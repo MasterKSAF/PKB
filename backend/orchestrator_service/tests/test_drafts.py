@@ -171,13 +171,14 @@ class TestCreateDraft:
         data = response.json()
         assert "title_key" in data
         assert data["title_key"] is not None
-        # title_key should contain the key fields concatenated
-        assert "RF" in data["title_key"]
-        assert "GOST" in data["title_key"]
-        assert "Test Doc" in data["title_key"]
+        # title_key follows 6-field formula: era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title
+        assert data["title_key"] == "RF|GOST|||12345|test doc"
+        # title_hash_sha256 — SHA-256 только от raw title (обратная совместимость)
+        assert data["title_hash_sha256"] is not None
+        assert len(data["title_hash_sha256"]) == 64
 
-    def test_create_draft_title_key_none_when_no_fields(self, client: TestClient, auth_header: dict):
-        """Without era/doc_code/title, title_key only has source_type."""
+    def test_create_draft_title_key_6field_when_missing_fields(self, client: TestClient, auth_header: dict):
+        """Без era/doc_code/title — title_key содержит пустые поля для остальных."""
         response = client.post(
             self.URL,
             headers=auth_header,
@@ -187,7 +188,10 @@ class TestCreateDraft:
         assert response.status_code == 202
         data = response.json()
         assert "title_key" in data
-        assert data["title_key"] == "GOST"
+        # 6 полей: era|source_type|mks_oks_code|okstu_code|doc_code|normalized_title
+        assert data["title_key"] == "|GOST||||"
+        # title_hash_sha256 = None т.к. title не передан
+        assert data["title_hash_sha256"] is None
 
 
 # ---------------------------------------------------------------------------

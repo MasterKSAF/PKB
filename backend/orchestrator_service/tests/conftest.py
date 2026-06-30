@@ -66,7 +66,7 @@ _storage_patcher.start()
 # This patch makes httpx.AsyncClient.request instantly raise ConnectError.
 import httpx
 
-# Also replace AsyncClient with a fast fake — on Windows, creating a real
+# Replace AsyncClient with a fast fake — on Windows, creating a real
 # httpx.AsyncClient takes ~0.4s due to connection pool setup, which adds up
 # across all real-mode tests.
 class _FakeHttpxClient:

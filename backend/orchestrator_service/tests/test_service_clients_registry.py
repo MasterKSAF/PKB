@@ -93,21 +93,54 @@ class TestRegistryDrafts:
             title="Тестовый документ",
             doc_code="TEST-001",
             source_type="GOST",
+            title_hash_sha256="abc123def456",
         )
         assert "data" in result
         data = result["data"]
         assert "is_duplicate" in data
         assert "is_duplicate_file" in data
+        assert "title_hash_sha256" in data
+        assert data["title_hash_sha256"] == "abc123def456"
 
     @pytest.mark.asyncio
-    async def test_check_uniqueness_duplicate(self, reg_client):
-        """check_uniqueness returns is_duplicate flags."""
+    async def test_check_uniqueness_duplicate_by_title_hash(self, reg_client):
+        """check_uniqueness detects duplicate by title_hash_sha256."""
+        # Сначала создаём draft с известным title_hash_sha256
+        title_hash = "known-hash-duplicate-001"
+        await reg_client.create_draft(
+            file_key="f-existing",
+            document_key="doc-existing",
+            created_by="user-1",
+            title_hash_sha256=title_hash,
+        )
+        # Проверяем уникальность — должен найти дубль
         result = await reg_client.check_uniqueness(
-            title="known-duplicate-title",
+            title="some title",
+            title_hash_sha256=title_hash,
         )
         assert "data" in result
         data = result["data"]
-        assert isinstance(data.get("is_duplicate"), bool)
+        assert data["is_duplicate"] is True
+        assert len(data["candidates"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_check_uniqueness_no_duplicate_by_different_hash(self, reg_client):
+        """check_uniqueness returns is_duplicate=False when hash differs."""
+        # Создаём draft с одним хешем
+        await reg_client.create_draft(
+            file_key="f-other",
+            document_key="doc-other",
+            created_by="user-1",
+            title_hash_sha256="hash-aaa",
+        )
+        # Проверяем с другим хешем
+        result = await reg_client.check_uniqueness(
+            title="other title",
+            title_hash_sha256="hash-bbb",
+        )
+        assert "data" in result
+        data = result["data"]
+        assert data["is_duplicate"] is False
 
     # ------------------------------------------------------------------
     # Document status (RG-1)

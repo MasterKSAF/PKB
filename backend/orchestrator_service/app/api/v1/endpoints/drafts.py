@@ -319,7 +319,33 @@ async def create_draft(
         )
 
     file_hash = _compute_sha256(content)
+
+    # --- Compute title hashes ---
+    # Для обратной совместимости: SHA-256 только от raw title
     title_hash = _compute_sha256(title.encode("utf-8")) if title else None
+
+    # 6-польный бизнес-ключ по спецификации normalizer_specification.md
+    # title_hash_sha256 = SHA-256(era | source_type_lower | mks_oks_code | okstu_code | doc_code | normalized_title)
+    normalized_title = " ".join(title.strip().lower().split()) if title else ""
+    # title_key (для отладки/аудита): поля в оригинальном регистре
+    title_key = "|".join([
+        era or "",
+        source_type or "",
+        mks_oks_code or "",
+        okstu_code or "",
+        doc_code or "",
+        normalized_title,
+    ]) if any([era, source_type, mks_oks_code, okstu_code, doc_code, normalized_title]) else None
+    # title_hash_sha256 (6-польный): source_type в нижнем регистре для единообразия хеша
+    title_hash_key = "|".join([
+        era or "",
+        (source_type or "").lower(),
+        mks_oks_code or "",
+        okstu_code or "",
+        doc_code or "",
+        normalized_title,
+    ])
+    title_hash_6field = _compute_sha256(title_hash_key.encode("utf-8")) if title else None
 
     # --- Upload to MinIO ---
     file_key = f"f-{file_hash[:12]}"
@@ -339,21 +365,6 @@ async def create_draft(
                 }
             },
         )
-
-    # --- Compute title_key (DB-28): конкатенация ключевых полей ---
-    title_key_parts = []
-    if era:
-        title_key_parts.append(era)
-    title_key_parts.append(source_type)
-    if jurisdiction:
-        title_key_parts.append(jurisdiction)
-    if doc_code:
-        title_key_parts.append(doc_code)
-    if mks_oks_code:
-        title_key_parts.append(mks_oks_code)
-    if title:
-        title_key_parts.append(title)
-    title_key = "|".join(title_key_parts) if title_key_parts else None
 
     # --- Build metadata_fields from form data ---
     metadata_fields: Dict[str, Any] = {}
@@ -391,6 +402,7 @@ async def create_draft(
             source_type=source_type,
             file_size_bytes=file_size,
             file_hash_sha256=file_hash,
+            title_hash_sha256=title_hash_6field,
         )
         data = uniqueness.get("data", {})
         is_duplicate_file = data.get("is_duplicate_file", False)
@@ -425,7 +437,7 @@ async def create_draft(
             document_key=document_key,
             created_by=current_user.user_id if current_user else MOCK_USER_ID,
             file_hash_sha256=file_hash,
-            title_hash_sha256=title_hash,
+            title_hash_sha256=title_hash_6field,
             title_key=title_key,
             original_filename=original_filename,
             metadata_fields=metadata_fields if metadata_fields else None,
@@ -522,7 +534,7 @@ async def create_draft(
         file_size_bytes=file_size,
         is_duplicate_file=is_duplicate_file,
         is_duplicate_document=is_duplicate_document,
-        title_hash_sha256=title_hash,
+        title_hash_sha256=title_hash_6field,
         title_key=title_key,
         original_filename=original_filename,
         display_name=original_filename,
@@ -819,7 +831,7 @@ async def start_preview(
 async def _wait_for_preview(
     db: AsyncSession,
     task_id: int,
-    timeout: int = 15,
+    timeout: float = 15.0,
     poll_interval: float = 1.0,
 ) -> dict:
     """Poll DB for preview step completion with timeout.
@@ -985,7 +997,7 @@ async def _find_task_for_draft(
 )
 async def get_preview_status(
     draft_id: int,
-    longpoll: int = Query(15, ge=0, le=60, description="Время ожидания (сек)"),
+    longpoll: float = Query(15.0, ge=0, le=60, description="Время ожидания (сек)"),
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DraftPreviewStatusResponse:

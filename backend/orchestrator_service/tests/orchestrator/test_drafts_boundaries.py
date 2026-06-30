@@ -203,7 +203,7 @@ class TestDuplicateDetection:
     ):
         """Без title — title_hash_sha256 отсутствует (null).
 
-        title_key может содержать source_type и др. поля, даже без title.
+        title_key содержит все 6 полей с пустыми для отсутствующих.
         """
         response = client.post(
             self.CREATE_URL,
@@ -213,8 +213,54 @@ class TestDuplicateDetection:
         )
         assert response.status_code == 202
         data = response.json()
-        # title_hash_sha256 вычисляется ТОЛЬКО из title
-        # Если title не передан, hash не вычисляется
+        # title_hash_sha256 требует title для вычисления
         assert data["title_hash_sha256"] is None
-        # title_key может быть None или содержать source_type
-        # (зависит от реализации)
+        # title_key содержит source_type (остальные поля пустые)
+        assert "GOST" in data["title_key"]
+
+    def test_duplicate_document_by_business_key_returns_is_duplicate_true(
+        self, client: TestClient, auth_header: dict
+    ):
+        """Две загрузки с одинаковыми metadata → is_duplicate_document=True.
+
+        E2E-тест детекции дублей по 6-польному бизнес-ключу (B1).
+        Загружаем два разных файла с одинаковыми form-полями.
+        """
+        file_a = b"%PDF-1.4 first content " * 100
+        file_b = b"%PDF-1.4 different content " * 100
+        metadata = {
+            "document_key": "doc-biz-dup",
+            "source_type": "GOST",
+            "title": "Один и тот же документ",
+            "era": "RF",
+            "doc_code": "ГОСТ 12345-2024",
+            "mks_oks_code": "47.020",
+            "okstu_code": "05.010",
+        }
+
+        # Первая загрузка — успех
+        r1 = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("first.pdf", file_a, "application/pdf")},
+            data=metadata,
+        )
+        assert r1.status_code == 202
+        d1 = r1.json()
+        assert d1["is_duplicate_document"] is False
+
+        # Вторая загрузка — другой файл, те же metadata → дубль по бизнес-ключу
+        r2 = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("second.pdf", file_b, "application/pdf")},
+            data=metadata,
+        )
+        assert r2.status_code == 202
+        d2 = r2.json()
+        assert d2["is_duplicate_file"] is False, (
+            "Разные файлы не должны детектиться как дубликаты по хешу"
+        )
+        assert d2["is_duplicate_document"] is True, (
+            "Одинаковые metadata → is_duplicate_document=True"
+        )

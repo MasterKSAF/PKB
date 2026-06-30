@@ -46,44 +46,29 @@ class TestAtomicTaskCreation:
     ):
         """
         Создание step для несуществующего task_id → IntegrityError (FK).
-        Это уже атомарно на уровне БД.
 
-        ВНИМАНИЕ: SQLite по умолчанию не enforce'ит FK-констрейнты.
-        Тест проверяет, что либо выбрасывается IntegrityError (если FK on),
-        либо step создаётся с orphan task_id (если FK off — текущее поведение
-        в тестах). В production PG — IntegrityError гарантирован.
+        Включает foreign_keys=ON для SQLite, чтобы FK-констрейнт сработал
+        независимо от настроек соединения по умолчанию.
         """
         from sqlalchemy import text
-        from app.db.base import engine
 
-        # Проверяем, включён ли FK в текущей БД.
-        async with engine.connect() as conn:
-            result = await conn.execute(text("PRAGMA foreign_keys"))
-            fk_on = result.scalar() == 1
+        # Включаем FK для SQLite (по умолчанию выключены).
+        # Для PostgreSQL pragma игнорируется без ошибки.
+        await db_session.execute(text("PRAGMA foreign_keys = ON"))
+        await db_session.flush()
 
         repo = TaskRepository(db_session)
-        if fk_on:
+        try:
             with pytest.raises(IntegrityError):
                 await repo.create_task_step(
                     task_id=999999, step_name="upload",
                     step_index=0, service_name="Orchestrator",
                 )
                 await db_session.flush()
-        else:
-            # SQLite без FK: step создаётся, но остаётся orphan.
-            # В production (PG) это привело бы к IntegrityError.
-            step = await repo.create_task_step(
-                task_id=999999, step_name="upload",
-                step_index=0, service_name="Orchestrator",
-            )
-            await db_session.flush()
-            assert step.task_id == 999999
-            # Помечаем как известное ограничение тестового окружения.
-            pytest.xfail(
-                "SQLite без FK: orphan step создан. "
-                "В production (PG) был бы IntegrityError. "
-                "См. todo_pipeline_coverage §17"
-            )
+        finally:
+            await db_session.rollback()
+            # Отключаем FK, чтобы не сломать clean_db (truncate требует FK off).
+            await db_session.execute(text("PRAGMA foreign_keys = OFF"))
 
     async def test_rollback_does_not_persist_partial_state(
         self, db_session: AsyncSession

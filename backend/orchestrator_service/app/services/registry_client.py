@@ -557,7 +557,7 @@ class RegistryServiceClient(ServiceClient):
 
     @classmethod
     def _mock_check_uniqueness(cls, storage: dict, body: dict) -> dict:
-        title = body.get("title", "")
+        title_hash = body.get("title_hash_sha256")
         file_hash = body.get("file_hash_sha256")
         is_duplicate = False
         is_duplicate_file = False
@@ -566,11 +566,8 @@ class RegistryServiceClient(ServiceClient):
         all_entries = cls._all_drafts(storage) + cls._all_documents(storage)
 
         for d in all_entries:
-            # Title-based duplicate
-            if title and (
-                d.get("document_key") == title
-                or d.get("file_key", "").find(title[:8]) >= 0
-            ):
+            # Title-based duplicate по 6-польному бизнес-ключу
+            if title_hash and d.get("title_hash_sha256") == title_hash:
                 is_duplicate = True
                 candidates.append(d)
 
@@ -585,6 +582,7 @@ class RegistryServiceClient(ServiceClient):
                 "is_duplicate": is_duplicate,
                 "is_duplicate_file": is_duplicate_file,
                 "candidates": candidates,
+                "title_hash_sha256": title_hash,
             }
         }
 
@@ -868,6 +866,7 @@ class RegistryServiceClient(ServiceClient):
         source_type: Optional[str] = None,
         file_size_bytes: Optional[int] = None,
         file_hash_sha256: Optional[str] = None,
+        title_hash_sha256: Optional[str] = None,
     ) -> dict:
         """Check document uniqueness (duplicate detection)."""
         body = CheckUniquenessRequest(
@@ -877,6 +876,7 @@ class RegistryServiceClient(ServiceClient):
             source_type=source_type,
             file_size_bytes=file_size_bytes,
             file_hash_sha256=file_hash_sha256,
+            title_hash_sha256=title_hash_sha256,
         )
         return await self.call(
             "POST",
@@ -887,6 +887,7 @@ class RegistryServiceClient(ServiceClient):
                     "is_duplicate": False,
                     "is_duplicate_file": False,
                     "candidates": [],
+                    "title_hash_sha256": title_hash_sha256,
                 }
             },
             json=body.model_dump(exclude_none=True),

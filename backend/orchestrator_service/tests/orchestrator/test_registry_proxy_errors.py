@@ -115,9 +115,10 @@ class TestRegistryProxyErrors:
         )
 
     def test_registry_client_call_raises_on_5xx_in_real_mode(self):
-        """RegistryServiceClient.call в real-режиме при 5xx бросает HTTPStatusError."""
+        """RegistryServiceClient.call в real-режиме пробрасывает 5xx как HTTPStatusError."""
         from app.services.base_client import ServiceClient
         from circuitbreaker import CircuitBreaker
+        from unittest.mock import patch as any_patch
 
         class _RegistryProxy(ServiceClient):
             async def _generate_mock(self, *a, **kw):
@@ -130,7 +131,7 @@ class TestRegistryProxyErrors:
             failure_threshold=99, recovery_timeout=60, name="cb_reg_test"
         )
 
-        # Подменяем _request, чтобы он бросал 5xx
+        # Мокаем _request, чтобы он всегда возвращал 5xx
         async def _fake_5xx(*args, **kwargs):
             raise httpx.HTTPStatusError(
                 "503",
@@ -138,9 +139,10 @@ class TestRegistryProxyErrors:
                 response=httpx.Response(503),
             )
 
-        with patch.object(client, "_request", side_effect=_fake_5xx):
+        with any_patch.object(client, "_request", side_effect=_fake_5xx), \
+             any_patch("asyncio.sleep"):  # убираем задержки ретраев
             with pytest.raises(httpx.HTTPStatusError):
-                # В real-режиме 5xx пробрасывается (после retry)
+                # в real-режиме 5xx пробрасывается наружу (через retry)
                 import asyncio
                 asyncio.run(
                     client.call("GET", "/api/v1/registry/drafts/1")

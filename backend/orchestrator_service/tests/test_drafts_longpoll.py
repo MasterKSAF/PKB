@@ -53,7 +53,7 @@ class TestLongpollEdgeCases:
         response = client.get(
             self.URL.format(draft_id=draft_id),
             headers=auth_header,
-            params={"longpoll": 1},
+            params={"longpoll": 0.1},
         )
         assert response.status_code == 200
         # Тест в дальнейшем будет дополнен прямой записью status="failed" в БД.
@@ -80,11 +80,10 @@ class TestLongpollEdgeCases:
         r2 = client.get(
             self.URL.format(draft_id=draft_id),
             headers=auth_header,
-            params={"longpoll": 1},
+            params={"longpoll": 0.1},
         )
         elapsed = time.monotonic() - start
         assert r2.status_code == 200
-        # На active-черновике — допустимо ждать ~1с. Это ОК.
         # Здесь не делаем жёсткой проверки времени, но фиксируем ответ.
 
     def test_longpoll_returns_current_progress_on_timeout(
@@ -100,12 +99,12 @@ class TestLongpollEdgeCases:
         response = client.get(
             self.URL.format(draft_id=draft_id),
             headers=auth_header,
-            params={"longpoll": 1},  # 1 секунда
+            params={"longpoll": 0.1},
         )
         elapsed = time.monotonic() - start
         assert response.status_code == 200
-        # На 1-секундном longpoll ответ не должен превышать 2с (с запасом).
-        assert elapsed < 5.0, f"Longpoll занял {elapsed:.2f}с при заявленных 1с"
+        # С poll_interval=1.0 ответ придёт через ~1с (один цикл sleep).
+        assert elapsed < 3.0, f"Longpoll занял {elapsed:.2f}с"
         # Лимит longpoll=60 → 422 (boundary check).
         for invalid_lp in (-1, 61):
             r = client.get(
@@ -135,7 +134,7 @@ class TestLongpollEdgeCases:
     ):
         """
         N=5 последовательных longpoll на один draft → все получают 200.
-        Каждый longpoll завершается в пределах 2с при longpoll=1.
+        Каждый longpoll завершается в пределах 1с при longpoll=0.1.
 
         ВНИМАНИЕ: TestClient синхронный и не поддерживает реальный
         concurrency (FastAPI TestClient + threads вызывает проблемы с
@@ -152,12 +151,12 @@ class TestLongpollEdgeCases:
             r = client.get(
                 self.URL.format(draft_id=draft_id),
                 headers=auth_header,
-                params={"longpoll": 1},
+                params={"longpoll": 0.1},
             )
             results.append(r.status_code)
         elapsed = time.monotonic() - start
 
         # Все 5 должны вернуть 200.
         assert all(code == 200 for code in results), f"Коды: {results}"
-        # 5 запросов с longpoll=1 не должны занимать > 10с (с запасом).
-        assert elapsed < 10.0, f"5 longpolls заняли {elapsed:.2f}с"
+        # 5 запросов с longpoll=0.1 и poll_interval=1.0 ≈ 5с.
+        assert elapsed < 8.0, f"5 longpolls заняли {elapsed:.2f}с"
