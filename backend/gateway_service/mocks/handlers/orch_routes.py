@@ -7,7 +7,7 @@ import hashlib
 import logging
 import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -402,6 +402,7 @@ async def create_draft(request: Request):
         except Exception:
             draft["metadata"] = {}
 
+    # Проверка дублей: _drafts (активные черновики) + _documents (утверждённые документы)
     for existing in _drafts.values():
         if existing.get("file_hash_sha256") == file_hash and existing.get("status") in (
             "uploaded", "previewing", "ready_for_approve"
@@ -409,6 +410,14 @@ async def create_draft(request: Request):
             draft["is_duplicate_file"] = True
             draft["status"] = "uploaded"
             break
+
+    if not draft["is_duplicate_file"]:
+        for doc in _documents.values():
+            if doc.get("file_hash_sha256") == file_hash:
+                draft["is_duplicate_file"] = True
+                draft["is_duplicate_document"] = True
+                draft["approved_document_id"] = doc.get("document_id")
+                break
 
     _drafts[draft_id] = draft
     _tasks[task_id] = {
@@ -430,7 +439,7 @@ async def create_draft(request: Request):
         "file_hash_sha256": file_hash,
         "file_size_bytes": draft["file_size_bytes"],
         "is_duplicate_file": draft["is_duplicate_file"],
-        "is_duplicate_document": False,
+        "is_duplicate_document": draft["is_duplicate_document"],
         "title_hash_sha256": title_hash,
         "created_at": now,
     }
@@ -616,8 +625,25 @@ async def decide_draft(draft_id: int, req: DecideRequest):
             "user_id": user_id, "created_by": user_id,
             "metadata": metadata,
             "created_at": now, "updated_at": now,
+            "file_hash_sha256": draft.get("file_hash_sha256"),
             "chunk_count": 0, "chunk_validation": None,
         }
+        # Симуляция полного pipeline: full_ocr → full_converter → registry → indexation
+        full_ocr_at = (datetime.now(timezone.utc) + timedelta(seconds=5)).isoformat()
+        full_converter_at = (datetime.now(timezone.utc) + timedelta(seconds=12)).isoformat()
+        registry_at = (datetime.now(timezone.utc) + timedelta(seconds=18)).isoformat()
+
+        pipeline_steps = [
+            {"step": "full_ocr", "service": "OCR Service", "status": "completed",
+             "started_at": now, "completed_at": full_ocr_at},
+            {"step": "full_converter", "service": "Converter-validator", "status": "completed",
+             "started_at": full_ocr_at, "completed_at": full_converter_at},
+            {"step": "registry_creation", "service": "Registry", "status": "completed",
+             "started_at": full_converter_at, "completed_at": registry_at},
+            {"step": "pending_index", "service": "RAG Builder", "status": "pending",
+             "started_at": registry_at, "completed_at": None},
+        ]
+
         _documents[new_doc_id] = new_doc
         _versions[new_doc_id] = [{
             "version_id": draft["version_id"], "version_number": 1,
@@ -640,17 +666,19 @@ async def decide_draft(draft_id: int, req: DecideRequest):
         draft["updated_at"] = now
         task = _tasks.get(draft["task_id"])
         if task:
-            task["status"] = "created"
+            task["status"] = "processing"
             task["document_id"] = new_doc_id
-            task["pipeline_stage"] = "registry"
-            task["progress_percent"] = 80
+            task["pipeline_stage"] = "full_processing"
+            task["progress_percent"] = 15
+            task["pipeline_steps"] = pipeline_steps
             task["updated_at"] = now
         return {
             "draft_id": draft["draft_id"],
             "status": "approved",
             "action": "approve",
             "approved_document_id": new_doc_id,
-            "message": "Черновик завершён, документ создан в Registry. Запущен Пайплайн 2 (индексация).",
+            "message": "Черновик завершён. Полный pipeline (OCR/Parser → Converter-validator → Registry → RAG Builder) запущен.",
+            "pipeline_steps": pipeline_steps,
             "decided_by": user_id,
             "decided_at": now,
         }
@@ -1193,6 +1221,16 @@ async def add_version(doc_id: int, request: Request):
             "title_hash_sha256": _build_title_hash(doc.get("title", "")),
             "status": "uploaded", "created_at": now, "created_by": "system",
         }
+    # Проверка на дубли: ищем content_hash среди существующих версий во всех документах
+    is_dup = False
+    for existing_doc_id, existing_versions in _versions.items():
+        for v in existing_versions:
+            if v.get("content_hash_sha256") == content_hash:
+                is_dup = True
+                break
+        if is_dup:
+            break
+
     if doc_id not in _versions:
         _versions[doc_id] = []
     _versions[doc_id].insert(0, new_ver)
@@ -1206,7 +1244,7 @@ async def add_version(doc_id: int, request: Request):
         "status": "uploaded",
         "task_id": task_id,
         "file_hash_sha256": content_hash,
-        "is_duplicate_file": False,
+        "is_duplicate_file": is_dup,
         "created_at": now,
     }
 

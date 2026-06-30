@@ -186,6 +186,8 @@ class RegistryDocCreate(BaseModel):
     issuing_body: Optional[str] = None
     mks_oks_code: Optional[str] = None
     okstu_code: Optional[str] = None
+    file_hash_sha256: Optional[str] = None  # D1: хеш файла для детекции дублей
+    file_size_bytes: Optional[int] = None   # D1: размер файла
     valid_from: Optional[str] = None  # RG-6: YYYY-MM-DD
     valid_until: Optional[str] = None  # RG-6: YYYY-MM-DD, default 9999-12-31
     source_draft_id: Optional[int] = None  # RG-9
@@ -319,6 +321,7 @@ class CheckUniquenessRequest(BaseModel):
     era: Optional[str] = None
     source_type: Optional[str] = None
     file_size_bytes: Optional[int] = None
+    file_hash_sha256: Optional[str] = None
 
 
 # ── 1. Classifiers ───────────────────────────────────────────────────────────
@@ -925,6 +928,7 @@ async def create_registry_doc(req: RegistryDocCreate):
                "status": req.status, "era": req.era, "validity_status": req.validity_status,
                "jurisdiction": req.jurisdiction, "issuing_body": req.issuing_body,
                "mks_oks_code": req.mks_oks_code, "okstu_code": req.okstu_code,
+               "file_hash_sha256": req.file_hash_sha256, "file_size_bytes": req.file_size_bytes or 0,
                "valid_from": valid_from, "valid_until": valid_until,  # RG-6
                "source_draft_id": req.source_draft_id,  # RG-9
                "draft_id": req.draft_id,  # DB-26
@@ -1081,13 +1085,88 @@ async def get_doc_sections(doc_id: int):
 
 @router.post("/documents/check-uniqueness")
 async def check_uniqueness(req: CheckUniquenessRequest):
-    file_hash = hashlib.sha256((str(req.file_size_bytes or "") + req.title).encode()).hexdigest() if req.file_size_bytes else None
-    title_hash = hashlib.sha256(req.title.encode()).hexdigest()
+    """
+    Проверка уникальности документа.
+    Ищет дубли по file_hash_sha256 (точное совпадение файла)
+    и по title_hash_sha256 (совпадение метаданных) в _registry_docs и _registry_drafts.
+    """
+    # Если file_hash_sha256 не передан — вычисляем из title + file_size_bytes (fallback)
+    file_hash = req.file_hash_sha256
+    if not file_hash and req.file_size_bytes:
+        file_hash = hashlib.sha256((str(req.file_size_bytes) + req.title).encode()).hexdigest()
+    
+    # Вычисляем title_hash по 6-польной формуле
+    doc_for_hash = {
+        "era": req.era or "",
+        "source_type": req.source_type or "",
+        "mks_oks_code": "",
+        "doc_code": req.doc_code or "",
+        "title": req.title,
+    }
+    title_hash = compute_title_hash_sha256(doc_for_hash)
+
+    candidates = []
+    is_duplicate = False
+    is_duplicate_file = False
+
+    # Поиск по _registry_docs (approved documents)
+    for doc in _registry_docs.values():
+        if doc.get("status") in ("created", "indexed", "pending_index", "failed", "approved", "draft"):
+            doc_file_hash = doc.get("file_hash_sha256")
+            doc_title_hash = doc.get("title_hash_sha256")
+            if file_hash and doc_file_hash and doc_file_hash == file_hash:
+                is_duplicate_file = True
+                is_duplicate = True
+                candidates.append({
+                    "document_id": doc.get("id"),
+                    "title": doc.get("title", ""),
+                    "doc_code": doc.get("doc_code"),
+                    "similarity": 1.0,
+                    "status": doc.get("status", ""),
+                    "file_size_bytes": doc.get("file_size_bytes", 0),
+                    "match_type": "file_hash",
+                })
+            elif doc_title_hash and doc_title_hash == title_hash:
+                is_duplicate = True
+                candidates.append({
+                    "document_id": doc.get("id"),
+                    "title": doc.get("title", ""),
+                    "doc_code": doc.get("doc_code"),
+                    "similarity": 0.95,
+                    "status": doc.get("status", ""),
+                    "file_size_bytes": doc.get("file_size_bytes", 0),
+                    "match_type": "title_hash",
+                })
+
+    # Поиск по _registry_drafts (черновики)
+    for draft in _registry_drafts.values():
+        draft_file_hash = draft.get("file_hash_sha256")
+        draft_title_hash = draft.get("title_hash_sha256")
+        if file_hash and draft_file_hash and draft_file_hash == file_hash:
+            is_duplicate_file = True
+            is_duplicate = True
+            candidates.append({
+                "draft_id": draft.get("id"),
+                "title": draft.get("title", ""),
+                "similarity": 1.0,
+                "status": draft.get("status", ""),
+                "match_type": "file_hash",
+            })
+        elif draft_title_hash and draft_title_hash == title_hash:
+            is_duplicate = True
+            candidates.append({
+                "draft_id": draft.get("id"),
+                "title": draft.get("title", ""),
+                "similarity": 0.95,
+                "status": draft.get("status", ""),
+                "match_type": "title_hash",
+            })
+
     return {
         "data": {
-            "is_duplicate": False,
-            "is_duplicate_file": False,
-            "candidates": [],
+            "is_duplicate": is_duplicate,
+            "is_duplicate_file": is_duplicate_file,
+            "candidates": candidates,
             "file_hash_sha256": file_hash,
             "title_hash_sha256": title_hash,
             "file_size_bytes": req.file_size_bytes,

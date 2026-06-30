@@ -350,8 +350,22 @@ Docker healthcheck может слать `/api/v1/system/health/` — слеш �
 - **query_routes.py**: `send_message` теперь принимает и JSON, и form-data (было 422 для form-data)
 - **registry_routes.py**: `import_docs` переписан — добавлен парсинг CSV/XLSX, multipart (был только JSON)
 - **orch_routes.py**: Добавлен роут `/api/v1/drafts/` со слешем для совместимости
+### D1 (2026-06-30): Детекция дублей — исправлено
+1. **`check_uniqueness`** в registry_routes.py: принимает `file_hash_sha256`, ищет дубли по `_registry_docs` + `_registry_drafts`, возвращает реальные `is_duplicate`/`is_duplicate_file`/`candidates`.
+2. **`create_draft`**: проверяет `_documents` (approved) в дополнение к `_drafts`.
+3. **`add_version`**: больше не хардкодит `is_duplicate_file=False` — проверяет по `content_hash_sha256` среди всех версий.
+4. **RegistryDocCreate**: добавлены поля `file_hash_sha256`, `file_size_bytes`.
+
+### Pipeline после approve (2026-06-30): исправлено
+1. **`decide_draft`**: после approve симулирует полный pipeline (full_ocr → full_converter → registry_creation → pending_index) с `pipeline_steps` в ответе.
+2. **task**: после approve статус `processing`, `pipeline_stage` = `full_processing` (вместо `created` / `registry`).
+
 ### Аномалии
 - **test_91_update_registry_doc** — падает с 422: `jurisdiction='RF'` недопустимо (список: RU/BY/KZ/...). Ошибка в тесте или в seed-данных, не связана с правками.
+
+### Статус тестов
+- **93/93 тестов test_tz_coverage.py** — pass (+7 новых тестов D1 + pipeline)
+- **1 pre-existing failure** test_28_document_status (isolation: shared state между test_tz_coverage и test_api)
 
 ## 2026-06-23: Gateway — path-pattern routing (разграничение Orchestrator/Registry)
 ### Изменения

@@ -848,6 +848,236 @@ class TestDrafts:
 
 
 # ===========================================================================
+# D1: DUPLICATE DETECTION — upload, check-uniqueness, add_version
+# ===========================================================================
+class TestD1_DuplicateDetection:
+    """Тесты детекции дублей в черновиках, документах и версиях."""
+    _PAYLOAD = b"%PDF-1.4\n" + b"%PAD-" * 300 + b"\n%%EOF\n"
+
+    def test_upload_duplicate_file_detected_among_drafts(self):
+        """Дважды загружаем один и тот же файл — второй раз is_duplicate_file=True.
+        Используем уникальный payload, чтобы гарантировать отсутствие пересечений с seed-данными."""
+        unique_content = b"UNIQUE_DUP_TEST_" + b"x" * 2000 + b"\n%%EOF\n"
+        r1 = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("dup.pdf", unique_content, "application/pdf")},
+            data={"title": "Дубликат"},
+        )
+        assert_ok(r1, 202)
+        assert r1.json()["is_duplicate_file"] is False
+
+        r2 = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("dup.pdf", unique_content, "application/pdf")},
+            data={"title": "Дубликат"},
+        )
+        assert_ok(r2, 202)
+        assert r2.json()["is_duplicate_file"] is True, (
+            "Ожидается is_duplicate_file=True при повторной загрузке того же файла"
+        )
+
+    def test_upload_creates_different_file_hash_per_content(self):
+        """Разные файлы — разные file_hash_sha256, нет дубля."""
+        r1 = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("a.pdf", b"content A" + b"x" * 2000, "application/pdf")},
+        )
+        r2 = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("b.pdf", b"content B" + b"x" * 2000, "application/pdf")},
+        )
+        assert_ok(r1, 202)
+        assert_ok(r2, 202)
+        assert r1.json()["file_hash_sha256"] != r2.json()["file_hash_sha256"]
+        assert r2.json()["is_duplicate_file"] is False
+
+    def test_add_version_duplicate_file_detected(self):
+        """POST /documents/{id}/versions с тем же файлом — is_duplicate_file=True.
+        Используем уникальный payload для изоляции теста."""
+        unique_content = b"VERSION_DUP_TEST_" + b"y" * 2000 + b"\n%%EOF\n"
+        # Сначала создаём версию для документа
+        version = orch_client.post(
+            f"{BASE}/documents/1/versions",
+            files={"file": ("v1.pdf", unique_content, "application/pdf")},
+        )
+        assert_ok(version, 202)
+        v1_hash = version.json()["file_hash_sha256"]
+        assert version.json()["is_duplicate_file"] is False
+
+        # Загружаем тот же файл снова
+        version2 = orch_client.post(
+            f"{BASE}/documents/1/versions",
+            files={"file": ("v1_again.pdf", unique_content, "application/pdf")},
+        )
+        assert_ok(version2, 202)
+        v2_hash = version2.json()["file_hash_sha256"]
+        assert v1_hash == v2_hash, "Хеши должны совпадать для одинакового содержимого"
+        assert version2.json()["is_duplicate_file"] is True, (
+            "Ожидается is_duplicate_file=True при загрузке уже существующей версии"
+        )
+
+    def test_approve_triggers_pipeline_steps(self):
+        """После approve ответ содержит pipeline_steps."""
+        create = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("pipeline_test.pdf", self._PAYLOAD, "application/pdf")},
+            data={"source_type": "GOST", "title": "Pipeline"},
+        )
+        assert_ok(create, 202)
+        draft_id = create.json()["draft_id"]
+
+        orch_client.post(f"{BASE}/drafts/{draft_id}/preview")
+        orch_client.get(f"{BASE}/drafts/{draft_id}/preview/status")
+
+        decide = orch_client.patch(
+            f"{BASE}/drafts/{draft_id}/decide",
+            json={"action": "approve", "comment": "Pipeline test"},
+        )
+        assert_ok(decide)
+        ddata = decide.json()
+        assert ddata["status"] == "approved"
+        assert "pipeline_steps" in ddata, "После approve должны быть pipeline_steps"
+        steps = ddata["pipeline_steps"]
+        assert len(steps) >= 3
+        # Проверяем ключевые шаги
+        step_names = [s["step"] for s in steps]
+        assert "full_ocr" in step_names
+        assert "full_converter" in step_names
+        assert "registry_creation" in step_names
+        assert "pending_index" in step_names
+
+    def test_approve_then_upload_same_file_detects_duplicate(self):
+        """
+        End-to-end: upload → preview → approve → upload same file →
+        is_duplicate_file=True + is_duplicate_document=True.
+        """
+        unique_content = b"UPLOAD_APPROVE_UPLOAD_" + b"z" * 2000 + b"\n%%EOF\n"
+        # 1. Первый раз — загрузка, должна быть уникальной
+        r1 = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("original.pdf", unique_content, "application/pdf")},
+            data={"source_type": "GOST", "title": "Original"},
+        )
+        assert_ok(r1, 202)
+        assert r1.json()["is_duplicate_file"] is False
+        draft_id_1 = r1.json()["draft_id"]
+
+        # 2. Preview + approve
+        orch_client.post(f"{BASE}/drafts/{draft_id_1}/preview")
+        orch_client.get(f"{BASE}/drafts/{draft_id_1}/preview/status")
+        decide = orch_client.patch(
+            f"{BASE}/drafts/{draft_id_1}/decide",
+            json={"action": "approve", "comment": "E2E test"},
+        )
+        assert_ok(decide)
+        approved_doc_id = decide.json()["approved_document_id"]
+        assert approved_doc_id is not None
+
+        # 3. Загружаем тот же файл снова — должен обнаружиться дубль
+        r2 = orch_client.post(
+            f"{BASE}/drafts",
+            files={"file": ("copy.pdf", unique_content, "application/pdf")},
+            data={"source_type": "GOST", "title": "Original"},
+        )
+        assert_ok(r2, 202)
+        assert r2.json()["is_duplicate_file"] is True, (
+            "После approve того же файла повторная загрузка должна дать is_duplicate_file=True"
+        )
+        assert r2.json()["is_duplicate_document"] is True
+
+
+# ===========================================================================
+# D1: DUPLICATE DETECTION — Registry endpoint
+# ===========================================================================
+class TestCheckUniqueness:
+    """Тесты детекции дублей — Registry endpoint /documents/check-uniqueness."""
+
+    def test_no_duplicate_when_no_match(self):
+        """check-uniqueness возвращает is_duplicate=False при отсутствии совпадений."""
+        resp = reg_client.post(
+            f"{REG_BASE}/documents/check-uniqueness",
+            json={"title": "Совершенно новый документ", "file_hash_sha256": "aaabbbccc"},
+        )
+        assert_ok(resp)
+        data = resp.json()["data"]
+        assert data["is_duplicate"] is False
+        assert data["is_duplicate_file"] is False
+        assert data["candidates"] == []
+
+    def test_duplicate_by_file_hash(self):
+        """check-uniqueness находит дубль по file_hash_sha256 в _registry_docs."""
+        # Сначала создаём документ с известным file_hash_sha256 через Registry
+        known_hash = "aabbccdd11223344"
+        create = reg_client.post(
+            f"{REG_BASE}/documents",
+            json={
+                "title": "Документ-оригинал",
+                "doc_code": "ORIG-001",
+                "source_type": "GOST",
+                "era": "RF",
+                "file_hash_sha256": known_hash,
+                "file_size_bytes": 50000,
+                "status": "approved",
+            },
+        )
+        assert_ok(create, 201)
+
+        # Теперь проверяем уникальность — ищем по этому хешу
+        check = reg_client.post(
+            f"{REG_BASE}/documents/check-uniqueness",
+            json={
+                "title": "Документ-оригинал",
+                "file_hash_sha256": known_hash,
+                "file_size_bytes": 50000,
+            },
+        )
+        assert_ok(check)
+        data = check.json()["data"]
+        assert data["is_duplicate_file"] is True
+        assert data["is_duplicate"] is True
+        assert len(data["candidates"]) >= 1
+        # Первый кандидат — exact file_hash match
+        assert data["candidates"][0]["match_type"] == "file_hash"
+
+    def test_duplicate_by_title_hash(self):
+        """check-uniqueness находит дубль по title_hash_sha256 (6-польная формула)."""
+        known_hash = "ffeeddccbbaa9988"
+        create = reg_client.post(
+            f"{REG_BASE}/documents",
+            json={
+                "title": "ГОСТ Р 12345-2023",
+                "doc_code": "12345-2023",
+                "source_type": "GOST_R",
+                "era": "RF",
+                "file_hash_sha256": known_hash,
+                "file_size_bytes": 30000,
+                "status": "approved",
+            },
+        )
+        assert_ok(create, 201)
+
+        # Тот же title + doc_code + era + source_type — title_hash совпадёт
+        check = reg_client.post(
+            f"{REG_BASE}/documents/check-uniqueness",
+            json={
+                "title": "ГОСТ Р 12345-2023",
+                "doc_code": "12345-2023",
+                "source_type": "GOST_R",
+                "era": "RF",
+                "file_hash_sha256": "other_hash_xyz",
+                "file_size_bytes": 30000,
+            },
+        )
+        assert_ok(check)
+        data = check.json()["data"]
+        # Должен найти дубль по title_hash (даже если file_hash разный)
+        assert data["is_duplicate"] is True
+        assert len(data["candidates"]) >= 1
+        title_matches = [c for c in data["candidates"] if c.get("match_type") == "title_hash"]
+        assert len(title_matches) >= 1, "Должен быть кандидат с match_type=title_hash"
+
+
+# ===========================================================================
 # UC-09: TASKS (internal) — сквозной ID для отслеживания пайплайна.
 # ===========================================================================
 class TestTasks:
@@ -895,6 +1125,6 @@ class TestTasks:
         resp = orch_client.get(f"{BASE}/tasks/{task_id}/status")
         assert_ok(resp)
         data = resp.json()
-        assert data["status"] == "created"
+        assert data["status"] == "processing"
         assert data["document_id"] is not None
-        assert data["progress_percent"] >= 50
+        assert data["pipeline_stage"] == "full_processing"
