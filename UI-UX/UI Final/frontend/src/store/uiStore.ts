@@ -9,12 +9,34 @@ export type { AppTab, UserRole };
 
 export type KnowledgeProcessingSection = 'upload' | 'drafts' | 'registry' | 'journal';
 
+const THEME_MODE_STORAGE_KEY = 'pkb_theme_mode';
+
 const getInitialThemeMode = (): 'dark' | 'light' => {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+  if (typeof window === 'undefined') {
     return 'dark';
   }
 
+  try {
+    const storedThemeMode = window.localStorage.getItem(THEME_MODE_STORAGE_KEY);
+    if (storedThemeMode === 'dark' || storedThemeMode === 'light') {
+      return storedThemeMode;
+    }
+  } catch {
+    // Fall back to the system preference when storage is unavailable.
+  }
+
+  if (typeof window.matchMedia !== 'function') return 'dark';
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+};
+
+const persistThemeMode = (themeMode: 'dark' | 'light') => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(THEME_MODE_STORAGE_KEY, themeMode);
+  } catch {
+    // The selected theme still applies for the current session.
+  }
 };
 
 export interface AdminAuditLogItem {
@@ -136,7 +158,10 @@ export const useUIStore = create<UIState>((set) => ({
   activeProjectId: '',
   setActiveProjectId: (activeProjectId) => set({ activeProjectId }),
   themeMode: getInitialThemeMode(),
-  setThemeMode: (themeMode) => set({ themeMode }),
+  setThemeMode: (themeMode) => {
+    persistThemeMode(themeMode);
+    set({ themeMode });
+  },
   workMode: 'prod',
   setWorkMode: (workMode) =>
     set((state) => {

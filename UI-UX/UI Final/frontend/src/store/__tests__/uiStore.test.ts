@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useUIStore } from '../uiStore';
 import type { AdminUser } from '../../utils/mockData';
 
@@ -81,5 +81,15 @@ describe('uiStore work mode', () => {
     ]);
 
     expect(useUIStore.getState().adminUsers.some((user) => user.id === productionUser.id)).toBe(true);
+  });
+
+  it('restores the selected theme after the store is reloaded', async () => {
+    useUIStore.getState().setThemeMode('light');
+    expect(window.localStorage.getItem('pkb_theme_mode')).toBe('light');
+
+    vi.resetModules();
+    const { useUIStore: reloadedStore } = await import('../uiStore');
+
+    expect(reloadedStore.getState().themeMode).toBe('light');
   });
 });
