@@ -525,6 +525,52 @@ const formatCompactDateTime = (value?: string) => {
   }).format(date);
 };
 
+const HISTORY_ACTION_LABELS: Record<string, string> = {
+  created: 'Создание',
+  create: 'Создание',
+  uploaded: 'Загрузка',
+  upload: 'Загрузка',
+  updated: 'Обновление',
+  update: 'Обновление',
+  metadata_updated: 'Обновление метаданных',
+  status_changed: 'Смена статуса',
+  approved: 'Подтверждение',
+  discarded: 'Отклонение',
+  deleted: 'Удаление',
+  failed: 'Ошибка',
+};
+
+const formatHistoryAction = (value: unknown) => {
+  const text = normalizeText(value);
+  if (!text) return '';
+  return HISTORY_ACTION_LABELS[text.toLowerCase()] ?? text;
+};
+
+const normalizeHistoryRows = (items: any[]) => {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null;
+
+      const at = normalizeText(item.at ?? item.created_at ?? item.updated_at ?? item.timestamp ?? item.event_at);
+      const action = formatHistoryAction(item.action ?? item.event ?? item.event_type ?? item.type ?? item.status);
+      const details = item.details && typeof item.details === 'object' ? JSON.stringify(item.details) : item.details;
+      const note = normalizeText(item.note ?? item.message ?? item.description ?? item.comment ?? item.reason ?? details);
+      const user = normalizeText(item.user ?? item.user_id ?? item.created_by ?? item.updated_by ?? item.actor);
+
+      if (!at && !action && !note && !user) return null;
+
+      return {
+        id: normalizeText(item.id ?? item.event_id ?? item.history_id) || `history-${index}`,
+        at,
+        action: action || 'Событие',
+        note: note || (user ? `Пользователь: ${user}` : 'Дополнительные сведения не переданы.'),
+      };
+    })
+    .filter((item): item is { id: string; at: string; action: string; note: string } => Boolean(item));
+};
+
 export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ documents }) => {
   const { themeMode, workMode } = useUIStore();
   const queryClient = useQueryClient();
@@ -684,6 +730,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const versions = workMode === 'prod' ? extractVersionItems(versionsQuery.data) : buildDemoVersions(selectedDocument);
   const history = workMode === 'prod' ? (historyQuery.data ?? []) : buildDemoHistory(selectedDocument);
   const errors = workMode === 'prod' ? (errorsQuery.data ?? []) : buildDemoErrors(selectedDocument);
+  const historyRows = useMemo(() => normalizeHistoryRows(history), [history]);
   const parameters = workMode === 'prod' ? parametersQuery.data : buildDemoParameters(selectedDocument);
   const previewPages = useMemo(
     () => {
@@ -712,7 +759,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     [detail, gatewayPages, pageContentQuery.data, selectedDocument, selectedGatewayPage, workMode],
   );
   const selectedPreviewPage = previewPages[Math.min(previewPageIndex, Math.max(previewPages.length - 1, 0))] ?? null;
-  const previewText = buildPreviewText(selectedDocument, detail, versions, history, errors, parameters);
+  const previewText = buildPreviewText(selectedDocument, detail, versions, historyRows, errors, parameters);
   const currentPreviewText = selectedPreviewPage?.lines.join('\n') ?? '';
   const compareVersions = versions.filter((version) => selectedVersionIds.includes(version.id)).slice(0, 2);
   const totalVersions = Number(detail?.total_versions ?? versions.length ?? 0);
@@ -760,7 +807,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
 
   const summaryChips = [
     { label: `Версий: ${totalVersions}`, value: totalVersions },
-    { label: `История: ${history.length}`, value: history.length },
+    { label: `История: ${historyRows.length}`, value: historyRows.length },
     { label: `Ошибки: ${errors.length}`, value: errors.length },
     { label: `Страниц: ${previewPages.length}`, value: previewPages.length },
   ];
@@ -1383,15 +1430,15 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                         <History size={16} color={isLight ? '#0284c7' : '#98d9d8'} />
                         <Typography sx={{ fontWeight: 560 }}>История и ошибки</Typography>
-                        <Chip size="small" variant="outlined" label={history.length + errors.length} />
+                        <Chip size="small" variant="outlined" label={historyRows.length + errors.length} />
                       </Stack>
                     </Button>
                     <Divider sx={{ borderColor: 'rgba(198,214,236,0.16)' }} />
                     <Collapse in={historyOpen}>
                       <Stack spacing={0.5} sx={{ p: 1.1 }}>
-                        {history.slice(0, 6).map((item: any, index: number) => (
+                        {historyRows.slice(0, 6).map((item) => (
                           <Box
-                            key={item.id ?? index}
+                            key={item.id}
                             sx={{
                               display: 'grid',
                               gridTemplateColumns: { xs: '1fr', md: '110px 1fr 1fr' },
@@ -1401,13 +1448,13 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                             }}
                           >
                             <Typography sx={detailLabelSx}>
-                              {item.at ?? item.created_at ?? 'без даты'}
+                              {formatCompactDateTime(item.at)}
                             </Typography>
                             <Typography sx={detailValueSx}>
-                              {item.action ?? item.event ?? 'Событие'}
+                              {item.action}
                             </Typography>
                             <Typography sx={{ ...detailValueSx, color: 'text.secondary' }}>
-                              {item.note ?? item.message ?? item.description ?? 'Комментарий не передан.'}
+                              {item.note}
                             </Typography>
                           </Box>
                         ))}
@@ -1416,9 +1463,9 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                             Последняя ошибка: {(errors[0] as any)?.error_message ?? 'Сервер вернул список ошибок.'}
                           </Alert>
                         )}
-                        {!history.length && !errors.length && (
+                        {!historyRows.length && !errors.length && (
                           <Typography variant="body2" color="text.secondary">
-                            История и ошибки по документу не переданы.
+                            История и ошибки по документу не переданы сервером.
                           </Typography>
                         )}
                       </Stack>
