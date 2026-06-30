@@ -373,11 +373,9 @@ def run_converter_full_step(
         async def _do_converter_full():
             client = ConverterValidatorClient()
             try:
-                body = {"file_key": file_key, "draft_id": draft_id}
+                body = {"file_key": file_key, "draft_id": draft_id, "task_id": task_id, "version_id": version_id}
                 if raw_json:
                     body["raw_json"] = raw_json
-                    body["task_id"] = task_id
-                    body["version_id"] = version_id
                 return await client.convert_full(body)
             finally:
                 await client.close()
