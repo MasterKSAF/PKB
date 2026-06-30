@@ -82,7 +82,8 @@ class Settings(BaseSettings):
     embedding_base_url: str = Field(default="http://infinity:7997", alias="EMBEDDING_BASE_URL")
     embedding_model: str = Field(default="Qwen/Qwen3-Embedding-0.6B", alias="EMBEDDING_MODEL")
     embedding_dim: int = Field(default=1024, alias="EMBEDDING_DIM")
-    embedding_timeout: int = Field(default=60, alias="EMBEDDING_TIMEOUT")
+    # Таймаут 10с — эмбеддинг один и мелкий, долгого ожидания быть не может, сразу retry.
+    embedding_timeout: int = Field(default=10, alias="EMBEDDING_TIMEOUT")
     embedding_instruction: str = Field(default="", alias="EMBEDDING_INSTRUCTION")
 
     # --- Search ---

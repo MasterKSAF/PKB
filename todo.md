@@ -1,18 +1,14 @@
-# Fix dispatching full_ocr / OCR fallback in orchestrator
+# Сессия 30.06 — Infinity reranker, таймауты, 404 валидации
 
-## Analysis findings
+- [x] InfinityRerankerProvider — новый провайдер под Infinity v2 (relevance_score, document)
+- [x] Фабрика провайдеров — автоопределение по URL
+- [x] REGISTRY_SERVICE_URL — исправлен двойной /api/v1 у converter-validator
+- [x] EMBEDDING_TIMEOUT разделён: rag-search=10, rag-builder=120
+- [x] RERANKER_FETCH_MULTIPLIER=2 (20 кандидатов вместо 500)
+- [x] GATEWAY_REQUEST_TIMEOUT=300
+- [x] Timeout в тесте увеличен до 120с
+- [x] Проверка PDF — 5 файлов, 3 текстовых (8/8 verified)
+- [x] Фиксация аномалий в specificity.md
 
-### Bugs identified:
-
-1. **`_run_ocr_fallback` (line 349):** New OCR preview step is created with `status="pending"` but never started via `start_task_step`. When OCR task completes, `on_step_completed` finds a "pending" step and completes it directly (skipping "running" state). This breaks step lifecycle.
-
-2. **`approve_draft` else branch (line 1197):** When `need_full_processing=False` (full preview mode or `full_completed=True`), the `full_converter` step is started but `run_converter_full_step.delay()` is NEVER called. The step stays `running` forever — no Celery task is dispatched to process it.
-
-3. **`_run_ocr_fallback` missing import guard:** After creating the step, `.delay()` is called but if the local import or dispatch fails, there's no error handling.
-
-### Plan:
-
-- [x] Fix 1: `_run_ocr_fallback` — start the new OCR step after creation
-- [x] Fix 2: `approve_draft` else branch — dispatch `run_converter_full_step.delay()` when skipping Parser/OCR
-- [x] Review all dispatch sites for consistency
-- [x] Run tests
+**Не исправлено:**
+- Документы остаются в validating (архитектурное решение)

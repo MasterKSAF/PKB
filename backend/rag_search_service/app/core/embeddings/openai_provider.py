@@ -19,6 +19,8 @@ class OpenAICompatibleProvider(EmbeddingProvider):
     def __init__(self, instruction: str | None = None):
         self.settings = get_settings()
         self._instruction = instruction if instruction is not None else self.settings.embedding_instruction
+        # Таймаут 10с — запрос на один мелкий эмбеддинг, долгого ожидания быть не может.
+        # Если не успел — сразу retry (max_retries=2), а не ждать 60с.
         self._client = AsyncOpenAI(
             base_url=self.settings.embedding_base_url,
             api_key=self.settings.embedding_api_key or "not-needed",

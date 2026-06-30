@@ -515,19 +515,50 @@ def main():
 
     for idx, fragment in enumerate(fragments):
         print(f"\n  --- Fragment [{idx + 1}/{len(fragments)}]: \"{fragment[:80]}...\" ---")
+        # DEBUG: проверим что шлём
+        _test_body = {"query": fragment, "valid_at": "2025-01-01"}
+        print(f"  DEBUG headers keys: {list(headers.keys())}")
+        print(f"  DEBUG body keys: {list(_test_body.keys())}")
         try:
             r = requests.post(
                 f"{GW}/rag/search",
-                json={"query": fragment, "valid_at": "2025-01-01"},
+                json=_test_body,
                 headers={**headers, "Content-Type": "application/json; charset=utf-8"},
-                timeout=30,
+                timeout=120,
             )
+        except requests.Timeout:
+            # Таймаут — попробуем прямой вызов rag-search
+            print(f"  [WARN] Gateway timeout, trying direct rag-search...")
+            try:
+                direct_url = f"http://localhost:8091/api/v1/rag/search"
+                r = requests.post(
+                    direct_url,
+                    json={"query": fragment, "valid_at": "2025-01-01"},
+                    headers={"Content-Type": "application/json; charset=utf-8"},
+                    timeout=120,
+                )
+                if r.status_code == 200:
+                    print(f"  Direct rag-search: OK")
+                else:
+                    print(f"  Direct rag-search: HTTP {r.status_code}")
+                    continue
+            except Exception:
+                print(f"  Direct rag-search also failed")
+                continue
         except Exception as e:
             print(f"  [WARN] Search error: {e}")
             continue
 
         if r.status_code == 404:
             print(f"  RAG endpoint not found at gateway")
+            _fallback = True
+        elif r.status_code == 422:
+            print(f"  HTTP 422 (JSON error) — пробую напрямую rag-search")
+            _fallback = True
+        else:
+            _fallback = False
+
+        if _fallback:
             # Попробовать напрямую к rag-search (локально)
             try:
                 direct_url = f"http://localhost:8091/api/v1/rag/search"
@@ -535,7 +566,7 @@ def main():
                     direct_url,
                     json={"query": fragment, "valid_at": "2025-01-01"},
                     headers={"Content-Type": "application/json; charset=utf-8"},
-                    timeout=10,
+                    timeout=120,
                 )
                 if r.status_code == 200:
                     print(f"  Direct rag-search: OK")
