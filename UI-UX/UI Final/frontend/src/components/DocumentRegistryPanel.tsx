@@ -136,6 +136,47 @@ const resolveGatewayAssetUrl = (url: unknown) => {
   return `${originBase}${text.startsWith('/') ? text : `/${text}`}`;
 };
 
+const getInternalServiceHost = (url: unknown) => {
+  const text = normalizeText(url);
+  if (!/^https?:\/\//i.test(text)) return '';
+  try {
+    const parsed = new URL(text);
+    return ['minio', 'registry', 'orchestrator', 'gateway'].includes(parsed.hostname.toLowerCase()) ? parsed.hostname : '';
+  } catch {
+    return '';
+  }
+};
+
+const extractServerErrorMessage = async (payload: unknown) => {
+  if (!payload) return '';
+  try {
+    if (payload instanceof Blob) {
+      const text = await payload.text();
+      if (!text) return '';
+      try {
+        const parsed = JSON.parse(text);
+        return normalizeText(parsed?.error?.message ?? parsed?.detail?.error?.message ?? parsed?.detail ?? text);
+      } catch {
+        return text;
+      }
+    }
+    if (typeof payload === 'string') return payload;
+    if (typeof payload === 'object') {
+      const data = payload as Record<string, any>;
+      return normalizeText(data.error?.message ?? data.detail?.error?.message ?? data.detail ?? data.message);
+    }
+  } catch {
+    return '';
+  }
+  return '';
+};
+
+const openBlobInNewTab = (blob: Blob) => {
+  const objectUrl = URL.createObjectURL(blob);
+  window.open(objectUrl, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+};
+
 const getLatestVersionId = (detail: any, versions: DocumentVersionSummary[]) => {
   const latest = detail?.latest_version ?? {};
   return normalizeText(latest.version_id ?? latest.versionId ?? detail?.version_id ?? detail?.current_version_id ?? versions[0]?.id);
@@ -744,23 +785,49 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
 
     setDownloadError('');
     try {
+      try {
+        const binaryResponse = await apiClient.get(`/documents/${selectedDocument.id}/file`, {
+          params: { format: 'binary' },
+          responseType: 'blob',
+        });
+        const contentType = normalizeText(binaryResponse.headers?.['content-type']).toLowerCase();
+        const blob = binaryResponse.data instanceof Blob ? binaryResponse.data : new Blob([binaryResponse.data]);
+
+        if (!contentType.includes('application/json')) {
+          openBlobInNewTab(blob);
+          return;
+        }
+      } catch (binaryError) {
+        const status = (binaryError as { response?: { status?: number } })?.response?.status;
+        if (status && ![404, 410, 501].includes(status)) {
+          throw binaryError;
+        }
+      }
+
       const fileInfo = await documentsApi.file(selectedDocument.id);
-      const fileUrl = resolveGatewayAssetUrl(fileInfo?.file_url ?? fileInfo?.url ?? fileInfo?.download_url);
+      const rawFileUrl = fileInfo?.file_url ?? fileInfo?.url ?? fileInfo?.download_url;
+      const fileUrl = resolveGatewayAssetUrl(rawFileUrl);
+      const internalHost = getInternalServiceHost(rawFileUrl);
 
       if (!fileUrl) {
-        throw new Error('Сервер не передал ссылку на файл.');
+        throw new Error(
+          internalHost
+            ? `Сервер вернул внутреннюю ссылку ${internalHost}, но публичный proxy скачивания файлов не настроен.`
+            : 'Сервер не передал публичную ссылку на файл.',
+        );
       }
 
       const response = await apiClient.get(fileUrl, { responseType: 'blob' });
       const blob = response.data instanceof Blob ? response.data : new Blob([response.data]);
-      const objectUrl = URL.createObjectURL(blob);
-      window.open(objectUrl, '_blank', 'noopener,noreferrer');
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      openBlobInNewTab(blob);
     } catch (error) {
       const status = (error as { response?: { status?: number } })?.response?.status;
+      const serverMessage = await extractServerErrorMessage((error as { response?: { data?: unknown } })?.response?.data);
       setDownloadError(
         status === 404
           ? 'Сервер передал ссылку на файл, но файл по ней не найден (404).'
+          : status === 410
+            ? `Серверный proxy скачивания файлов отключен${serverMessage ? `: ${serverMessage}` : '.'}`
           : error instanceof Error
             ? error.message
             : 'Не удалось получить файл через сервер.',
