@@ -13,6 +13,21 @@ DEFAULT_ROLES = {
     "system_admin": ["users:manage", "roles:manage", "audit:read", "documents:read", "documents:write", "search", "history:read"],
 }
 
+DEFAULT_USERS = [
+    {
+        "email": "knowledge@example.com",
+        "full_name": "Knowledge Administrator",
+        "password": "Knowledge1234!",
+        "role": "knowledge_admin",
+    },
+    {
+        "email": "engineer@example.com",
+        "full_name": "Engineer",
+        "password": "Engineer1234!",
+        "role": "engineer",
+    },
+]
+
 
 async def init_db(db: AsyncSession) -> None:
     async with engine.begin() as connection:
@@ -42,3 +57,22 @@ async def init_db(db: AsyncSession) -> None:
         )
         db.add(admin)
         await db.commit()
+
+    for user_spec in DEFAULT_USERS:
+        result = await db.execute(select(User).where(User.email == user_spec["email"]))
+        user = result.scalar_one_or_none()
+        if user:
+            continue
+
+        role_result = await db.execute(select(Role).where(Role.name == user_spec["role"]))
+        role = role_result.scalar_one()
+        db.add(
+            User(
+                email=user_spec["email"],
+                full_name=user_spec["full_name"],
+                password_hash=hash_password(user_spec["password"]),
+                roles=[role],
+            )
+        )
+
+    await db.commit()

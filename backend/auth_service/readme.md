@@ -25,7 +25,7 @@
 |---|---|---|
 | engineer | Инженер-конструктор | documents:read, search, history:read |
 | knowledge_admin | Администратор знаний | documents:read, documents:write, search, history:read |
-| system_admin | Администратор системы | users:manage, roles:manage, audit:read, documents:read, documents:write, search |
+| system_admin | Администратор системы | users:manage, roles:manage, audit:read, documents:read, documents:write, search, history:read |
 
 ## Быстрый старт
 
@@ -40,11 +40,12 @@ docker compose up --build
 - Swagger: http://localhost:8000/docs
 - Healthcheck: http://localhost:8000/health
 
-## Данные администратора по умолчанию
+## Пользователи по умолчанию
 
 ```text
-email: admin@example.com
-password: Admin1234!
+system_admin: admin@example.com / Admin1234!
+knowledge_admin: knowledge@example.com / Knowledge1234!
+engineer: engineer@example.com / Engineer1234!
 ```
 
 ## Получить токен

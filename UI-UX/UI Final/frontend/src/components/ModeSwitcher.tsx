@@ -116,8 +116,8 @@ export const ModeSwitcher: React.FC = () => {
   const lightShipBlue = '#0284c7';
   const currentUser = adminUsers.find((user) => user.id === currentUserId) ?? null;
   const availableTabs = React.useMemo(
-    () => getAccessibleTabs(currentRole, currentUser?.availableTabs, workMode),
-    [currentRole, currentUser?.availableTabs, workMode],
+    () => getAccessibleTabs(currentRole, currentUser?.availableTabs, workMode, currentUser?.permissions),
+    [currentRole, currentUser?.availableTabs, currentUser?.permissions, workMode],
   );
   const visibleNavItems = NAV_ITEMS.filter((item) => availableTabs.includes(item.value));
   const [chatTreeOpen, setChatTreeOpen] = React.useState(false);
