@@ -69,7 +69,7 @@ export const Feedback: React.FC<FeedbackProps> = ({ messageId, sessionId }) => {
                 <ThumbsUp size={16} />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Не полезно">
+            <Tooltip title="Неполезно">
               <IconButton
                 aria-label="Оценить ответ отрицательно"
                 size="small"
