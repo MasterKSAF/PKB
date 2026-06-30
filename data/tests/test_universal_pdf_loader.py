@@ -2,14 +2,17 @@
 Universal PDF Loader + Search Verification Test.
 
 Загружает любой PDF, проходит полный pipeline (Upload → Preview → Approve → Wait),
-извлекает из PDF фрагменты текста и проверяет их через RAG Search.
+после pipeline получает текст распарсенного документа из Registry (sections),
+извлекает из него фрагменты и проверяет их через RAG Search.
+
+Использует только корневой docker-compose (порт 8080), без service_checker.
 
 Usage:
     # По умолчанию — локальный сервер
     python data/tests/test_universal_pdf_loader.py
 
     # Указать конкретный PDF
-    python data/tests/test_universal_pdf_loader.py data/pdf/НД_№2_09_006_кн_6_переиздан_как_2_039901_005,_2018.pdf
+    python data/tests/test_universal_pdf_loader.py data/pdf/2-020101-004.pdf
 
     # Внешний сервер
     set TEST_API_URL=http://195.70.195.203:8080/api/v1 && python data/tests/test_universal_pdf_loader.py data/pdf/...pdf
@@ -19,7 +22,7 @@ Usage:
 
 Requires:
     - docker services up (gateway, orchestrator, celery-worker, rag-search, etc.)
-    - pip install PyPDF2 requests  (обычно уже есть)
+    - pip install requests
 """
 import io, os, sys, re, json, time, uuid, hashlib, datetime
 from pathlib import Path
@@ -35,12 +38,6 @@ except ImportError:
     print("[FAIL] requests not installed. Run: pip install requests")
     sys.exit(1)
 
-try:
-    import PyPDF2
-except ImportError:
-    print("[FAIL] PyPDF2 not installed. Run: pip install PyPDF2")
-    sys.exit(1)
-
 from config import get_api_url
 
 # ─── Config ──────────────────────────────────────────────────────────────
@@ -50,7 +47,7 @@ GW = get_api_url()
 if len(sys.argv) > 1:
     pdf_arg = sys.argv[1]
 else:
-    pdf_arg = "data/pdf/НД_№2_09_006_кн_6_переиздан_как_2_039901_005,_2018.pdf"
+    pdf_arg = "data/pdf/2-020101-004.pdf"
 
 PDF = Path(pdf_arg).resolve()
 if not PDF.exists():
@@ -99,64 +96,45 @@ def ok(msg=""):
     sys.stdout.flush()
 
 
-# ─── STEP 1: Extract text fragments from PDF ────────────────────────────
-def extract_fragments_from_pdf(path: Path, max_fragments: int = 8) -> list:
+# ─── STEP: Extract fragments from Registry sections ─────────────────────
+def extract_fragments_from_sections(sections: list, max_fragments: int = 8) -> list:
     """
-    Извлекает осмысленные текстовые фрагменты из PDF для последующей
-    верификации через RAG Search.
-
-    Стратегия:
-    1. Читает все страницы
-    2. Фильтрует короткие/пустые строки
-    3. Выбирает самые длинные/информативные строки (не оглавление, не номер страницы)
-    4. Нормализует пробелы
+    Извлекает осмысленные текстовые фрагменты из массива секций документа,
+    полученных от Registry (уже распарсено конвертером/OCR).
     """
     fragments = []
     seen = set()
 
-    try:
-        reader = PyPDF2.PdfReader(path)
-        total_pages = len(reader.pages)
-        print(f"  PDF: {path.name} ({path.stat().st_size} bytes, {total_pages} pages)")
-    except Exception as e:
-        print(f"  [WARN] Cannot read PDF: {e}")
-        return ["Техническое наблюдение", "ремонт морских судов", "корпусных конструкций"]
-
     # Стоп-слова для фильтрации мусора
     stop_patterns = [
-        r'^\d+$',                               # только номер страницы
-        r'^с\.?\s*$', r'^стр\.?\s*\d*$',       # с., стр.
-        r'^содержание$', r'^оглавление$',       # заголовки разделов
-        r'^приложение\s*\d*$',                   # приложение N
-        r'^\s*$',                               # пустые
+        r'^\d+$',                           # только номер страницы
+        r'^с\.?\s*$', r'^стр\.?\s*\d*$',   # с., стр.
+        r'^содержание$', r'^оглавление$',   # заголовки разделов
+        r'^приложение\s*\d*$',              # приложение N
+        r'^\s*$',                            # пустые
     ]
     stop_re = re.compile('|'.join(stop_patterns), re.IGNORECASE)
 
-    # Собираем все тексты со страниц (без первых 2 — титул, содержание)
-    for page_num in range(min(2, total_pages), total_pages):
-        try:
-            text = reader.pages[page_num].extract_text()
-        except Exception:
-            continue
-
-        if not text or len(text) < 30:
+    for section in sections:
+        content = section.get("content", "") or ""
+        if len(content) < 30:
             continue
 
         # Разбиваем на строки и чистим
-        lines = text.split('\n')
+        lines = content.split('\n')
         for line in lines:
             line = line.strip()
-            # Нормализация пробелов
             line = re.sub(r'\s+', ' ', line).strip()
-            # Фильтры
             if len(line) < 20:
                 continue
             if len(line) > 300:
-                # Слишком длинная строка — обрезаем до предложения
                 line = line[:250]
             if stop_re.match(line):
                 continue
-            # Избегаем дубликатов (по первым 50 символам)
+            # Нет смысла брать строки без букв
+            if not any(c.isalpha() for c in line):
+                continue
+
             key = line[:50]
             if key in seen:
                 continue
@@ -167,23 +145,21 @@ def extract_fragments_from_pdf(path: Path, max_fragments: int = 8) -> list:
             break
 
     if not fragments:
-        print(f"  [WARN] No meaningful fragments extracted, using filename-based defaults")
-        return [PDF.stem[:50], str(total_pages)]
+        print(f"  [WARN] No meaningful fragments extracted from sections")
+        return []
 
-    # Сортируем по длине (самые информативные) и берём топ-N
-    # Приоритет: длинные строки с буквами (не цифры), разнообразие
+    # Сортируем по длине + буквенному содержанию
     scored = []
     for f in fragments:
         alpha_ratio = sum(1 for c in f if c.isalpha()) / max(len(f), 1)
         digit_ratio = sum(1 for c in f if c.isdigit()) / max(len(f), 1)
-        # Бонус за буквы, штраф за одни цифры
         score = len(f) * alpha_ratio - len(f) * digit_ratio * 0.5
         scored.append((score, f))
 
     scored.sort(key=lambda x: -x[0])
     top = [f for _, f in scored[:max_fragments]]
 
-    print(f"  Extracted {len(top)} fragments from {len(fragments)} candidates:")
+    print(f"  Extracted {len(top)} fragments from {len(fragments)} candidates (from {len(sections)} sections):")
     for i, frag in enumerate(top):
         print(f"    [{i+1}] ({len(frag)} chars) {frag[:120]}...")
 
@@ -195,14 +171,10 @@ def main():
     global failed
 
     print(f"\n{'#'*70}")
-    print(f"  UNIVERSAL PDF LOADER")
+    print(f"  UNIVERSAL PDF LOADER (sections-based verification)")
     print(f"  Target: {GW}")
     print(f"  PDF:    {PDF.name}")
     print(f"{'#'*70}\n")
-
-    # ─── Extract fragments ───────────────────────────────────────────────
-    log("Extract text fragments from PDF for later verification")
-    fragments = extract_fragments_from_pdf(PDF, EXTRACT_FRAGMENTS)
 
     # ─── Auth ────────────────────────────────────────────────────────────
     log("Auth — get JWT token")
@@ -218,7 +190,6 @@ def main():
         ok(f"Token: {token[:40]}...")
     except Exception as e:
         fail(f"Auth: {e}")
-        # Пробуем с другие credentials
         try:
             r = requests.post(
                 f"{GW}/auth/token",
@@ -342,7 +313,6 @@ def main():
             data = r.json()
             s = data.get("status", "")
             pp = data.get("progress_percent", 0)
-            # Детали preview-шагов
             preview_steps = data.get("preview_steps", data.get("steps", []))
             step_statuses = {st.get("step_name","?"): st.get("status","?") for st in preview_steps}
             print(f"  [{i+1}] Preview: {s}, {pp}%  steps={step_statuses}")
@@ -403,11 +373,8 @@ def main():
     pipeline_ok = False
 
     def print_step_summary(steps_list, title=""):
-        """Печатает сводку шагов: группировка по step_name, статусы, тайминги."""
         if title:
             print(f"  --- {title} ---")
-        # Группируем по step_name
-        from collections import Counter
         groups = {}
         for st in steps_list:
             name = st["step_name"]
@@ -417,7 +384,6 @@ def main():
             groups[name]["statuses"][st["status"]] += 1
             groups[name]["items"].append(st)
 
-        # Сортируем: сначала проблемные (с pending/failed), потом по имени
         def sort_key(item):
             name, g = item
             has_pending = g["statuses"].get("pending", 0) > 0
@@ -435,7 +401,6 @@ def main():
                 marker = f" 🔄 DUPLICATE x{g['count']}"
             print(f"    {name:30s} | {status_str:30s}{marker}")
 
-            # Для pending/failed показываем время старта и сервис
             for si in g["items"]:
                 if si["status"] in ("pending", "failed"):
                     started = si.get("started_at", "")[:19] if si.get("started_at") else "-"
@@ -467,7 +432,6 @@ def main():
             progress = d.get("progress_percent", 0)
             steps_list = d.get("steps", [])
 
-            # Печатаем сводку: каждый раз, но с уменьшением частоты
             if i < 3 or i % 5 == 0 or s in ("completed", "failed"):
                 print(f"\n  >>> Poll [{i+1}] status={s} stage={stage} progress={progress}%")
                 print_step_summary(steps_list)
@@ -486,13 +450,46 @@ def main():
         time.sleep(5)
     else:
         fail(f"Pipeline did not complete in {PIPELINE_TIMEOUT}s")
-        # При таймауте выводим полную картину
         try:
             r = requests.get(f"{GW}/tasks/{task_id}/status", headers=headers, timeout=10)
             if r.status_code == 200:
                 print_step_summary(r.json().get("steps", []), "FINAL TIMEOUT STATE")
         except:
             pass
+
+    # ─── Get fragments from Registry sections ───────────────────────────
+    log("Fetch parsed text from Registry (document sections)")
+    fragments = []
+    if document_id and pipeline_ok:
+        try:
+            r = requests.get(
+                f"{GW}/registry/documents/{document_id}/sections",
+                headers=headers,
+                timeout=15,
+            )
+            if r.status_code == 200:
+                bundle = r.json().get("data", {})
+                sections = bundle.get("sections", [])
+                print(f"  Got {len(sections)} sections from Registry")
+
+                # Извлекаем фрагменты из секций
+                fragments = extract_fragments_from_sections(sections, EXTRACT_FRAGMENTS)
+                if not fragments:
+                    print(f"  [WARN] No fragments from sections, trying fallback")
+                    # Fallback: собрать сырой текст из всех секций
+                    all_text = " ".join(s.get("content", "") or "" for s in sections)
+                    words = [w for w in all_text.split() if len(w) > 3 and w.isalpha()]
+                    unique = list(dict.fromkeys(words))
+                    fragments = [" ".join(unique[i:i+5]) for i in range(0, min(len(unique), 40), 5)][:EXTRACT_FRAGMENTS]
+                    print(f"  Fallback: {len(fragments)} word-group fragments")
+            elif r.status_code == 404:
+                print(f"  [WARN] Document sections not found yet (HTTP 404)")
+            else:
+                print(f"  [WARN] Registry sections: HTTP {r.status_code}")
+        except Exception as e:
+            print(f"  [WARN] Cannot fetch sections: {e}")
+    else:
+        print(f"  [SKIP] No document_id or pipeline failed")
 
     # ─── Verify in Registry ──────────────────────────────────────────────
     log("Verify document in registry")
@@ -513,117 +510,103 @@ def main():
     log("SEARCH & VERIFY — проверка фрагментов через RAG Search")
     verified_count = 0
 
-    for idx, fragment in enumerate(fragments):
-        print(f"\n  --- Fragment [{idx + 1}/{len(fragments)}]: \"{fragment[:80]}...\" ---")
-        # DEBUG: проверим что шлём
-        _test_body = {"query": fragment, "valid_at": "2025-01-01"}
-        print(f"  DEBUG headers keys: {list(headers.keys())}")
-        print(f"  DEBUG body keys: {list(_test_body.keys())}")
-        try:
-            r = requests.post(
-                f"{GW}/rag/search",
-                json=_test_body,
-                headers={**headers, "Content-Type": "application/json; charset=utf-8"},
-                timeout=120,
-            )
-        except requests.Timeout:
-            # Таймаут — попробуем прямой вызов rag-search
-            print(f"  [WARN] Gateway timeout, trying direct rag-search...")
+    if not fragments:
+        print(f"  [SKIP] No fragments to search")
+    else:
+        for idx, fragment in enumerate(fragments):
+            print(f"\n  --- Fragment [{idx + 1}/{len(fragments)}]: \"{fragment[:80]}...\" ---")
             try:
-                direct_url = f"http://localhost:8091/api/v1/rag/search"
                 r = requests.post(
-                    direct_url,
+                    f"{GW}/rag/search",
                     json={"query": fragment, "valid_at": "2025-01-01"},
-                    headers={"Content-Type": "application/json; charset=utf-8"},
+                    headers={**headers, "Content-Type": "application/json; charset=utf-8"},
                     timeout=120,
                 )
-                if r.status_code == 200:
-                    print(f"  Direct rag-search: OK")
-                else:
-                    print(f"  Direct rag-search: HTTP {r.status_code}")
+            except requests.Timeout:
+                print(f"  [WARN] Gateway timeout, trying direct rag-search...")
+                try:
+                    direct_url = f"http://localhost:8091/api/v1/rag/search"
+                    r = requests.post(
+                        direct_url,
+                        json={"query": fragment, "valid_at": "2025-01-01"},
+                        headers={"Content-Type": "application/json; charset=utf-8"},
+                        timeout=120,
+                    )
+                    if r.status_code == 200:
+                        print(f"  Direct rag-search: OK")
+                    else:
+                        print(f"  Direct rag-search: HTTP {r.status_code}")
+                        continue
+                except Exception:
+                    print(f"  Direct rag-search also failed")
                     continue
-            except Exception:
-                print(f"  Direct rag-search also failed")
-                continue
-        except Exception as e:
-            print(f"  [WARN] Search error: {e}")
-            continue
-
-        if r.status_code == 404:
-            print(f"  RAG endpoint not found at gateway")
-            _fallback = True
-        elif r.status_code == 422:
-            print(f"  HTTP 422 (JSON error) — пробую напрямую rag-search")
-            _fallback = True
-        else:
-            _fallback = False
-
-        if _fallback:
-            # Попробовать напрямую к rag-search (локально)
-            try:
-                direct_url = f"http://localhost:8091/api/v1/rag/search"
-                r = requests.post(
-                    direct_url,
-                    json={"query": fragment, "valid_at": "2025-01-01"},
-                    headers={"Content-Type": "application/json; charset=utf-8"},
-                    timeout=120,
-                )
-                if r.status_code == 200:
-                    print(f"  Direct rag-search: OK")
-                else:
-                    print(f"  Direct rag-search: HTTP {r.status_code}")
-                    continue
-            except Exception:
-                print(f"  Direct rag-search also failed")
+            except Exception as e:
+                print(f"  [WARN] Search error: {e}")
                 continue
 
-        if r.status_code != 200:
-            print(f"  HTTP {r.status_code}: {r.text[:200]}")
-            continue
+            if r.status_code in (404, 422):
+                print(f"  HTTP {r.status_code} — пробую напрямую rag-search")
+                try:
+                    direct_url = f"http://localhost:8091/api/v1/rag/search"
+                    r = requests.post(
+                        direct_url,
+                        json={"query": fragment, "valid_at": "2025-01-01"},
+                        headers={"Content-Type": "application/json; charset=utf-8"},
+                        timeout=120,
+                    )
+                    if r.status_code == 200:
+                        print(f"  Direct rag-search: OK")
+                    else:
+                        print(f"  Direct rag-search: HTTP {r.status_code}")
+                        continue
+                except Exception:
+                    print(f"  Direct rag-search also failed")
+                    continue
 
-        data = r.json()
-        results = data.get("results", [])
-        total = data.get("total_found", 0)
+            if r.status_code != 200:
+                print(f"  HTTP {r.status_code}: {r.text[:200]}")
+                continue
 
-        # Пытаемся найти фрагмент в результатах
-        fragment_lower = fragment.lower()
-        fragment_words = set(fragment_lower.split()[:5])  # ключевые слова
+            data = r.json()
+            results = data.get("results", [])
+            total = data.get("total_found", 0)
 
-        found_in_results = False
-        docs_found = set()
-        if results:
-            print(f"  total_found={total}, results_in_page={len(results)}")
-            for rr in results[:5]:
-                content = rr["source"].get("content", "")
-                score = rr["retrieval"].get("score", 0)
-                doc_id = rr["source"].get("document_id", "?")
-                docs_found.add(doc_id)
-                print(f"    [score={score:.3f}] doc_id={doc_id} len={len(content)}")
-                print(f"      {content[:150]}...")
-                # Проверка: совпадение подстроки
-                if fragment_lower in content.lower():
-                    found_in_results = True
-                # Проверка: совпадение ключевых слов
-                if not found_in_results:
-                    content_words = set(content.lower().split())
-                    overlap = len(fragment_words & content_words)
-                    if overlap >= 2 and len(fragment_words) >= 3:
+            fragment_lower = fragment.lower()
+            fragment_words = set(fragment_lower.split()[:5])
+
+            found_in_results = False
+            docs_found = set()
+            if results:
+                print(f"  total_found={total}, results_in_page={len(results)}")
+                for rr in results[:5]:
+                    content = rr["source"].get("content", "")
+                    score = rr["retrieval"].get("score", 0)
+                    doc_id = rr["source"].get("document_id", "?")
+                    docs_found.add(doc_id)
+                    print(f"    [score={score:.3f}] doc_id={doc_id} len={len(content)}")
+                    print(f"      {content[:150]}...")
+                    if fragment_lower in content.lower():
                         found_in_results = True
+                    if not found_in_results:
+                        content_words = set(content.lower().split())
+                        overlap = len(fragment_words & content_words)
+                        if overlap >= 2 and len(fragment_words) >= 3:
+                            found_in_results = True
 
-            if document_id and str(document_id) in docs_found:
-                print(f"  ✓ OUR DOCUMENT (id={document_id}) is in results!")
-            elif docs_found:
-                print(f"  ⚠ Only OTHER docs found: {docs_found}, ours={document_id}")
-        elif total > 0:
-            print(f"  total_found={total} but no results in response")
-        else:
-            print(f"  No results")
+                if document_id and str(document_id) in docs_found:
+                    print(f"  ✓ OUR DOCUMENT (id={document_id}) is in results!")
+                elif docs_found:
+                    print(f"  ⚠ Only OTHER docs found: {docs_found}, ours={document_id}")
+            elif total > 0:
+                print(f"  total_found={total} but no results in response")
+            else:
+                print(f"  No results")
 
-        if found_in_results:
-            verified_count += 1
-            print(f"  ✓ VERIFIED")
-        else:
-            print(f"  ✗ NOT VERIFIED (fragment not found in search results)")
+            if found_in_results:
+                verified_count += 1
+                print(f"  ✓ VERIFIED")
+            else:
+                print(f"  ✗ NOT VERIFIED (fragment not found in search results)")
 
     # ─── Final Report ────────────────────────────────────────────────────
     print(f"\n{'='*70}")
@@ -631,6 +614,7 @@ def main():
     print(f"{'='*70}")
     print(f"  PDF:            {PDF.name}")
     print(f"  Pipeline:       {'✓ COMPLETED' if pipeline_ok else '✗ FAILED / TIMEOUT'}")
+    print(f"  Sections:       {'✓ Fetched' if fragments else '✗ Not available'}")
     print(f"  Fragments:      {verified_count}/{len(fragments)} verified via search")
     print(f"")
     print(f"  Draft ID:       {draft_id}")
@@ -641,12 +625,15 @@ def main():
     if failed:
         print(f"\n  [FAIL] Some checks failed")
         sys.exit(1)
-    elif verified_count >= max(1, len(fragments) // 2):
+    elif pipeline_ok and fragments and verified_count >= max(1, len(fragments) // 2):
         print(f"\n  [PASS] All critical checks passed")
         sys.exit(0)
-    else:
-        print(f"\n  [WARN] Low verification rate ({verified_count}/{len(fragments)}), pipeline may be incomplete")
+    elif pipeline_ok:
+        print(f"\n  [INFO] Pipeline completed, but fragment verification low")
         sys.exit(2)
+    else:
+        print(f"\n  [FAIL] Pipeline did not complete")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -811,15 +811,39 @@ class PipelineOrchestrator:
             )
 
             from app.tasks.pipeline_formation import run_rag_index_step
-            # Extract sections from full_ocr step output for RAG Builder
+            # Extract sections from step outputs for RAG Builder.
+            # Try full_converter first (fast path), fall back to full_ocr (OCR path).
             sections = None
+            # Try full_converter first (fast path) — конвертер отдаёт content[]
             for s in steps:
-                if s.step_name == "full_ocr" and s.output_data:
-                    sections = s.output_data.get("sections")
+                if s.step_name == "full_converter" and s.output_data:
+                    content_items = (s.output_data.get("document") or {}).get("content")
+                    if content_items:
+                        # RAG Builder Section требует section_id (int), level, path, type, content.
+                        # У конвертера section_id нет — назначаем от индекса.
+                        sections = []
+                        for idx, item in enumerate(content_items):
+                            sec = dict(item)
+                            sec["section_id"] = idx + 1
+                            sections.append(sec)
+                        logger.info(
+                            f"Extracted {len(sections)} sections from full_converter content",
+                            extra={"task_id": task.id, "draft_id": task.draft_id},
+                        )
                     break
+            # Fallback to OCR path (sections уже с section_id от парсера)
+            if not sections:
+                for s in steps:
+                    if s.step_name == "full_ocr" and s.output_data:
+                        sections = s.output_data.get("sections")
+                        if sections:
+                            logger.info(
+                                f"Extracted {len(sections)} sections from full_ocr output",
+                                extra={"task_id": task.id, "draft_id": task.draft_id},
+                            )
+                        break
             document_id = getattr(task, 'document_id', None) or task.draft_id
             # Fix document_id in sections to match registry document_id (P1F-10)
-            # Sections were built with draft_id, but registry may assign a different id
             if sections:
                 for s in sections:
                     s['document_id'] = document_id
@@ -829,7 +853,7 @@ class PipelineOrchestrator:
                     "celery_task": "tasks.pipeline.run_rag_index_step",
                     "queue": "pipeline",
                     "params": {"task_id": task.id, "draft_id": task.draft_id,
-                               "document_id": document_id},
+                               "document_id": document_id, "sections_count": len(sections) if sections else 0},
                 },
             )
             run_rag_index_step.delay(

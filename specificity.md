@@ -246,20 +246,67 @@ registry_creation completed → enqueue rag_index`
 
 ### UTL. Универсальный тест загрузки PDF — data/tests/test_universal_pdf_loader.py
 
-**Назначение:** Единый скрипт для загрузки любого PDF через Gateway, извлечения текстовых фрагментов из самого PDF и верификации их через RAG Search.
+**Назначение:** Единый скрипт для загрузки любого PDF через Gateway, прохождения полного pipeline и верификации через RAG Search.
 
 **Особенности:**
 - Не использует service_checker — только корневой docker-compose (порт 8080)
-- Аргумент — путь к PDF (по умолчанию `НД_№2_09_006_кн_6_переиздан_как_2_039901_005,_2018.pdf`)
-- Фрагменты извлекаются через PyPDF2: фильтрация стоп-строк, сортировка по длине + буквенному соотношению
-- Настройка через переменные окружения: `EXTRACT_FRAGMENTS` (сколько фрагментов), `DOC_SOURCE_TYPE`, `DOC_TITLE`, `DOC_CODE`, `TEST_API_URL`
-- Выходной код: 0 (успех), 1 (ошибка), 2 (низкий процент верификации)
+- Текст для верификации берётся из Registry sections (**распарсенный конвертером/OCR PDF**, не PyPDF2)
+- Если конвертер не смог парсить PDF (CID-шрифты, сканы) — sections пусты, тест выходит с exit 2
+- Настройка через переменные окружения: `EXTRACT_FRAGMENTS`, `DOC_SOURCE_TYPE`, `DOC_TITLE`, `DOC_CODE`, `TEST_API_URL`
+- Выходной код: 0 (успех), 1 (ошибка), 2 (низкая верификация или нет секций)
 
-**Пример:**
-```bash
-set EXTRACT_FRAGMENTS=10 && python data/tests/test_universal_pdf_loader.py data/pdf/ОСТ5_2067_73_Имущество_АСИ_ППИ_и_ЗИП_Крепление_на_судах.pdf
-```
+**Важно:** Для PDF с CID-шрифтами/закодированным текстом конвертер не создаёт секции. Тест корректно отражает это — верификация невозможна, т.к. текст не извлекается ни самим конвертером, ни OCR.
+
+### D1. Детекция дублей при загрузке не работает (30.06)
+
+**Статус:** НЕ ИСПРАВЛЕНО
+
+**Что не работает:**
+- Повторная загрузка того же файла создаёт новый draft (не HTTP 409)
+- Три теста (`test_dup_check.py`): 3/3 файлов загружены дважды с разными draft_id
+- Bulk test: 63/63 файлов загрузились успешно, дубли не проверяются
+
+**Корневая причина (2 уровня):**
+
+1. `CheckUniquenessRequest` в `orchestrator_service/app/schemas/requests.py:52-59` НЕ включает `file_hash_sha256`. Передаются только: `title`, `doc_code`, `era`, `source_type`, `file_size_bytes`.
+
+2. `check_document_uniqueness` в `registry_service/api/v1/crud/document.py:326-385`:
+   - Ищет только по `Document` (не Draft) — файл ещё не проиндексирован, искать негде
+   - `is_duplicate_file` хардкодно `False` (строка 379)
+   - Не использует file_hash — только title_hash (из метаданных)
+
+3. Gateway mock (`mocks/handlers/registry_routes.py:1083-1096`) всегда возвращает `is_duplicate: False`.
+
+**Где должно быть:**
+- Orchestrator: в `create_draft()` (оркестратор) перед `check_uniqueness` — передавать `file_hash_sha256`
+- Registry: `check_document_uniqueness` — добавить поиск по Draft.file_hash_sha256
+- Registry: `is_duplicate_file` — вычислять по факту: есть ли Draft/Document с таким file_hash в активном статусе
 
 ### R4. Документы застревают в validating после pipeline
 
 Orchestrator намеренно ставит статус `validating`. Переход в `active` не автоматизирован.
+
+### D1. Детекция дублей при загрузке не работает (30.06)
+
+**Статус:** НЕ ИСПРАВЛЕНО
+
+**Что не работает:**
+- Повторная загрузка того же файла создаёт новый draft (не HTTP 409)
+- Три теста (`test_dup_check.py`): 3/3 файлов загружены дважды с разными draft_id
+- Bulk test: 63/63 файлов загрузились успешно, дубли не проверяются
+
+**Корневая причина (2 уровня):**
+
+1. `CheckUniquenessRequest` в `orchestrator_service/app/schemas/requests.py:52-59` НЕ включает `file_hash_sha256`. Передаются только: `title`, `doc_code`, `era`, `source_type`, `file_size_bytes`.
+
+2. `check_document_uniqueness` в `registry_service/api/v1/crud/document.py:326-385`:
+   - Ищет только по `Document` (не Draft) — файл ещё не проиндексирован, искать негде
+   - `is_duplicate_file` хардкодно `False` (строка 379)
+   - Не использует file_hash — только title_hash (из метаданных)
+
+3. Gateway mock (`mocks/handlers/registry_routes.py:1083-1096`) всегда возвращает `is_duplicate: False`.
+
+**Где должно быть:**
+- Orchestrator: в `create_draft()` (оркестратор) перед `check_uniqueness` — передавать `file_hash_sha256`
+- Registry: `check_document_uniqueness` — добавить поиск по Draft.file_hash_sha256
+- Registry: `is_duplicate_file` — вычислять по факту: есть ли Draft/Document с таким file_hash в активном статусе

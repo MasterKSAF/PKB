@@ -1,21 +1,10 @@
-# Баг: Исчезновение черновика после обработки / approval
+# Todo — Тестирование загрузки PDF и проверка дублей (ВЫПОЛНЕНО)
 
-## Статус: ИСПРАВЛЕНО
-
-### Корневая причина
-Оркестратор (`decide_draft`) при approve возвращает `status: "proceeding"`, а фронтенд ожидал `"approved"` и удалял черновик по наличию `document_id`. Документ при этом ещё не проиндексирован (Pipeline 2).
-
-### Сделанные изменения
-
-**Файл**: `UI-UX/UI Final/frontend/src/components/KnowledgeProcessing.tsx`
-
-**Fix 1** (строки 1728–1752): В `handleDecision` при approve:
-- Добавлен флаг `isProceedingAfterApprove` — true, когда ответ оркестратора `{ status: "proceeding" }`
-- `shouldRemoveDraft` теперь учитывает этот флаг: не удаляет черновик при "proceeding" даже если есть `document_id`
-- Вместо удаления — обновляет черновик со статусом `"validation"` (маппинг `"proceeding"` → `"validation"`)
-- Note: "Документ создан, запущена индексация. Черновик исчезнет после завершения."
-- 5-сек опрос `gatewayDraftsQuery` подхватит финальный `"approved"` и `isActiveDraftStatus` отфильтрует
-
-**Fix 2** (строка 1036–1039): `publishedDocumentsQuery`
-- Добавлен `refetchInterval: 10_000` при активной секции `registry`
-- Реестр автоматически обновляется и подхватывает проиндексированные документы
+## Результаты
+- [x] 1. Индексация репозитория (project_id: H-Projects-PKB_neuroassistant_develop)
+- [x] 2. Bulk upload test — все 63 PDF загружены (63/63 OK, HTTP 202)
+- [x] 3. Universal test — 2 PDF (`2-020101-004.pdf`, `gost_22786-77.pdf`): pipeline completed
+- [x] 4. Dup test создан и запущен — 3/3 файлов дубли не обнаружены
+- [x] 5. Анализ кода — найдена корневая причина отсутствия детекции дублей
+- [x] 6. Аномалия зафиксирована в specificity.md (секция D1)
+- [x] 7. Отчёт сформирован
