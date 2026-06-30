@@ -515,6 +515,10 @@ function mapGatewayStatus(
   if (normalized === 'enriching_citations') return 'enriching_citations';
   if (normalized === 'completed' || normalized === 'answered') return 'answered';
   if (scenario === 'failed' || normalized === 'failed' || normalized === 'error') return 'failed';
+  if (normalized === 'not_found') return 'not_found';
+  if (normalized === 'out_of_scope') return 'out_of_scope';
+  if (normalized === 'needs_clarification') return 'needs_clarification';
+  if (normalized === 'source_conflict') return 'source_conflict';
 
   return 'failed';
 }

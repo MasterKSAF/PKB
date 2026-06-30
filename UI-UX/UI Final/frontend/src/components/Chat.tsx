@@ -59,6 +59,10 @@ const statusLabel: Record<ChatStatus, string> = {
   enriching_citations: 'обогащение цитат',
   answered: 'ответ найден',
   failed: 'ошибка',
+  not_found: 'не найдено',
+  out_of_scope: 'вне области знаний',
+  needs_clarification: 'требуется уточнение',
+  source_conflict: 'конфликт источников',
 } as const;
 
 const statusTone: Record<ChatStatus, 'success' | 'warning' | 'error' | 'info'> = {
@@ -69,6 +73,10 @@ const statusTone: Record<ChatStatus, 'success' | 'warning' | 'error' | 'info'> =
   enriching_citations: 'info',
   answered: 'success',
   failed: 'error',
+  not_found: 'warning',
+  out_of_scope: 'warning',
+  needs_clarification: 'warning',
+  source_conflict: 'warning',
 };
 
 type ChatPreview = Citation & {
