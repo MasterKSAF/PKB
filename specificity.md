@@ -263,8 +263,7 @@ registry_creation completed → enqueue rag_index`
 
 **Что не работает:**
 - Повторная загрузка того же файла создаёт новый draft (не HTTP 409)
-- Три теста (`test_dup_check.py`): 3/3 файлов загружены дважды с разными draft_id
-- Bulk test: 63/63 файлов загрузились успешно, дубли не проверяются
+- 2/2 PDF протестированы (`2-020101-004.pdf`, `gost_22786-77.pdf`) — оба загружены дважды
 
 **Корневая причина (2 уровня):**
 
@@ -275,10 +274,8 @@ registry_creation completed → enqueue rag_index`
    - `is_duplicate_file` хардкодно `False` (строка 379)
    - Не использует file_hash — только title_hash (из метаданных)
 
-3. Gateway mock (`mocks/handlers/registry_routes.py:1083-1096`) всегда возвращает `is_duplicate: False`.
-
 **Где должно быть:**
-- Orchestrator: в `create_draft()` (оркестратор) перед `check_uniqueness` — передавать `file_hash_sha256`
+- Orchestrator: в `create_draft()` перед `check_uniqueness` передавать `file_hash_sha256`
 - Registry: `check_document_uniqueness` — добавить поиск по Draft.file_hash_sha256
 - Registry: `is_duplicate_file` — вычислять по факту: есть ли Draft/Document с таким file_hash в активном статусе
 
@@ -286,27 +283,18 @@ registry_creation completed → enqueue rag_index`
 
 Orchestrator намеренно ставит статус `validating`. Переход в `active` не автоматизирован.
 
-### D1. Детекция дублей при загрузке не работает (30.06)
+### B4. approve (decide) не доходит до Orchestrator — Gateway mock (30.06)
 
 **Статус:** НЕ ИСПРАВЛЕНО
 
-**Что не работает:**
-- Повторная загрузка того же файла создаёт новый draft (не HTTP 409)
-- Три теста (`test_dup_check.py`): 3/3 файлов загружены дважды с разными draft_id
-- Bulk test: 63/63 файлов загрузились успешно, дубли не проверяются
+**Симптом:** PATCH /api/v1/drafts/{id}/decide с action=approve возвращает 200 OK, но pipeline не запускается — full_ocr step зависает в `running`.
 
-**Корневая причина (2 уровня):**
-
-1. `CheckUniquenessRequest` в `orchestrator_service/app/schemas/requests.py:52-59` НЕ включает `file_hash_sha256`. Передаются только: `title`, `doc_code`, `era`, `source_type`, `file_size_bytes`.
-
-2. `check_document_uniqueness` в `registry_service/api/v1/crud/document.py:326-385`:
-   - Ищет только по `Document` (не Draft) — файл ещё не проиндексирован, искать негде
-   - `is_duplicate_file` хардкодно `False` (строка 379)
-   - Не использует file_hash — только title_hash (из метаданных)
-
-3. Gateway mock (`mocks/handlers/registry_routes.py:1083-1096`) всегда возвращает `is_duplicate: False`.
+**Корневая причина:**
+- Gateway (`mocks/handlers/orch_routes.py:580-673`) обрабатывает `decide_draft` локально в памяти, вместо проксирования в Orchestrator
+- Создаёт document в `_documents[new_doc_id]`, но не вызывает `orchestrator.approve_draft()`
+- Celery-задачи (`run_parser_full_step.delay`) никогда не диспатчатся
+- Orchestrator не видит approve, pipeline stage остаётся `decision`, steps в `pending`
 
 **Где должно быть:**
-- Orchestrator: в `create_draft()` (оркестратор) перед `check_uniqueness` — передавать `file_hash_sha256`
-- Registry: `check_document_uniqueness` — добавить поиск по Draft.file_hash_sha256
-- Registry: `is_duplicate_file` — вычислять по факту: есть ли Draft/Document с таким file_hash в активном статусе
+- Gateway должен проксировать PATCH /api/v1/drafts/{id}/decide в Orchestrator (как делает POST /api/v1/drafts)
+- Или убрать mock-хендлер для real-режима (GATEWAY_MODE=real)
