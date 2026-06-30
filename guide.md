@@ -74,6 +74,55 @@ Gateway проксирует `/api/v1/rag/...` на rag_search. Но если tr
 
 Недостаток данных diagnostics — это не тупик, а задача.
 
+## Тестирование через data/tests/
+
+### Назначение
+
+Тесты в `data/tests/` — скрипты, которые стучатся в корневой docker-compose через Gateway (порт 8080).
+Не используют `service_checker`. Предназначены для быстрой проверки загрузки документов, pipeline и поиска.
+
+### Автоматическая подготовка окружения
+
+Перед запуском каждый тест вызывает `ensure_services()` из `data/tests/config.py`.
+Функция:
+1. Проверяет что тест идёт на `localhost` (не внешний сервер)
+2. Перезапускает контейнеры только рабочих сервисов (НЕ postgres, redis, minio, infinity)
+3. Очищает БД (`TRUNCATE registry.drafts, registry.documents, pipeline.tasks CASCADE`)
+4. Очищает Minio (удаление файлов в /data/documents/ и /data/images/)
+
+**Два режима:**
+| Режим | Сервисы | Какие тесты используют |
+|-------|---------|----------------------|
+| `minimal` | gateway, auth, registry | `test_dup_check`, `test_bulk_upload`, `test_api_coverage`, `test_go` |
+| `all` | gateway, auth, registry, parser, converter-validator, rag-builder, rag-search, query, orchestrator, celery-worker, frontend | `test_e2e`, `test_full_pipeline`, `test_load_pkps_pdf`, `test_quick`, `test_universal_pdf_loader` |
+
+**Системные сервисы НЕ перезапускаются:** postgres, redis, minio, infinity, db-init, minio-init.
+Образы НЕ пересобираются (используются существующие).
+
+**Отключение авто-подготовки** (для быстрых итераций — данные не чистятся):
+```
+set TEST_SKIP_REBUILD=true && python data/tests/test_dup_check.py data/pdf/2-020101-004.pdf
+```
+
+**Внешний сервер** (авто-подготовка не запускается):
+```
+set TEST_API_URL=http://195.70.195.203/api/v1 && python data/tests/test_e2e.py
+```
+
+### Доступные тесты
+
+| Файл | Что проверяет | Требует pipeline |
+|------|---------------|------------------|
+| `test_dup_check.py` | Детекция дублирующей загрузки PDF | Нет |
+| `test_bulk_upload.py` | Загрузка всех PDF из data/pdf/ | Нет |
+| `test_api_coverage.py` | Доступность всех GET-эндпоинтов | Нет |
+| `test_go.py` | Upload + approve + poll + search | Да |
+| `test_quick.py` | Upload + preview + approve + poll | Да |
+| `test_e2e.py` | Полный E2E: upload → pipeline → search | Да |
+| `test_full_pipeline.py` | Полный pipeline с верификацией search | Да |
+| `test_load_pkps_pdf.py` | Загрузка ПКПС pdf → pipeline → search | Да |
+| `test_universal_pdf_loader.py` | Загрузка любого PDF → pipeline → sections → search | Да |
+
 ## Chat FSM — статусы сообщений
 
 Бэкенд (`query_service`) и фронтенд (`UI Final`) должны быть синхронизированы по набору статусов.

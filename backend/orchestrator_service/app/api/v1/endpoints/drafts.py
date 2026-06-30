@@ -444,13 +444,26 @@ async def create_draft(
         )
         draft_id = draft_result.get("data", {}).get("id", 0)
     except Exception as exc:
+        exc_str = str(exc)
+        # Пробрасываем 409 Conflict (дубликат) как есть, не заворачивая в 500
+        if "409" in exc_str or "Conflict" in exc_str:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": {
+                        "code": "DUPLICATE_DRAFT",
+                        "message": "Черновик с таким файлом уже существует",
+                        "details": {"file_hash_sha256": file_hash},
+                    }
+                },
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": {
                     "code": "DRAFT_CREATION_FAILED",
                     "message": "Ошибка при создании черновика в Registry",
-                    "details": {"original_error": str(exc)},
+                    "details": {"original_error": exc_str},
                 }
             },
         )

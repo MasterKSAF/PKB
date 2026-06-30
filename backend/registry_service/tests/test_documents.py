@@ -33,6 +33,111 @@ def test_create_document_validation_error(client):
     response = client.post("/api/v1/registry/documents", json=payload)
     assert response.status_code == 400
 
+
+def test_check_uniqueness_no_duplicate(client):
+    """Проверка уникальности: нет дубликатов — is_duplicate=False."""
+    response = client.post(
+        "/api/v1/registry/documents/check-uniqueness",
+        json={
+            "title": "Unique Document",
+            "doc_code": "UNIQUE-001",
+            "era": "RF",
+            "source_type": "GOST",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["is_duplicate"] is False
+    assert data["is_duplicate_file"] is False
+
+
+def test_check_uniqueness_duplicate_by_title_hash(client):
+    """Проверка уникальности: документ с таким же title_hash — is_duplicate=True."""
+    # Создаём документ
+    client.post("/api/v1/registry/documents", json={
+        "title": "Test Doc", "doc_code": "TEST-001", "era": "RF",
+        "source_type": "GOST", "status": "registry",
+    })
+    # Проверяем уникальность того же заголовка
+    response = client.post(
+        "/api/v1/registry/documents/check-uniqueness",
+        json={"title": "Test Doc", "doc_code": "TEST-001", "era": "RF", "source_type": "GOST"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["is_duplicate"] is True
+
+
+def test_check_uniqueness_duplicate_file_by_draft(client):
+    """Проверка уникальности: draft с таким же document_key — is_duplicate_file=True."""
+    # Создаём draft через API
+    client.post("/api/v1/registry/drafts", json={
+        "file_key": "f-hash1",
+        "document_key": "common-file-hash",
+        "status": "uploaded",
+        "created_by": "admin",
+    })
+    # Проверяем уникальность с тем же file_hash_sha256
+    response = client.post(
+        "/api/v1/registry/documents/check-uniqueness",
+        json={
+            "title": "Another Title",
+            "doc_code": "OTHER-001",
+            "era": "RF",
+            "source_type": "GOST",
+            "file_hash_sha256": "common-file-hash",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["is_duplicate_file"] is True
+    assert data["is_duplicate"] is False  # по документу не дубль
+
+
+def test_check_uniqueness_deleted_draft_not_duplicate(client):
+    """Draft со статусом deleted не считается дубликатом."""
+    client.post("/api/v1/registry/drafts", json={
+        "file_key": "f-hash2",
+        "document_key": "deleted-file-hash",
+        "status": "deleted",
+        "created_by": "admin",
+    })
+    response = client.post(
+        "/api/v1/registry/documents/check-uniqueness",
+        json={
+            "title": "After Delete",
+            "doc_code": "AFTER-DEL-001",
+            "era": "RF",
+            "source_type": "GOST",
+            "file_hash_sha256": "deleted-file-hash",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["is_duplicate_file"] is False
+
+
+def test_create_draft_duplicate_document_key(client):
+    """Создание draft с уже существующим document_key — 409 Conflict."""
+    # Первый draft
+    resp1 = client.post("/api/v1/registry/drafts", json={
+        "file_key": "f-abc",
+        "document_key": "dup-hash-123",
+        "status": "uploaded",
+        "created_by": "admin",
+    })
+    assert resp1.status_code == 201
+
+    # Второй draft с тем же document_key — должен быть 409
+    resp2 = client.post("/api/v1/registry/drafts", json={
+        "file_key": "f-abc-2",
+        "document_key": "dup-hash-123",
+        "status": "uploaded",
+        "created_by": "admin",
+    })
+    assert resp2.status_code == 409
+    assert "DUPLICATE_DRAFT" in resp2.text
+
 def test_get_documents(client):
     client.post("/api/v1/registry/documents", json={"title": "Doc 1", "classifier_system": "MKS"})
     client.post("/api/v1/registry/documents", json={"title": "Doc 2", "classifier_system": "MKS"})

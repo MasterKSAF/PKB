@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from api.v1.dependencies.database import get_db
 from api.v1.crud import document as document_crud, classifier as classifier_crud, terminology as terminology_crud
 from api.v1.models import Classifier, ClassifierPending, Document, Terminology
+from api.v1.models.draft import Draft
 from api.v1.models.registry_service_enums import RegistryServiceEnums
 from api.v1.schemas import DocumentSchema, ClassifierSchema, TerminologySchema, ClassifierValidateRequest
 from api.v1.schemas.response import SingleResponse, ListResponse, PaginationMeta, ErrorResponse
@@ -320,6 +321,7 @@ def check_documents_uniqueness(
             era=payload.get('era'),
             source_type=payload.get('source_type'),
             file_size_bytes=payload.get('file_size_bytes'),
+            file_hash_sha256=payload.get('file_hash_sha256') or payload.get('document_key'),
         )
         return {'data': result}
     except HTTPException:
@@ -1945,6 +1947,18 @@ def create_draft(
     """POST /registry/drafts - Создать запись черновика"""
     log_event('INFO', '/registry/drafts', None, payload.model_dump())
     try:
+        # Проверка дубликата: draft с таким document_key уже существует
+        if payload.document_key:
+            existing = db.query(Draft).filter(
+                Draft.document_key == payload.document_key,
+                Draft.status.notin_(['deleted']),
+            ).first()
+            if existing:
+                raise HTTPException(
+                    status_code=409,
+                    detail={'error': {'code': 'DUPLICATE_DRAFT', 'message': 'Draft with this document_key already exists'}},
+                )
+
         draft = draft_crud.create_draft(
             db,
             file_key=payload.file_key,
@@ -1955,6 +1969,8 @@ def create_draft(
             original_filename=payload.original_filename,
         )
         return JSONResponse(status_code=201, content={'data': DraftSchema.model_validate(draft).model_dump(mode='json', by_alias=True, exclude_none=True)})
+    except HTTPException:
+        raise
     except Exception as e:
         log_event('ERROR', '/registry/drafts', None, payload.model_dump(), str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})

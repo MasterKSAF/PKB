@@ -21,7 +21,9 @@ except ImportError:
     print("[FAIL] requests not installed. Run: pip install requests")
     sys.exit(1)
 
-from config import get_api_url
+from config import get_api_url, ensure_services
+
+ensure_services("minimal")
 
 GW = get_api_url()
 

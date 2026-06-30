@@ -8,6 +8,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from api.v1.models import Document, DocumentHistory, DocumentReference, DocumentSection
+from api.v1.models.draft import Draft
 
 _BIGINT_FIELDS = ('successor_doc_id', 'predecessor_doc_id', 'draft_id', 'current_version_id')
 
@@ -330,6 +331,7 @@ def check_document_uniqueness(
     era: Optional[str] = None,
     source_type: Optional[str] = None,
     file_size_bytes: Optional[int] = None,
+    file_hash_sha256: Optional[str] = None,
 ) -> Dict[str, Any]:
     normalized_title = (title or '').strip().lower()
     title_hash = compute_title_hash_sha256(
@@ -354,6 +356,14 @@ def check_document_uniqueness(
             Document.era == era,
         ).all()
 
+    # Проверяем Drafts с таким же document_key (file_hash)
+    draft_duplicate = None
+    if file_hash_sha256:
+        draft_duplicate = db.query(Draft).filter(
+            Draft.document_key == file_hash_sha256,
+            Draft.status.notin_(['deleted']),
+        ).first()
+
     seen_ids = set()
     candidates: List[Dict[str, Any]] = []
     duplicate_statuses = {'registry', 'indexed', 'approved', 'processing'}
@@ -373,12 +383,13 @@ def check_document_uniqueness(
         })
 
     is_duplicate = any(c.get('status') in duplicate_statuses for c in candidates)
+    is_duplicate_file = draft_duplicate is not None
 
     return {
         'is_duplicate': is_duplicate,
-        'is_duplicate_file': False,
+        'is_duplicate_file': is_duplicate_file,
         'candidates': candidates,
-        'file_hash_sha256': None,
+        'file_hash_sha256': file_hash_sha256,
         'title_hash_sha256': title_hash,
         'file_size_bytes': file_size_bytes,
         'checked_at': datetime.now(timezone.utc).isoformat(),

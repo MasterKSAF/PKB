@@ -14,7 +14,9 @@ from urllib.parse import urljoin
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 import requests
-from config import get_api_url
+from config import get_api_url, ensure_services
+
+ensure_services("minimal")
 
 BASE = get_api_url().rstrip("/")
 session = requests.Session()

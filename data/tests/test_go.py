@@ -2,7 +2,9 @@
 import requests, time, uuid, hashlib, sys
 from pathlib import Path
 
-from config import get_api_url
+from config import get_api_url, ensure_services
+
+ensure_services("minimal")
 
 GW = get_api_url()
 PDF = Path("data/pdf/7bd97d737317a8a272bb18a405ab2d04.pdf")

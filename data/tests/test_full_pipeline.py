@@ -10,7 +10,9 @@ import sys
 import hashlib
 from pathlib import Path
 
-from config import get_api_url, get_direct_rag_url
+from config import get_api_url, get_direct_rag_url, ensure_services
+
+ensure_services("all")
 
 GATEWAY_URL = get_api_url()
 PDF_PATH = Path("data/pdf/7bd97d737317a8a272bb18a405ab2d04.pdf")

@@ -11,7 +11,9 @@ from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-from config import get_api_url
+from config import get_api_url, ensure_services
+
+ensure_services("all")
 
 GW = get_api_url()
 PDF = Path("data/pdf/ПКПС_Часть_VIII_Системы_и_трубопроводы,_изд_2018.pdf")

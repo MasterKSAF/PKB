@@ -14,7 +14,9 @@ from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
-from config import get_api_url, get_direct_rag_url
+from config import get_api_url, get_direct_rag_url, ensure_services
+
+ensure_services("all")
 
 GW = get_api_url()
 PDF = Path("data/pdf/7bd97d737317a8a272bb18a405ab2d04.pdf")
