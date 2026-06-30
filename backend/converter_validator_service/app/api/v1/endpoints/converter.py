@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, status
 
 from app.api.v1.schemas import (
@@ -6,7 +8,10 @@ from app.api.v1.schemas import (
     PreviewMetadataResponse,
     RawJsonRequest,
 )
+from app.core.exceptions import MetadataExtractionFailedError
 from app.services import converter_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -17,8 +22,18 @@ router = APIRouter()
     response_model=PreviewMetadataResponse,
 )
 async def preview(request: RawJsonRequest):
-    meta = converter_service.extract_metadata(request.raw_json)
-    return PreviewMetadataResponse(**meta)
+    try:
+        meta = converter_service.extract_metadata(request.raw_json)
+        return PreviewMetadataResponse(**meta)
+    except MetadataExtractionFailedError as exc:
+        # Сканированный PDF без текстового слоя — метаданные не извлечены.
+        # Возвращаем 200 с пустыми полями, чтобы оркестратор мог
+        # выполнить OCR fallback вместо жёсткой ошибки.
+        logger.warning(
+            f"Metadata extraction failed for task {request.task_id}: {exc}. "
+            f"Returning empty preview — orchestrator will fallback to OCR."
+        )
+        return PreviewMetadataResponse()
 
 
 @router.post(

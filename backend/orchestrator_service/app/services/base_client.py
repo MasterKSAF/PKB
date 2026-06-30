@@ -46,20 +46,23 @@ class ServiceClient:
         service_name: str,
         service_url: Optional[str],
         mock_mode: bool = False,
+        read_timeout: Optional[int] = None,
     ):
         self.service_name = service_name
         self.service_url = service_url.rstrip("/") if service_url else None
         self.mock_mode = mock_mode
         self._http_client: Optional[httpx.AsyncClient] = None
         self._circuit_breaker: Optional[CircuitBreaker] = None
+        self._read_timeout = read_timeout
 
         if not mock_mode and self.service_url:
             # Initialize real HTTP client with timeouts from config
             http_cfg = settings.http_client
+            rt = read_timeout if read_timeout is not None else http_cfg.READ_TIMEOUT
             timeout = httpx.Timeout(
                 connect=http_cfg.CONNECT_TIMEOUT,
-                read=http_cfg.READ_TIMEOUT,
-                write=http_cfg.READ_TIMEOUT,
+                read=rt,
+                write=rt,
                 pool=http_cfg.POOL_TIMEOUT,
             )
             limits = httpx.Limits(
@@ -85,7 +88,7 @@ class ServiceClient:
                 extra={
                     "service": service_name,
                     "url": service_url,
-                    "timeout": http_cfg.READ_TIMEOUT,
+                    "timeout": rt,
                     "max_retries": http_cfg.MAX_RETRIES,
                     "cb_threshold": pipeline_cfg.CIRCUIT_FAILURE_THRESHOLD,
                     "cb_timeout": pipeline_cfg.CIRCUIT_RECOVERY_TIMEOUT,
@@ -182,7 +185,7 @@ class ServiceClient:
             elapsed = time.monotonic() - start_time
             logger.error(
                 f"Circuit breaker OPEN for {self.service_name}, "
-                f"falling back to mock ({elapsed:.1f}s)",
+                f"request blocked ({elapsed:.1f}s)",
                 extra={
                     "service": self.service_name,
                     "method": method,
@@ -191,7 +194,7 @@ class ServiceClient:
                     "circuit_breaker": "open",
                 },
             )
-            return mock_response or {}
+            raise
 
         except httpx.TimeoutException as exc:
             elapsed = time.monotonic() - start_time
@@ -211,7 +214,7 @@ class ServiceClient:
         except httpx.ConnectError as exc:
             elapsed = time.monotonic() - start_time
             logger.error(
-                f"HTTP connection error: {method} {endpoint} ({exc})",
+                f"HTTP connection error after retries: {method} {endpoint} ({exc})",
                 extra={
                     "service": self.service_name,
                     "method": method,
@@ -220,11 +223,19 @@ class ServiceClient:
                     "error": str(exc),
                 },
             )
-            # Do NOT retry on connection error — return mock as fallback
-            logger.warning(
-                f"Falling back to mock response for {endpoint} after connection error"
+            # If a mock_response fallback was provided (or we can use {}),
+            # return it instead of crashing. This supports graceful
+            # degradation when a downstream service is unreachable.
+            fallback = mock_response if mock_response is not None else {}
+            logger.info(
+                f"Falling back to mock_response={fallback} for {method} {endpoint}",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                },
             )
-            return mock_response or {}
+            return fallback
 
         except httpx.HTTPStatusError as exc:
             elapsed = time.monotonic() - start_time
@@ -364,11 +375,8 @@ def _is_retryable_http_error(exc: BaseException) -> bool:
     - TimeoutException — network may recover
 
     Do NOT retry on:
-    - ConnectError — connection refused / DNS failure (waste of time)
     - Client errors (4xx) — request is bad
     """
-    if isinstance(exc, httpx.ConnectError):
-        return False
     if isinstance(exc, httpx.TimeoutException):
         return True
     if isinstance(exc, httpx.HTTPStatusError):

@@ -268,6 +268,42 @@ class TestTaskRepository:
         assert len(stale) >= 1
         assert any(s.id == step.id for s in stale)
 
+    async def test_stale_running_steps(self, db_session: AsyncSession):
+        """get_stale_running_steps finds steps stuck in running (B2)."""
+        repo = TaskRepository(db_session)
+        task = await repo.create_task(
+            draft_id=1, pipeline_type="formation", total_steps=2,
+        )
+        step = await repo.create_task_step(
+            task_id=task.id, step_name="full_ocr",
+            step_index=1, service_name="Parser Service",
+        )
+        await repo.start_task_step(step.id)
+        # Manually set started_at in the past
+        from datetime import datetime, timedelta, timezone
+        db_step = await db_session.get(type(step), step.id)
+        db_step.started_at = datetime.now(timezone.utc) - timedelta(minutes=15)
+        await db_session.flush()
+
+        stale = await repo.get_stale_running_steps(max_running_seconds=600)
+        assert len(stale) >= 1
+        assert any(s.id == step.id for s in stale)
+
+    async def test_stale_running_steps_skips_recent(self, db_session: AsyncSession):
+        """get_stale_running_steps does not return recently started steps."""
+        repo = TaskRepository(db_session)
+        task = await repo.create_task(
+            draft_id=1, pipeline_type="formation", total_steps=2,
+        )
+        step = await repo.create_task_step(
+            task_id=task.id, step_name="full_ocr",
+            step_index=1, service_name="Parser Service",
+        )
+        await repo.start_task_step(step.id)
+        # started_at is now — should NOT be stale
+        stale = await repo.get_stale_running_steps(max_running_seconds=600)
+        assert not any(s.id == step.id for s in stale)
+
     async def test_absolute_timeout_tasks(self, db_session: AsyncSession):
         """get_absolute_timeout_tasks finds tasks exceeding max age (P3S-1)."""
         repo = TaskRepository(db_session)

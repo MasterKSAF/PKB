@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { AppTab, UserRole } from '../utils/access';
-import { USER_ROLE_BY_LABEL, getFallbackTab } from '../utils/access';
+import { USER_ROLE_BY_LABEL, getDemoStartTab, getProdStartTab } from '../utils/access';
 import { MOCK_ADMIN_USERS, MOCK_CHATS } from '../utils/mockData';
 import type { AdminUser } from '../utils/mockData';
 import type { ChatMessage } from '../utils/mockData';
@@ -85,13 +85,17 @@ export const useUIStore = create<UIState>((set) => ({
       }
 
       const currentRole = USER_ROLE_BY_LABEL[user.role] ?? 'user';
+      const activeTab =
+        state.workMode === 'demo'
+          ? getDemoStartTab(currentRole)
+          : getProdStartTab(user.availableTabs, user.permissions) ?? state.activeTab;
 
       return {
         isAuthenticated: true,
         currentUserId: user.id,
         currentRole,
         currentPermissions: user.permissions ?? {},
-        activeTab: getFallbackTab(currentRole),
+        activeTab,
         ...(state.workMode === 'prod'
           ? {
               prodAdminUsersSnapshot: state.adminUsers,
@@ -129,7 +133,7 @@ export const useUIStore = create<UIState>((set) => ({
   setCurrentPermissions: (currentPermissions) => set({ currentPermissions }),
   currentGatewaySessionId: null,
   setCurrentGatewaySessionId: (currentGatewaySessionId) => set({ currentGatewaySessionId }),
-  activeProjectId: 'project-223m',
+  activeProjectId: '',
   setActiveProjectId: (activeProjectId) => set({ activeProjectId }),
   themeMode: getInitialThemeMode(),
   setThemeMode: (themeMode) => set({ themeMode }),
@@ -144,6 +148,10 @@ export const useUIStore = create<UIState>((set) => ({
       const targetUserId = workMode === 'demo' ? MOCK_ADMIN_USERS[0]?.id ?? '' : prodUserId;
       const targetUser = targetUsers.find((user) => user.id === targetUserId);
       const currentRole = USER_ROLE_BY_LABEL[targetUser?.role ?? ''] ?? 'user';
+      const activeTab =
+        workMode === 'demo'
+          ? getDemoStartTab(currentRole)
+          : getProdStartTab(targetUser?.availableTabs, targetUser?.permissions) ?? state.activeTab;
 
       return {
         workMode,
@@ -153,7 +161,7 @@ export const useUIStore = create<UIState>((set) => ({
         currentUserId: targetUserId,
         currentRole,
         currentPermissions: targetUser?.permissions ?? {},
-        activeTab: getFallbackTab(currentRole),
+        activeTab,
         chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
         isAuthenticated: workMode === 'demo' ? state.isAuthenticated : Boolean(prodUserId && prodUsers.length),
         prodAdminUsersSnapshot: prodUsers,
@@ -169,6 +177,10 @@ export const useUIStore = create<UIState>((set) => ({
       const targetUserId = workMode === 'demo' ? MOCK_ADMIN_USERS[0]?.id ?? '' : prodUserId;
       const targetUser = targetUsers.find((user) => user.id === targetUserId);
       const currentRole = USER_ROLE_BY_LABEL[targetUser?.role ?? ''] ?? 'user';
+      const activeTab =
+        workMode === 'demo'
+          ? getDemoStartTab(currentRole)
+          : getProdStartTab(targetUser?.availableTabs, targetUser?.permissions) ?? state.activeTab;
 
       return {
         workMode,
@@ -178,7 +190,7 @@ export const useUIStore = create<UIState>((set) => ({
         currentUserId: targetUserId,
         currentRole,
         currentPermissions: targetUser?.permissions ?? {},
-        activeTab: getFallbackTab(currentRole),
+        activeTab,
         chatMessages: workMode === 'demo' ? MOCK_CHATS : [],
         isAuthenticated: workMode === 'demo' ? state.isAuthenticated : Boolean(prodUserId && prodUsers.length),
         prodAdminUsersSnapshot: prodUsers,
@@ -194,10 +206,31 @@ export const useUIStore = create<UIState>((set) => ({
   setApiStatus: (apiStatus) => set({ apiStatus }),
   adminUsers: [],
   setAdminUsers: (adminUsers) =>
-    set((state) => ({
-      adminUsers,
-      ...(state.workMode === 'prod' ? { prodAdminUsersSnapshot: adminUsers } : {}),
-    })),
+    set((state) => {
+      const currentSessionUser = state.adminUsers.find((user) => user.id === state.currentUserId);
+      const mergedUsers = adminUsers.map((user) => {
+        if (!currentSessionUser || user.id !== currentSessionUser.id) return user;
+
+        return {
+          ...currentSessionUser,
+          ...user,
+          availableTabs: user.availableTabs ?? currentSessionUser.availableTabs,
+          permissions:
+            user.permissions && Object.keys(user.permissions).length > 0
+              ? user.permissions
+              : currentSessionUser.permissions,
+        };
+      });
+      const usersWithCurrentSession =
+        currentSessionUser && !mergedUsers.some((user) => user.id === currentSessionUser.id)
+          ? [currentSessionUser, ...mergedUsers]
+          : mergedUsers;
+
+      return {
+        adminUsers: usersWithCurrentSession,
+        ...(state.workMode === 'prod' ? { prodAdminUsersSnapshot: usersWithCurrentSession } : {}),
+      };
+    }),
   prodAdminUsersSnapshot: [],
   prodCurrentUserIdSnapshot: '',
   upsertAdminUser: (user) =>

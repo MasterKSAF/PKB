@@ -22,3 +22,9 @@ def client():
 def raw_gost_sample() -> dict:
     path = FIXTURES / "raw_gost_sample.json"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def raw_circular_sample() -> dict:
+    path = FIXTURES / "raw_circular_sample.json"
+    return json.loads(path.read_text(encoding="utf-8"))

@@ -116,8 +116,8 @@ def test_document_pages_and_parameters(client):
     assert page2_prev_res.status_code == 200
     page2_prev_data = page2_prev_res.json()["data"]
     assert page2_prev_data["page"] == 2
-    assert "image_url" in page2_prev_data
-    assert "p2.png" in page2_prev_data["image_url"]
+    assert "key" in page2_prev_data
+    assert "p2.png" in page2_prev_data["key"]
 
     # 6. Test GET /registry/documents/{id}/parameters
     params_res = client.get(f"/api/v1/registry/documents/{doc_id}/parameters")

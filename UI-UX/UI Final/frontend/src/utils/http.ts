@@ -36,8 +36,15 @@ let refreshGatewayTokenPromise: Promise<string | null> | null = null;
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 6500,
+  timeout: 30_000,
 });
+
+export const pipelineClient = axios.create({
+  baseURL: BASE_URL,
+  timeout: 120_000,
+});
+
+const FILE_UPLOAD_TIMEOUT_MS = 120_000;
 
 export type MonitorLogRow = {
   time: string;
@@ -495,7 +502,6 @@ function shouldShowOutOfScopeResult(query: string) {
 function mapGatewayStatus(
   status?: string,
   scenario?: string,
-  fallback: NonNullable<ChatMessage['status']> = 'answered',
 ): ChatMessage['status'] {
   const normalized = String(status ?? '').toLowerCase();
 
@@ -507,7 +513,7 @@ function mapGatewayStatus(
   if (normalized === 'completed' || normalized === 'answered') return 'answered';
   if (scenario === 'failed' || normalized === 'failed' || normalized === 'error') return 'failed';
 
-  return fallback;
+  return 'failed';
 }
 
 function mapGatewayDocumentOcrStatus(status?: string): Document['ocrStatus'] {
@@ -529,9 +535,17 @@ function mapGatewayDocumentIndexStatus(status?: string): Document['indexStatus']
 }
 
 function mapGatewaySource(source: any, index = 0): Citation {
+  const rawCitationIndex = source.index ?? source.citation_index;
+  const citationIndex = rawCitationIndex === undefined || rawCitationIndex === null ? undefined : Number(rawCitationIndex);
+
   return {
-    id: toGatewayStringId(source.section_id ?? source.source_id ?? source.document_id, `gateway-source-${index}`),
+    id: toGatewayStringId(
+      source.source_id ?? source.id ?? `${source.document_id ?? 'doc'}-${source.section_id ?? 'section'}-${index}`,
+      `gateway-source-${index}`,
+    ),
+    index: Number.isFinite(citationIndex) ? citationIndex : undefined,
     documentId: toGatewayStringId(source.document_id ?? source.doc_id),
+    sectionId: toGatewayStringId(source.section_id ?? source.chunk_id),
     document: source.document_title ?? source.document ?? source.document_id ?? 'Документ базы знаний',
     section: source.clause ?? source.section ?? source.section_id ?? 'Фрагмент источника',
     page: Number(source.page ?? source.page_num ?? 1),
@@ -575,16 +589,26 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
     };
   }
 
-  const content =
-    answerItems.length > 0
-      ? answerItems.map((item: any, index: number) => `${item.number ?? index + 1}. ${item.text ?? ''}`.trim()).join('\n')
-      : messagePayload.content ?? messagePayload.answer ?? messagePayload.message ?? `Система приняла запрос: ${query}`;
+  const answerItemsContent = answerItems
+    .map((item: any, index: number) => `${item.number ?? index + 1}. ${item.text ?? ''}`.trim())
+    .filter(Boolean)
+    .join('\n');
+  const content = answerItemsContent || messagePayload.content || messagePayload.answer || messagePayload.message;
+
+  if (!String(content ?? '').trim()) {
+    throw new Error(
+      `Gateway response does not contain final answer content for query "${query}". message_id=${
+        messagePayload.message_id ?? 'missing'
+      }, status=${messagePayload.status ?? 'missing'}`,
+    );
+  }
+  const status = mapGatewayStatus(messagePayload.status, messagePayload.scenario);
 
   return {
     id: messagePayload.message_id ?? messagePayload.answer_id ?? Math.random().toString(36).slice(2),
     role: 'assistant',
     content,
-    status: mapGatewayStatus(messagePayload.status, messagePayload.scenario),
+    status,
     citations: citations.length ? citations : undefined,
     timestamp: toUiTimestamp(messagePayload.timestamp),
   };
@@ -593,17 +617,6 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
 function isFinalChatStatus(status?: string) {
   const normalized = String(status ?? '').toLowerCase();
   return normalized === 'answered' || normalized === 'completed' || normalized === 'failed';
-}
-
-function chatLongpollIncompleteMessage(messageId?: string): ChatMessage {
-  return {
-    id: messageId ?? Math.random().toString(36).slice(2),
-    role: 'assistant',
-    content:
-      'Gateway принял сообщение, но не вернул финальный ответ за время ожидания. Повторите запрос позже или обновите историю чата.',
-    status: 'failed',
-    timestamp: toUiTimestamp(),
-  };
 }
 
 async function waitForGatewayChatMessage(sessionId: string, messageId: string, longpoll = 15, maxAttempts = 4) {
@@ -625,7 +638,7 @@ async function waitForGatewayChatMessage(sessionId: string, messageId: string, l
   }
 
   const lastStatus = lastResponse?.message?.status ?? lastResponse?.status ?? 'unknown';
-  throw new Error(`Longpoll did not reach final status: ${lastStatus}`);
+  throw new Error(`Gateway chat longpoll did not reach final status. session_id=${sessionId}, message_id=${messageId}, status=${lastStatus}`);
 }
 
 function mapGatewaySessionMessages(session: any): ChatMessage[] {
@@ -751,41 +764,6 @@ function mapGatewayDocumentDetailResponse(payload: any): GatewayDocumentDetail {
   };
 }
 
-function mapGatewayHistoryResponse(payload: any): QueryHistoryItem[] {
-  const root = payload?.data ?? payload;
-  const items = Array.isArray(root) ? root : root?.items ?? root?.history ?? [];
-
-  return items.map((item: any, index: number) => {
-    const query = item.question ?? item.query ?? '';
-    const answer = item.answer_preview ?? item.answer ?? '';
-    const status = mapGatewayStatus(item.status);
-
-    return {
-      id: toGatewayStringId(item.history_id ?? item.id, `gateway-history-${index}`),
-      user: item.user_name ?? item.user_id ?? 'Пользователь системы',
-      project: item.project ?? item.project_name ?? 'Проект не указан',
-      topic: item.topic ?? item.title ?? 'Рабочий чат',
-      session: toGatewayStringId(item.session_id ?? item.session),
-      query,
-      answer,
-      sources: Number(item.source_count ?? item.sources_count ?? 0),
-      status,
-      createdAt: item.created_at ?? item.timestamp ?? '',
-      messages: [
-        { id: `${item.history_id ?? index}-q`, role: 'user', content: query, timestamp: toUiTimestamp(item.created_at) },
-        {
-          id: `${item.history_id ?? index}-a`,
-          role: 'assistant',
-          content: answer,
-          status,
-          citations: Array.isArray(item.sources) ? item.sources.map((source: any, sourceIndex: number) => mapGatewaySource(source, sourceIndex)) : undefined,
-          timestamp: toUiTimestamp(item.created_at),
-        },
-      ].filter((message) => message.content),
-    };
-  });
-}
-
 function mapGatewaySessionsResponse(payload: any): QueryHistoryItem[] {
   const sessions = Array.isArray(payload) ? payload : payload.sessions ?? payload.items ?? [];
 
@@ -804,7 +782,7 @@ function mapGatewaySessionsResponse(payload: any): QueryHistoryItem[] {
       query: userMessage?.content ?? session.last_question ?? session.last_message_preview ?? '',
       answer: assistantMessage?.content ?? session.last_answer ?? session.last_message_preview ?? '',
       sources: Number(session.source_count ?? sourceCount),
-      status: assistantMessage?.status ?? mapGatewayStatus(session.status, session.scenario, messages.length ? 'answered' : 'pending'),
+      status: assistantMessage?.status ?? mapGatewayStatus(session.status, session.scenario),
       createdAt: session.created_at ?? session.updated_at ?? '',
       messages,
     };
@@ -836,6 +814,11 @@ function mapGatewaySessionsToProjects(payload: any): GatewayChatProject[] {
 
 function mapGatewayProject(project: any, index = 0): GatewayChatProject {
   const projectId = String(project.project_id ?? project.id ?? project.code ?? `gateway-project-${index}`);
+  const chats = Array.isArray(project.chats)
+    ? project.chats
+    : Array.isArray(project.sessions)
+      ? project.sessions
+      : [];
 
   return {
     id: projectId,
@@ -843,7 +826,12 @@ function mapGatewayProject(project: any, index = 0): GatewayChatProject {
     code: project.code,
     description: project.description,
     status: project.status,
-    chats: [],
+    chats: chats.map((chat: any, chatIndex: number) => ({
+      id: toGatewayStringId(chat.session_id ?? chat.id, `${projectId}-session-${chatIndex}`),
+      title: toGatewayStringId(chat.title ?? chat.name ?? chat.session_id, `Сессия ${chatIndex + 1}`),
+      preview: chat.last_message_preview ?? chat.last_question ?? chat.preview,
+      updatedAt: chat.updated_at ?? chat.created_at,
+    })),
   };
 }
 
@@ -852,37 +840,21 @@ function mapGatewayProjectsResponse(payload: any): GatewayChatProject[] {
   return items.map((project: any, index: number) => mapGatewayProject(project, index));
 }
 
-function mergeGatewayProjectsWithSessions(projects: GatewayChatProject[], sessionProjects: GatewayChatProject[]) {
-  if (!projects.length) return sessionProjects;
-
-  const merged = new Map<string, GatewayChatProject>();
-  projects.forEach((project) => {
-    merged.set(project.id, { ...project, chats: [...project.chats] });
-  });
-
-  sessionProjects.forEach((sessionProject) => {
-    const matchingProject =
-      merged.get(sessionProject.id) ??
-      [...merged.values()].find(
-        (project) =>
-          (project.code && project.code === sessionProject.code) ||
-          project.name.trim().toLowerCase() === sessionProject.name.trim().toLowerCase(),
-      );
-
-    if (matchingProject) {
-      matchingProject.chats = [...matchingProject.chats, ...sessionProject.chats];
-      return;
-    }
-
-    merged.set(sessionProject.id, sessionProject);
-  });
-
-  return [...merged.values()];
+function normalizeGatewayNumericId(value?: string | number | null) {
+  const normalized = String(value ?? '').trim();
+  return /^\d+$/.test(normalized) ? normalized : undefined;
 }
 
 function normalizeGatewayProjectId(projectId?: string) {
-  if (!projectId || projectId === 'gateway-dialogs') return undefined;
-  return projectId;
+  return normalizeGatewayNumericId(projectId);
+}
+
+function requireGatewaySessionId(sessionId: string) {
+  const normalized = normalizeGatewayNumericId(sessionId);
+  if (!normalized) {
+    throw new Error('Gateway session id is missing or not numeric.');
+  }
+  return normalized;
 }
 
 function createGatewayProjectCode(name: string) {
@@ -1200,14 +1172,26 @@ function formatAuditEvent(action?: unknown, ipAddress?: unknown) {
   return ip ? `${label}. IP: ${ip}` : label;
 }
 
-function formatTaskEvent(taskId: string, stage?: unknown, status?: unknown, progress?: unknown) {
-  return `Задача ${taskId}: ${mapGatewayTaskStage(stage)}; статус: ${mapGatewayTaskStatusLabel(status)}; прогресс: ${Number(progress ?? 0)}%.`;
+function formatTaskErrorDetails(errorCode?: unknown, errorMessage?: unknown) {
+  const code = String(errorCode ?? '').trim();
+  const message = String(errorMessage ?? '').trim();
+
+  if (code && message) return ` Код ошибки: ${code}. Причина: ${message}`;
+  if (message) return ` Причина: ${message}`;
+  if (code) return ` Код ошибки: ${code}.`;
+  return '';
+}
+
+function formatTaskEvent(taskId: string, stage?: unknown, status?: unknown, progress?: unknown, errorCode?: unknown, errorMessage?: unknown) {
+  return `Задача ${taskId}: ${mapGatewayTaskStage(stage)}; статус: ${mapGatewayTaskStatusLabel(status)}; прогресс: ${Number(
+    progress ?? 0,
+  )}%.${formatTaskErrorDetails(errorCode, errorMessage)}`;
 }
 
 function formatTaskStepEvent(step: any, index: number) {
   return `${mapGatewayServiceLabel(step?.service_name)}: ${mapGatewayTaskStage(step?.step_name, step?.service_name)}; статус: ${mapGatewayTaskStatusLabel(
     step?.status,
-  )}; шаг ${index + 1}.`;
+  )}; шаг ${index + 1}.${formatTaskErrorDetails(step?.error_code, step?.error_message)}`;
 }
 
 function mapGatewayTaskRetryStatus(status?: string): ProcessingLogItem['retryStatus'] {
@@ -1228,7 +1212,7 @@ function mapGatewayTaskStatusResponse(payload: any): ProcessingLogItem[] {
       time: toUiTimestamp(data.updated_at ?? data.created_at),
       document: draftLabel,
       stage: mapGatewayTaskStage(data.pipeline_stage),
-      event: formatTaskEvent(taskId, data.pipeline_stage, data.status, data.progress_percent),
+      event: formatTaskEvent(taskId, data.pipeline_stage, data.status, data.progress_percent, data.error_code, data.error_message),
       retryStatus: mapGatewayTaskRetryStatus(data.status),
       visibility: 'Администратор',
     },
@@ -1355,16 +1339,6 @@ function mapRegistryTerminologyNode(node: any): RegistryTerminologyEntry {
     is_blocked: Boolean(node.is_blocked),
     created_at: node.created_at ?? null,
     updated_at: node.updated_at ?? null,
-  };
-}
-
-function backendUnavailableMessage(): ChatMessage {
-  return {
-    id: Math.random().toString(36).slice(2),
-    role: 'assistant',
-    content: 'Серверная часть недоступна. Повторите запрос позже или переключитесь в демонстрационный режим.',
-    status: 'failed',
-    timestamp: toUiTimestamp(),
   };
 }
 
@@ -1506,23 +1480,26 @@ export const chatApi = {
     return mapGatewaySessionsToProjects(response.data);
   },
   getSession: async (sessionId: string): Promise<QueryHistoryItem> => {
-    const response = await gatewayRequest<any>(() => apiClient.get(`/chat/sessions/${sessionId}`));
+    const gatewaySessionId = requireGatewaySessionId(sessionId);
+    const response = await gatewayRequest<any>(() => apiClient.get(`/chat/sessions/${gatewaySessionId}`));
     const [session] = mapGatewaySessionsResponse({ sessions: [response.data] });
     return session;
   },
   createSession: async (title: string, projectId?: string) => {
+    const gatewayProjectId = normalizeGatewayProjectId(projectId);
     const response = await gatewayRequest<any>(() =>
       apiClient.post('/chat/sessions', {
         title,
-        project_id: normalizeGatewayProjectId(projectId),
+        ...(gatewayProjectId ? { project_id: gatewayProjectId } : {}),
         document_ids: [],
       }),
     );
     return response.data;
   },
   updateSession: async (sessionId: string, patch: { title?: string; documentIds?: string[] }) => {
+    const gatewaySessionId = requireGatewaySessionId(sessionId);
     const response = await gatewayRequest<any>(() =>
-      apiClient.put(`/chat/sessions/${sessionId}`, {
+      apiClient.put(`/chat/sessions/${gatewaySessionId}`, {
         title: patch.title,
         document_ids: patch.documentIds,
       }),
@@ -1530,11 +1507,13 @@ export const chatApi = {
     return response.data;
   },
   deleteSession: async (sessionId: string) => {
-    const response = await gatewayRequest<any>(() => apiClient.delete(`/chat/sessions/${sessionId}`));
+    const gatewaySessionId = requireGatewaySessionId(sessionId);
+    const response = await gatewayRequest<any>(() => apiClient.delete(`/chat/sessions/${gatewaySessionId}`));
     return response.data;
   },
   exportSession: async (sessionId: string, format = 'pdf') => {
-    const response = await gatewayRequest<any>(() => apiClient.post(`/chat/sessions/${sessionId}/export`, { format }));
+    const gatewaySessionId = requireGatewaySessionId(sessionId);
+    const response = await gatewayRequest<any>(() => apiClient.post(`/chat/sessions/${gatewaySessionId}/export`, { format }));
     return response.data;
   },
   send: async (query: string): Promise<ChatMessage> => {
@@ -1552,16 +1531,12 @@ export const chatApi = {
           return currentProjectId;
         }
 
-        try {
-          const projects = await projectsApi.list();
-          const resolvedProjectId = projects.find((project) => /^\d+$/.test(project.id))?.id ?? projects[0]?.id;
+        const projects = await projectsApi.list();
+        const resolvedProjectId = projects.find((project) => /^\d+$/.test(project.id))?.id ?? projects[0]?.id;
 
-          if (resolvedProjectId) {
-            useUIStore.getState().setActiveProjectId(resolvedProjectId);
-            return resolvedProjectId;
-          }
-        } catch {
-          // Если список проектов временно недоступен, попробуем создать сессию с текущим activeProjectId.
+        if (resolvedProjectId) {
+          useUIStore.getState().setActiveProjectId(resolvedProjectId);
+          return resolvedProjectId;
         }
 
         return currentProjectId || undefined;
@@ -1613,50 +1588,30 @@ export const chatApi = {
       const messageId = response.data?.message_id ?? response.data?.answer_id;
       if (!messageId) {
         useUIStore.getState().setApiStatus('offline');
-        return chatLongpollIncompleteMessage();
+        throw new Error('Gateway accepted chat request but did not return message_id or answer_id.');
       }
 
       let finalResponse;
       try {
         finalResponse = await waitForGatewayChatMessage(activeSessionId, String(messageId), 15, 4);
-      } catch {
+      } catch (error) {
         useUIStore.getState().setApiStatus('offline');
-        return chatLongpollIncompleteMessage(String(messageId));
+        throw error;
       }
 
       useUIStore.getState().setApiStatus('online');
       return mapGatewayChatResponse(finalResponse ?? { ...response.data, session_id: activeSessionId }, query);
-    } catch {
+    } catch (error) {
       useUIStore.getState().setApiStatus('offline');
-
-      try {
-        const response = await gatewayRequest<any>(() => apiClient.post('/chat', { question: query }));
-        useUIStore.getState().setApiStatus('online');
-        return mapGatewayChatResponse(response.data, query);
-      } catch {
-        return backendUnavailableMessage();
-      }
+      throw error;
     }
   },
 };
 
 export const projectsApi = {
   list: async (): Promise<GatewayChatProject[]> => {
-    const [projectsResult, sessionsResult] = await Promise.allSettled([
-      gatewayRequest<any>(() => apiClient.get('/chat/projects', { params: { page_size: 100 } })),
-      gatewayRequest<any>(() => apiClient.get('/chat/sessions', { params: { page_size: 100 } })),
-    ]);
-
-    const projects =
-      projectsResult.status === 'fulfilled' ? mapGatewayProjectsResponse(projectsResult.value.data) : [];
-    const sessionProjects =
-      sessionsResult.status === 'fulfilled' ? mapGatewaySessionsToProjects(sessionsResult.value.data) : [];
-
-    if (!projects.length && !sessionProjects.length && projectsResult.status === 'rejected') {
-      throw projectsResult.reason;
-    }
-
-    return mergeGatewayProjectsWithSessions(projects, sessionProjects);
+    const response = await gatewayRequest<any>(() => apiClient.get('/chat/projects', { params: { page_size: 100 } }));
+    return mapGatewayProjectsResponse(response.data);
   },
   create: async (name: string) => {
     const response = await gatewayRequest<any>(() =>
@@ -1680,8 +1635,8 @@ export const projectsApi = {
     return mapGatewayProject(response.data);
   },
   delete: async (projectId: string) => {
-    await gatewayRequest<any>(() => apiClient.delete(`/chat/projects/${projectId}`));
-    return { ok: true };
+    const response = await gatewayRequest<any>(() => apiClient.delete(`/chat/projects/${projectId}`));
+    return response.data;
   },
 };
 
@@ -1740,6 +1695,7 @@ export const draftsApi = {
 
     const response = await gatewayRequest<any>(() =>
       apiClient.post('/drafts', form, {
+        timeout: FILE_UPLOAD_TIMEOUT_MS,
         headers: {
           ...(input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {}),
         },
@@ -1777,13 +1733,13 @@ export const draftsApi = {
   },
   startPreview: async (draftId: string) => {
     requireNumericDraftId(draftId, 'startPreview');
-    const response = await gatewayRequest<any>(() => apiClient.post(`/drafts/${draftId}/preview`));
+    const response = await gatewayRequest<any>(() => pipelineClient.post(`/drafts/${draftId}/preview`));
     return response.data;
   },
   waitPreview: async (draftId: string, longpoll = 15) => {
     requireNumericDraftId(draftId, 'waitPreview');
     const response = await gatewayRequest<any>(() =>
-      apiClient.get(`/drafts/${draftId}/preview/status`, {
+      pipelineClient.get(`/drafts/${draftId}/preview/status`, {
         params: { longpoll },
       }),
     );
@@ -2229,28 +2185,23 @@ export const historyApi = {
     if (isDemoMode()) return MOCK_HISTORY;
 
     try {
-      const response = await gatewayRequest<any>(() => apiClient.get('/chat/history'));
+      const sessionsResponse = await gatewayRequest<any>(() => apiClient.get('/chat/sessions'));
+      const sessions = mapGatewaySessionsResponse(sessionsResponse.data);
+
+      const hydrated = await Promise.all(
+        sessions.map(async (session) => {
+          try {
+            return await chatApi.getSession(session.id);
+          } catch {
+            return session;
+          }
+        }),
+      );
       useUIStore.getState().setApiStatus('online');
-      return mapGatewayHistoryResponse(response.data);
-    } catch {
-      try {
-        const sessionsResponse = await gatewayRequest<any>(() => apiClient.get('/chat/sessions'));
-        const sessions = mapGatewaySessionsResponse(sessionsResponse.data);
-        const hydrated = await Promise.all(
-          sessions.map(async (session) => {
-            try {
-              return await chatApi.getSession(session.id);
-            } catch {
-              return session;
-            }
-          }),
-        );
-        useUIStore.getState().setApiStatus('online');
-        return hydrated;
-      } catch {
-        useUIStore.getState().setApiStatus('offline');
-        return [];
-      }
+      return hydrated;
+    } catch (error) {
+      useUIStore.getState().setApiStatus('offline');
+      throw error;
     }
   },
   export: async (format = 'csv') => {

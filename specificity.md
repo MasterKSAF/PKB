@@ -117,3 +117,145 @@ query_service.pipeline.run_pipeline()
 **Где:** `backend/orchestrator_service/app/core/pipeline/orchestrator.py`, `backend/orchestrator_service/app/api/v1/endpoints/drafts.py`.
 
 **Статус:** исправлено.
+
+### G9. base_client.py — mock fallback при ConnectError удалён
+
+**Проблема:** При `ConnectError` (сервис недоступен) `ServiceClient.call()` возвращал пустой `mock_response` вместо retry.
+Celery-задача получала `{}` → конвертер падал с `MetadataExtractionFailedError`.
+
+**Фикс (29.06):**
+- ConnectError теперь retryable (tenacity)
+- После исчерпания retry — исключение пробрасывается в Celery-задачу
+- Аналогично для CircuitBreakerError
+
+**Где:** `backend/orchestrator_service/app/services/base_client.py`.
+
+### G10. Rag-builder: dimensions parameter для эмбеддингов
+
+**Проблема:** Qwen3-Embedding-8B возвращает 4096-мерные векторы. Rag-builder не передавал `dimensions`, обрезал 4096→2048.
+Rag-search передавал `dimensions=2048` и получал 2048 — несоответствие.
+
+**Фикс (29.06):** Rag-builder также передаёт `dimensions=self.dim` в API.
+
+**Где:** `backend/rag_builder_service/src/rag_builder/embeddings/service.py`.
+
+### G11. Registry: заголовок X-Service-ID для обновления статуса документа
+
+**Проблема:** Эндпоинт `PATCH /registry/documents/{id}/status` требует заголовок `X-Service-ID: orchestrator`.
+`RegistryServiceClient.update_document_status` не передавал его → 403 Forbidden.
++ Статус `"active"` не входит в валидные переходы из `"uploaded"`.
+
+**Фикс (29.06):**
+- Добавлен заголовок `X-Service-ID: orchestrator` в `update_document_status`
+- После rag_index статус меняется на `"validating"` (валидный переход `uploaded → validating`)
+
+**Где:** `backend/orchestrator_service/app/services/registry_client.py`, `backend/orchestrator_service/app/core/pipeline/orchestrator.py`.
+
+### G12. Сканированные PDF: 422 вместо OCR fallback
+
+**Симптом:** Загрузка сканированного PDF (например `gost_22786-77.pdf`) → черновик DISCARDED
+с ошибкой «Проверку черновика завершить не удалось».
+
+**Причина:** Converter-validator не может извлечь doc_code/title из сканированного PDF
+(нет текстового слоя) → `MetadataExtractionFailedError` → HTTP 422.
+Оркестратор делает retry, затем retry exhausted → задача FAILED.
+OCR fallback существовал только для падения Parser, не для Converter.
+
+**Фикс (29.06):**
+1. `converter.py` (endpoint `/preview`): перехват `MetadataExtractionFailedError`,
+   возврат 200 OK с пустыми полями вместо 422.
+2. `pipeline_formation.py` (`run_converter_preview_step`): если в ответе конвертера
+   нет doc_code и title → `validated=False`.
+3. `_on_preview_completed` видит `validated=False` + `used_parser=True` +
+   `fallback_to_ocr=True` → запускает OCR fallback.
+
+**Где:**
+- `backend/converter_validator_service/app/api/v1/endpoints/converter.py`
+- `backend/orchestrator_service/app/tasks/pipeline_formation.py`
+
+### G13. Не-ГОСТ документы без doc_code падают в full_converter
+
+**Симптом:** Циркулярное письмо (например `0A83D092-1D22-47AD-A6EF-0F06A8F11A6B_001.pdf`) —
+full_converter возвращает 400 `VALIDATION_ERROR: doc_code is required`.
+
+**Причина:** `compute_business_key` требует непустой doc_code. Для циркулярных писем
+`extract_preview_metadata` не находит doc_code (нет ГОСТ-шаблона) → `""` → ошибка.
+Preview-этап работает (там `MetadataExtractionFailedError` перехвачен), но
+`validate_document` в full-конвертации вызывает `_compute_fingerprint` → `compute_business_key` → падает.
+
+**Фикс (29.06):**
+1. `metadata_extractor.py` — добавлен `_CIRCULAR_RE` для распознавания
+   `ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц`
+2. `document_validator.py` — `_compute_fingerprint`: try-except `MetadataValidationError`
+   вокруг `compute_business_key`. При отсутствии doc_code/title создаётся fallback fingerprint
+   из task_id:version_id.
+
+**Где:**
+- `backend/converter_validator_service/app/services/metadata_extractor.py`
+- `backend/converter_validator_service/app/services/document_validator.py`
+
+### B1. Циклический OCR fallback в preview — дублирование preview_ocr шагов
+
+**Симптом:** `preview_ocr` шаги множатся (completed=5, pending=1), новые создаются каждый цикл.
+
+**Механизм:**
+1. Parser preview_ocr → completed
+2. Converter preview (`_on_preview_completed`) → `validated=False` (НД без doc_code)
+3. `_run_ocr_fallback` → создаёт `preview_ocr` (OCR), диспатчит
+4. OCR preview_ocr → completed → снова Converter → validated=False → снова `_run_ocr_fallback`
+5. **Бесконечный цикл:** guard в `_run_ocr_fallback` проверяет только `pending` шаги (`has_pending_ocr`),
+   но НЕ проверяет `completed` OCR-шаги. Каждый раз после завершения OCR Converter падает → новый OCR.
+
+**Где:** `PipelineOrchestrator._run_ocr_fallback()` (orchestrator.py:347–391).
+
+**Фикс (30.06):** guard теперь проверяет `has_existing_ocr` — completed шаги OCR Service.
+
+### B2. Pipeline full_phase: full_ocr (Parser) не завершается на больших PDF
+
+**Симптом:** `full_ocr` висит `running` на PDF 249 страниц более 300с.
+`full_converter`, `registry_creation`, `rag_index` — все `pending`, ждут full_ocr.
+
+**Причина:** Parser full не может обработать большой PDF (таймаут/зависание).
+Шаги стартуются последовательно: full_ocr → full_converter → registry → rag_index.
+Если full_ocr не completed — цепочка не движется.
+
+**Где:** `PipelineOrchestrator._on_full_step_completed()` (orchestrator.py:714–842).
+
+**Фикс (30.06):**
+- добавлен `RUNNING_STEP_TIMEOUT = 600с` (10 мин) в `PipelineConfig`
+- `get_stale_running_steps()` в TaskRepository — ищет шаги running > N секунд
+- `_check_service_health()` — HTTP health check сервиса (Parser, OCR, Converter, Registry, RAG)
+- `cleanup_stale_tasks` проверяет stale running шаги: если сервис жив → warning (медленная обработка),
+  если сервис мёртв → fail шага (SERVICE_DEAD)
+
+### B3. RAG-индексация не стартует даже при доступных данных
+
+**Симптом:** Данные в RAG Search уже есть (поиск находит doc_id=59), 
+но pipeline висит на 99%, `rag_index` всегда `pending`.
+
+**Причина:** rag_index стартуется только через цепочку:
+`full_ocr completed → _on_full_step_completed → enqueue full_converter → 
+full_converter completed → enqueue registry_creation → 
+registry_creation completed → enqueue rag_index`
+
+Если любой шаг в цепочке не завершён (B2: full_ocr running) — rag_index никогда не стартует.
+При этом RAG Builder может получить данные другим путём (через auto-индексацию или 
+параллельный процесс), поэтому данные в поиске есть, но pipeline не в курсе.
+
+**Где:** `PipelineOrchestrator._on_full_step_completed()` (orchestrator.py:714–842).
+
+### UTL. Универсальный тест загрузки PDF — data/tests/test_universal_pdf_loader.py
+
+**Назначение:** Единый скрипт для загрузки любого PDF через Gateway, извлечения текстовых фрагментов из самого PDF и верификации их через RAG Search.
+
+**Особенности:**
+- Не использует service_checker — только корневой docker-compose (порт 8080)
+- Аргумент — путь к PDF (по умолчанию `НД_№2_09_006_кн_6_переиздан_как_2_039901_005,_2018.pdf`)
+- Фрагменты извлекаются через PyPDF2: фильтрация стоп-строк, сортировка по длине + буквенному соотношению
+- Настройка через переменные окружения: `EXTRACT_FRAGMENTS` (сколько фрагментов), `DOC_SOURCE_TYPE`, `DOC_TITLE`, `DOC_CODE`, `TEST_API_URL`
+- Выходной код: 0 (успех), 1 (ошибка), 2 (низкий процент верификации)
+
+**Пример:**
+```bash
+set EXTRACT_FRAGMENTS=10 && python data/tests/test_universal_pdf_loader.py data/pdf/ОСТ5_2067_73_Имущество_АСИ_ППИ_и_ЗИП_Крепление_на_судах.pdf
+```

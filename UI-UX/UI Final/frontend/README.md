@@ -114,7 +114,7 @@ Demo-режим использует локальные профили:
 
 | Файл | Назначение |
 | --- | --- |
-| `src/utils/http.ts` | Gateway-first HTTP-слой, авторизация, refresh token, восстановление сессии, API-вызовы и controlled fallback/error states. |
+| `src/utils/http.ts` | Gateway-first HTTP-слой, авторизация, refresh token, восстановление сессии, API-вызовы и контролируемые error states без подмены продуктивных данных. |
 | `src/utils/mockData.ts` | Demo-данные для локального режима. |
 | `src/store/uiStore.ts` | Zustand-состояние UI: режим, пользователь, вкладки, роли, состояние Gateway. |
 | `src/utils/access.ts` | Роли, permissions и доступность вкладок. |

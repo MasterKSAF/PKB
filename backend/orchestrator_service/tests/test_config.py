@@ -176,10 +176,10 @@ class TestPipelineConfig:
     """Tests for PipelineConfig (P3S-1/P3S-2)."""
 
     def test_pending_state_timeout_default(self):
-        """PENDING_STATE_TIMEOUT defaults to 30 seconds."""
+        """PENDING_STATE_TIMEOUT defaults to 180 seconds."""
         from app.core.config import PipelineConfig
         config = PipelineConfig()
-        assert config.PENDING_STATE_TIMEOUT == 30
+        assert config.PENDING_STATE_TIMEOUT == 180
 
     def test_absolute_task_timeout_default(self):
         """ABSOLUTE_TASK_TIMEOUT_HOURS defaults to 48 hours."""

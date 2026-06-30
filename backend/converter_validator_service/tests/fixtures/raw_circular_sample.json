@@ -1,0 +1,72 @@
+{
+  "metadata": {
+    "schema": "raw_ocr_v4",
+    "task_id": "task-circular-001",
+    "created_at": "2026-06-29T10:00:00Z",
+    "parser": {
+      "name": "opendataloader_pdf",
+      "version": "1.0",
+      "ocr_engine": "none",
+      "ocr_fallback": false
+    }
+  },
+  "document": {
+    "source": {
+      "file_name": "circular_letter.pdf",
+      "file_hash_sha256": "f975d3b412f4bcf4e42cec2fe480870864ca37cace3c0dc325593f19e5563b55",
+      "page_count": 3,
+      "author": "Российский морской регистр судоходства",
+      "title": "Циркулярное письмо № 311-05-1950ц от 09.06.2023"
+    },
+    "pages": [
+      {"page": 1, "width": 595, "height": 841},
+      {"page": 2, "width": 595, "height": 841},
+      {"page": 3, "width": 595, "height": 841}
+    ],
+    "block": [
+      {
+        "number": 1,
+        "type": "image",
+        "page": 1,
+        "bbox": [45.834, 759.82, 454.842, 806.47],
+        "image_key": "images/logo.png"
+      },
+      {
+        "number": 2,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [46.2, 712.5, 492.234, 743.914],
+        "font": {"size": 11.04, "bold": true},
+        "content": "ЦИРКУЛЯРНОЕ ПИСЬМО № 311-05-1950ц от 09.06.2023\nКасательно:"
+      },
+      {
+        "number": 3,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [46.2, 671.465, 559.95, 709.113],
+        "content": "изменений к Правилам технического наблюдения за постройкой судов и изготовлением материалов\nи изделий для судов, 2023, НД № 2-020101-175 в связи с вступлением в силу УТ МАКО Z17 (Rev. 18\nFeb 2023) (Corr.1 May 2023))"
+      },
+      {
+        "number": 4,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [46.2, 636.66, 449.884, 664.714],
+        "content": "Объект(ы) наблюдения:\nдеятельность предприятий, поставщиков услуг и испытательных лабораторий"
+      },
+      {
+        "number": 5,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [46.195, 596.824, 175.47, 622.021],
+        "content": "Дата вступления в силу:1\n01.07.2023"
+      },
+      {
+        "number": 6,
+        "type": "paragraph",
+        "page": 1,
+        "bbox": [46.2, 199.62, 502.793, 233.674],
+        "content": "Исполнитель: А.А. Алёшин 311 +7 812 3121100\nСистема «Тезис» № 23-114243"
+      }
+    ]
+  }
+}

@@ -1,4 +1,3 @@
-import copy
 import re
 from typing import Any
 
@@ -9,16 +8,26 @@ _GOST_REF_RE = re.compile(
 )
 
 
-def _page_size(
-    raw_json: dict[str, Any], page: int
-) -> tuple[float, float]:
+def _build_page_size_cache(raw_json: dict[str, Any]) -> dict[int, tuple[float, float]]:
+    """Build a {page: (width, height)} cache for fast lookup."""
     pages = (raw_json.get("document") or {}).get("pages") or []
-    for page_info in pages:
-        if page_info.get("page") == page:
-            return (
-                float(page_info.get("width") or 210.0),
-                float(page_info.get("height") or 297.0),
+    cache = {}
+    for p in pages:
+        page = p.get("page")
+        if page is not None:
+            cache[int(page)] = (
+                float(p.get("width") or 210.0),
+                float(p.get("height") or 297.0),
             )
+    return cache
+
+
+def _page_size(
+    page_size_cache: dict[int, tuple[float, float]], page: int
+) -> tuple[float, float]:
+    result = page_size_cache.get(page)
+    if result:
+        return result
     return 210.0, 297.0
 
 
@@ -66,11 +75,11 @@ def _map_block_type(block_type: str) -> str:
 
 def _build_content_item(
     block: dict[str, Any],
-    raw_json: dict[str, Any],
+    page_size_cache: dict[int, tuple[float, float]],
     clause_ctx: dict[str, Any],
 ) -> dict[str, Any] | None:
     page = int(block.get("page") or 1)
-    page_w, page_h = _page_size(raw_json, page)
+    page_w, page_h = _page_size(page_size_cache, page)
     bbox = _normalize_bbox(block.get("bbox") or [], page_w, page_h)
     block_type = block.get("type") or "paragraph"
     out_type = _map_block_type(block_type)
@@ -89,16 +98,24 @@ def _build_content_item(
         parts = []
         for part in block.get("block") or []:
             font = part.get("font") or {}
-            parts.append({
-                "font": {
-                    "size": font.get("size", 10.0),
-                    "color": font.get("color", "#000000"),
-                    "bold": font.get("bold", False),
-                    "italic": font.get("italic", False),
-                    "underline": font.get("underline", False),
-                },
-                "content": part.get("content", ""),
-            })
+            # Skip font dict for default values — saves memory and alloc
+            if (font.get("size", 10.0) == 10.0
+                    and font.get("color", "#000000") == "#000000"
+                    and not font.get("bold")
+                    and not font.get("italic")
+                    and not font.get("underline")):
+                parts.append({"content": part.get("content", "")})
+            else:
+                parts.append({
+                    "font": {
+                        "size": font.get("size", 10.0),
+                        "color": font.get("color", "#000000"),
+                        "bold": font.get("bold", False),
+                        "italic": font.get("italic", False),
+                        "underline": font.get("underline", False),
+                    },
+                    "content": part.get("content", ""),
+                })
         content = {"block": parts}
     elif out_type == "list":
         items = []
@@ -154,7 +171,7 @@ def _build_content_item(
 def _update_clause_context(
     block: dict[str, Any], ctx: dict[str, Any], suffix: str = ""
 ) -> dict[str, Any]:
-    new_ctx = copy.copy(ctx)
+    new_ctx = dict(ctx)
     text = block.get("content") or ""
     if block.get("type") == "heading" and isinstance(text, str):
         clause, title = _parse_clause_from_text(text)
@@ -170,21 +187,24 @@ def _update_clause_context(
 
 def build_hierarchy(raw_json: dict[str, Any]) -> dict[str, Any]:
     doc_in = raw_json.get("document") or {}
-    source_in = copy.deepcopy(doc_in.get("source") or {})
+    source = doc_in.get("source") or {}
     blocks = doc_in.get("block") or []
 
-    content: list[dict[str, Any]] = []
-    clause_ctx: dict[str, Any] = {
-        "clause": None,
-        "title": None,
-        "level": 0,
-        "parent_clause": None,
-        "path": None,
-    }
+    page_size_cache = _build_page_size_cache(raw_json)
 
+    clause_ctx: dict[str, Any] = {
+        "clause": None, "title": None, "level": 0,
+        "parent_clause": None, "path": None,
+    }
     table_idx = 0
     fig_idx = 0
-    for block in blocks:
+
+    content: list[dict[str, Any]] = []
+    seen_refs: set[str] = set()
+    references: list[dict[str, Any]] = doc_in.get("references") or []
+    have_refs = bool(references)
+
+    for i, block in enumerate(blocks):
         block_type = block.get("type") or "paragraph"
         suffix = ""
         if block_type == "table":
@@ -197,22 +217,35 @@ def build_hierarchy(raw_json: dict[str, Any]) -> dict[str, Any]:
         if block_type in ("heading", "headerFooter"):
             clause_ctx = _update_clause_context(block, clause_ctx, suffix)
 
-        item = _build_content_item(block, raw_json, clause_ctx)
+        item = _build_content_item(block, page_size_cache, clause_ctx)
         if item:
             if suffix and item["path"] == clause_ctx.get("clause"):
                 item["path"] = (clause_ctx.get("clause") or "") + suffix
             content.append(item)
 
-    terminology = copy.deepcopy(doc_in.get("terminology") or [])
-    references = copy.deepcopy(doc_in.get("references") or [])
-    if not references:
-        references = _extract_references_from_blocks(blocks)
+        if not have_refs:
+            text = block.get("content")
+            if isinstance(text, str):
+                for match in _GOST_REF_RE.finditer(text):
+                    code = f"ГОСТ {match.group(1)}"
+                    if code in seen_refs:
+                        continue
+                    seen_refs.add(code)
+                    references.append({
+                        "target_doc_code": code,
+                        "type": "single",
+                        "context": text[:120],
+                        "current_status": "active",
+                        "note": None,
+                    })
+
+    terminology = doc_in.get("terminology") or []
 
     return {
         "source": {
-            "file_name": source_in.get("file_name", ""),
-            "file_hash_sha256": source_in.get("file_hash_sha256", ""),
-            "page_count": int(source_in.get("page_count") or 1),
+            "file_name": source.get("file_name", ""),
+            "file_hash_sha256": source.get("file_hash_sha256", ""),
+            "page_count": int(source.get("page_count") or 1),
         },
         "metadata": {},
         "content": content,
@@ -221,25 +254,4 @@ def build_hierarchy(raw_json: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _extract_references_from_blocks(
-    blocks: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    refs: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for block in blocks:
-        text = block.get("content")
-        if not isinstance(text, str):
-            continue
-        for match in _GOST_REF_RE.finditer(text):
-            code = f"ГОСТ {match.group(1)}"
-            if code in seen:
-                continue
-            seen.add(code)
-            refs.append({
-                "target_doc_code": code,
-                "type": "single",
-                "context": text[:120],
-                "current_status": "active",
-                "note": None,
-            })
-    return refs
+

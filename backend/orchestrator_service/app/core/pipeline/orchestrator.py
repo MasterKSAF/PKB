@@ -16,6 +16,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+import httpx
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -351,15 +353,29 @@ class PipelineOrchestrator:
             extra={"task_id": task.id, "draft_id": task.draft_id},
         )
 
-        # Guard against duplicate OCR fallback steps
+        # Guard against duplicate OCR fallback steps (B1)
         steps = await self.task_repo.get_task_steps(task.id)
         has_pending_ocr = any(
             s.step_name == "preview_ocr" and s.status == "pending"
             for s in steps
         )
+        has_existing_ocr = any(
+            s.step_name == "preview_ocr"
+            and s.service_name == "OCR Service"
+            and s.status == "completed"
+            for s in steps
+        )
+        if has_existing_ocr:
+            # OCR already completed once — stop fallback cycle (B1)
+            logger.info(
+                "OCR fallback skipped: OCR already completed for this task",
+                extra={"task_id": task.id, "draft_id": task.draft_id},
+            )
+            return
+
         if not has_pending_ocr:
-            # Create a new preview step for OCR
-            await self.task_repo.create_task_step(
+            # Create a new preview step for OCR and start it immediately
+            ocr_step = await self.task_repo.create_task_step(
                 task_id=task.id,
                 step_name="preview_ocr",
                 step_index=1,
@@ -371,6 +387,16 @@ class PipelineOrchestrator:
                     "draft_id": task.draft_id,
                 },
             )
+            # Start the step so its lifecycle is consistent: pending → running → completed
+            await self.task_repo.start_task_step(ocr_step.id)
+        else:
+            # Existing pending step from a previous call — start it too
+            pending_step = next(
+                (s for s in steps if s.step_name == "preview_ocr" and s.status == "pending"),
+                None,
+            )
+            if pending_step:
+                await self.task_repo.start_task_step(pending_step.id)
 
         # Reset retry count for the fallback attempt
         task.retry_count = 0
@@ -820,18 +846,20 @@ class PipelineOrchestrator:
                 progress_percent=100,
             )
 
-            # Update draft status to approved via Registry
+            # Update document status after successful indexing
+            # Valid transition from "uploaded" is "validating"
             try:
                 registry = RegistryServiceClient()
-                await registry.update_draft_status(
-                    draft_id=task.draft_id,
-                    status=DraftState.APPROVED.value,
+                document_id = getattr(task, 'document_id', None) or task.draft_id
+                await registry.update_document_status(
+                    document_id=document_id,
+                    status="validating",
                 )
                 await registry.close()
             except Exception as e:
                 logger.warning(
-                    f"Failed to update draft status to approved: {e}",
-                    extra={"draft_id": task.draft_id},
+                    f"Failed to update document status: {e}",
+                    extra={"draft_id": task.draft_id, "document_id": document_id},
                 )
 
             logger.info(
@@ -1188,9 +1216,13 @@ class PipelineOrchestrator:
             )
             if full_converter:
                 await self.task_repo.start_task_step(full_converter.id)
+                # Must dispatch converter task — otherwise step stays running forever
                 logger.info(
-                    "Enqueued full Converter step (full preview, no Parser/OCR)",
+                    "Enqueuing full Converter step (full preview, no Parser/OCR)",
                     extra={"task_id": task_id, "draft_id": draft_id},
+                )
+                run_converter_full_step.delay(
+                    task_id, draft_id, file_key, trace_id=current_trace_id,
                 )
 
         return {
@@ -1684,11 +1716,43 @@ class PipelineOrchestrator:
                 },
             )
 
+    async def _check_service_health(self, service_name: str) -> bool:
+        """Check if a service is alive via HTTP health check."""
+        svc = settings.services
+        url_map = {
+            "Parser Service": svc.PARSER_SERVICE_URL,
+            "OCR Service": svc.OCR_SERVICE_URL,
+            "Converter-validator": svc.CONVERTER_SERVICE_URL,
+            "Registry": svc.REGISTRY_SERVICE_URL,
+            "RAG Builder": svc.RAG_BUILDER_SERVICE_URL,
+            "Orchestrator": None,
+        }
+        base_url = url_map.get(service_name)
+        if not base_url:
+            return True  # cannot check, assume alive
+
+        health_urls = [
+            f"{base_url}/health",
+            f"{base_url}/api/v1/health",
+            base_url,
+        ]
+        for url in health_urls:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    r = await client.get(url)
+                    if r.status_code < 500:
+                        return True
+            except (httpx.TimeoutException, httpx.ConnectError,
+                    httpx.RequestError):
+                continue
+        return False
+
     async def cleanup_stale_tasks(self) -> int:
         """Find and mark stale running tasks as failed.
         
         Also handles:
         - Stale pending steps (P3S-1: per-state timeout)
+        - Stale running steps (B2: health check after timeout)
         - Absolute timeout tasks (P3S-1: 48h limit)
         """
         max_time = settings.pipeline.MAX_JOB_RUNNING_TIME
@@ -1715,6 +1779,35 @@ class PipelineOrchestrator:
                 step.id,
                 error_code="PENDING_TIMEOUT",
                 error_message=f"Step pending for >{pending_timeout}s",
+            )
+            cleaned += 1
+
+        # Handle stale running steps (B2: check if service is alive)
+        running_timeout = settings.pipeline.RUNNING_STEP_TIMEOUT
+        stale_running = await self.task_repo.get_stale_running_steps(running_timeout)
+        for step in stale_running:
+            service_alive = await self._check_service_health(step.service_name)
+            if service_alive:
+                logger.warning(
+                    f"Step {step.step_name} running for >{running_timeout}s "
+                    f"but service {step.service_name} is alive — possible slow processing",
+                    extra={"step_id": step.id,
+                           "step_name": step.step_name,
+                           "service_name": step.service_name},
+                )
+                continue
+
+            logger.warning(
+                f"Step {step.step_name} running for >{running_timeout}s "
+                f"and service {step.service_name} is DEAD — failing step",
+                extra={"step_id": step.id,
+                       "step_name": step.step_name,
+                       "service_name": step.service_name},
+            )
+            await self.task_repo.fail_task_step(
+                step.id,
+                error_code="SERVICE_DEAD",
+                error_message=f"Service {step.service_name} unreachable, step ran >{running_timeout}s",
             )
             cleaned += 1
 

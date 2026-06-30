@@ -25,4 +25,26 @@ describe('Gateway draft mapper', () => {
     expect(draft.gatewayDraftId).toBe('18');
     expect(draft.title).toBe('drafts/18/source.pdf');
   });
+
+  it('normalizes backend metadata values to strings before they reach form fields', () => {
+    const draft = mapGatewayDraftRecordToUi({
+      draft_id: 19,
+      title: 'ГОСТ 123',
+      status: 'review_required',
+      year: 2026,
+      mks_oks_code: 47.02,
+      okstu_code: 12000,
+      issuing_body: 42,
+      valid_from: 20260101,
+      preview_metadata: {
+        year: 2025,
+      },
+    });
+
+    expect(draft.year).toBe('2026');
+    expect(draft.mksOksCode).toBe('47.02');
+    expect(draft.okstuCode).toBe('12000');
+    expect(draft.issuingBody).toBe('42');
+    expect(draft.validFrom).toBe('20260101');
+  });
 });

@@ -29,6 +29,14 @@ SOURCE_TYPE_TO_KEY: Final[dict[str, str]] = {
 _GOST_R_RE = re.compile(r"гост\s*р|gost\s*r", re.IGNORECASE)
 _GOST_RE = re.compile(r"гост|gost", re.IGNORECASE)
 _RMRS_RE = re.compile(r"морск\w*\s+регистр|rmrs", re.IGNORECASE)
+_OST_RE = re.compile(r"ост\d*|ost\d*", re.IGNORECASE)
+_RD_RE = re.compile(r"(?:рд|rd)[\s\d]", re.IGNORECASE)
+_TU_RE = re.compile(r"(?:ту|tu)[\s\d]", re.IGNORECASE)
+_PKPS_RE = re.compile(r"пкпс", re.IGNORECASE)
+_ISO_RE = re.compile(r"\biso\s*\d", re.IGNORECASE)
+_DNV_RE = re.compile(r"\bdnv[-_\s]", re.IGNORECASE)
+_ASTM_RE = re.compile(r"\bastm\s", re.IGNORECASE)
+_SNIP_RE = re.compile(r"снип|сп\s|санпин", re.IGNORECASE)
 _USSR_MARKERS = ("ссср", "ussr")
 
 
@@ -164,4 +172,20 @@ def infer_source_type(*texts: str | None) -> str:
         return "GOST_R"
     if _GOST_RE.search(combined):
         return "GOST"
+    if _OST_RE.search(combined):
+        return "OST"
+    if _RD_RE.search(combined):
+        return "RD"
+    if _TU_RE.search(combined):
+        return "TU"
+    if _PKPS_RE.search(combined):
+        return "RD"
+    if _ISO_RE.search(combined):
+        return "ISO"
+    if _DNV_RE.search(combined):
+        return "DNV"
+    if _ASTM_RE.search(combined):
+        return "ASTM"
+    if _SNIP_RE.search(combined):
+        return "OTHER"
     return "OTHER"

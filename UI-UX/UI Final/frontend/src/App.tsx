@@ -24,7 +24,6 @@ import { AdminPanel } from './components/AdminPanel';
 import { VideoGuideDialog } from './components/VideoGuideDialog';
 import { LoginScreen } from './components/LoginScreen';
 import {
-  getAccessibleFallbackTab,
   getAccessibleTabs,
   TAB_DESCRIPTIONS,
   TAB_TITLES,
@@ -75,8 +74,8 @@ export default function App() {
       ? currentUser.role
       : `${currentUser.position} · ${currentUser.role}`;
   const accessibleTabs = useMemo(
-    () => getAccessibleTabs(currentRole, currentUser?.availableTabs, workMode),
-    [currentRole, currentUser?.availableTabs, workMode],
+    () => getAccessibleTabs(currentRole, currentUser?.availableTabs, workMode, currentUser?.permissions),
+    [currentRole, currentUser?.availableTabs, currentUser?.permissions, workMode],
   );
   const activeNavHeaderBackground = themeMode === 'dark' ? '#242829' : '#e0f2fe';
   const activeNavHeaderBorder = themeMode === 'dark' ? 'rgba(198, 216, 240, 0.38)' : '#7dd3fc';
@@ -153,14 +152,44 @@ export default function App() {
   }, [currentRole, currentUser, setCurrentRole]);
 
   useEffect(() => {
-    if (!accessibleTabs.includes(activeTab)) {
-      setActiveTab(getAccessibleFallbackTab(accessibleTabs));
+    if (accessibleTabs.length > 0 && !accessibleTabs.includes(activeTab)) {
+      setActiveTab(accessibleTabs[0]);
     }
   }, [accessibleTabs, activeTab, setActiveTab]);
 
+  const renderUnavailableContent = () => (
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 3,
+        borderRadius: 2,
+        bgcolor: 'rgba(22, 23, 27, 0.72)',
+        borderColor: 'rgba(198, 216, 240, 0.34)',
+      }}
+    >
+      <Typography variant="h6" sx={{ mb: 1 }}>
+        Разделы недоступны
+      </Typography>
+      <Typography color="text.secondary">
+        Сервис авторизации не передал доступные вкладки для текущей роли. Нужно проверить поля
+        {' '}
+        <Box component="span" sx={{ fontFamily: 'monospace' }}>
+          /auth/me.available_tabs
+        </Box>
+        {' '}
+        и
+        {' '}
+        <Box component="span" sx={{ fontFamily: 'monospace' }}>
+          permissions
+        </Box>
+        .
+      </Typography>
+    </Paper>
+  );
+
   const renderContent = () => {
     if (!accessibleTabs.includes(activeTab)) {
-      return <Chat />;
+      return renderUnavailableContent();
     }
 
     switch (activeTab) {
@@ -179,7 +208,7 @@ export default function App() {
       case 'admin':
         return <AdminPanel />;
       default:
-        return <Chat />;
+        return renderUnavailableContent();
     }
   };
 

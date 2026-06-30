@@ -154,6 +154,28 @@ class TaskRepository:
         )
         return list(result.scalars().all())
 
+    async def get_stale_running_steps(
+        self, max_running_seconds: int = 600
+    ) -> list[TaskStep]:
+        """Find steps stuck in running state (B2).
+
+        Steps in 'running' longer than max_running_seconds are candidates
+        for health check — the service may have hung or crashed.
+        """
+        from datetime import timedelta
+
+        threshold = datetime.now(timezone.utc) - timedelta(seconds=max_running_seconds)
+        result = await self.db.execute(
+            select(TaskStep).where(
+                and_(
+                    TaskStep.status == "running",
+                    TaskStep.started_at < threshold,
+                    TaskStep.deleted_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
     async def get_absolute_timeout_tasks(
         self, max_hours: int = 48
     ) -> list[Task]:

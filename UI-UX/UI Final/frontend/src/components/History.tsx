@@ -32,10 +32,23 @@ import { apiClient, historyApi, sourceApi } from '../utils/http';
 import type { AnswerStatus, Citation, QueryHistoryItem } from '../utils/mockData';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
+import {
+  getCitationDisplayIndex,
+  parseInlineCitationMarkers,
+  resolveCitationMarker,
+} from '../utils/citations';
 
 type HistoryPreview = Citation & {
   previewKind: 'source' | 'document';
 };
+
+function getGatewayErrorMessage(error: unknown) {
+  const payload = (error as any)?.response?.data;
+  const message = payload?.detail ?? payload?.message ?? payload?.error ?? (error as any)?.message;
+
+  if (typeof message === 'string') return message;
+  return JSON.stringify(message ?? payload ?? 'Неизвестная ошибка Gateway');
+}
 
 const statusLabel: Record<AnswerStatus, string> = {
   pending: 'ожидание',
@@ -157,6 +170,70 @@ function citationButtonSx(themeMode: 'dark' | 'light') {
   } as const;
 }
 
+function stripLegacyCitationMarkers(text: string) {
+  return text.replace(/\s*%\[[^\]]*\]%/g, '');
+}
+
+function renderHistoryMessageContent(
+  content: string,
+  citations: Citation[] = [],
+  openPreview: (citation: Citation, previewKind: HistoryPreview['previewKind']) => void,
+  themeMode: 'dark' | 'light',
+  useSequentialNumbers = false,
+) {
+  const cleanContent = stripLegacyCitationMarkers(content);
+  const markers = parseInlineCitationMarkers(cleanContent);
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+
+  markers.forEach((marker) => {
+    const markerStart = marker.start;
+    const markerEnd = marker.end;
+    const before = cleanContent.slice(cursor, markerStart);
+
+    if (before) {
+      nodes.push(before);
+    }
+
+    const citation = resolveCitationMarker(marker, citations, useSequentialNumbers);
+
+    if (citation) {
+      const displayIndex = getCitationDisplayIndex(citation, citations);
+      nodes.push(
+        <Button
+          key={`history-inline-source-${displayIndex}-${markerStart}`}
+          size="small"
+          variant="text"
+          className="source-link-button"
+          title={`${citation.document} · ${citation.section}`}
+          sx={{
+            ...citationButtonSx(themeMode),
+            display: 'inline-flex',
+            mx: 0.25,
+            px: 0.7,
+            py: 0.08,
+            height: 21,
+            verticalAlign: 'baseline',
+          }}
+          onClick={() => openPreview(citation, 'source')}
+        >
+          [{displayIndex}]
+        </Button>,
+      );
+    } else {
+      nodes.push(marker.raw);
+    }
+
+    cursor = markerEnd;
+  });
+
+  if (cursor < cleanContent.length) {
+    nodes.push(cleanContent.slice(cursor));
+  }
+
+  return nodes.length ? nodes : cleanContent;
+}
+
 export const History: React.FC = () => {
   const { adminUsers, currentRole, currentUserId, setActiveTab, setChatMessages, themeMode, workMode } = useUIStore();
   const isLight = themeMode === 'light';
@@ -171,7 +248,7 @@ export const History: React.FC = () => {
   const [exportLoading, setExportLoading] = useState(false);
   const [exportError, setExportError] = useState('');
 
-  const { data = [] } = useQuery<QueryHistoryItem[]>({
+  const { data = [], error: historyError, isError: historyIsError } = useQuery<QueryHistoryItem[]>({
     queryKey: ['history'],
     queryFn: historyApi.get,
   });
@@ -331,6 +408,12 @@ export const History: React.FC = () => {
                 </Paper>
               ))}
             </Box>
+
+            {historyIsError && (
+              <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
+                {getGatewayErrorMessage(historyError)}
+              </Alert>
+            )}
 
             <Paper
               variant="outlined"
@@ -586,7 +669,13 @@ export const History: React.FC = () => {
                                               </Typography>
                                             </Stack>
                                             <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>
-                                              {message.content}
+                                              {renderHistoryMessageContent(
+                                                message.content,
+                                                message.citations ?? [],
+                                                handleOpenPreview,
+                                                themeMode,
+                                                workMode === 'demo',
+                                              )}
                                             </Typography>
 
                                             {message.citations && message.citations.length > 0 && (

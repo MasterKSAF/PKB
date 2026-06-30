@@ -855,6 +855,11 @@ const firstNonEmptyText = (...values: unknown[]) => {
   return value === undefined ? '' : String(value).trim();
 };
 
+const firstDefinedText = (...values: unknown[]) => {
+  const value = values.find((item) => item !== null && item !== undefined);
+  return value === undefined ? '' : String(value);
+};
+
 const buildMetadataOverridesFromForm = (form: DraftForm): DraftMetadataOverrides => ({
   title: form.title.trim() || null,
   source_type: form.sourceType || null,
@@ -906,16 +911,16 @@ export const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<Draft
     id: draftId,
     fileName,
     title,
-    sourceType: payload?.source_type ?? metadataOverrides.source_type ?? payload?.preview_metadata?.source_type ?? fallback?.sourceType ?? 'OTHER',
-    docCode: payload?.doc_code ?? metadataOverrides.doc_code ?? payload?.preview_metadata?.doc_code ?? fallback?.docCode ?? '',
-    year: payload?.year ?? metadataOverrides.year ?? payload?.preview_metadata?.year ?? preview?.year ?? fallback?.year ?? '',
-    mksOksCode: payload?.mks_oks_code ?? metadataOverrides.mks_oks_code ?? payload?.preview_metadata?.mks_oks_code ?? fallback?.mksOksCode ?? '',
-    okstuCode: payload?.okstu_code ?? metadataOverrides.okstu_code ?? payload?.preview_metadata?.okstu_code ?? fallback?.okstuCode ?? '',
-    era: payload?.era ?? metadataOverrides.era ?? payload?.preview_metadata?.era ?? fallback?.era ?? 'CURRENT',
-    jurisdiction: payload?.jurisdiction ?? metadataOverrides.jurisdiction ?? payload?.preview_metadata?.jurisdiction ?? fallback?.jurisdiction ?? 'RU',
-    issuingBody: payload?.issuing_body ?? metadataOverrides.issuing_body ?? payload?.preview_metadata?.issuing_body ?? fallback?.issuingBody ?? '',
-    validFrom: payload?.valid_from ?? metadataOverrides.valid_from ?? payload?.preview_metadata?.valid_from ?? fallback?.validFrom ?? '',
-    validUntil: payload?.valid_until ?? metadataOverrides.valid_until ?? payload?.preview_metadata?.valid_until ?? fallback?.validUntil ?? '',
+    sourceType: firstDefinedText(payload?.source_type, metadataOverrides.source_type, payload?.preview_metadata?.source_type, fallback?.sourceType, 'OTHER'),
+    docCode: firstDefinedText(payload?.doc_code, metadataOverrides.doc_code, payload?.preview_metadata?.doc_code, fallback?.docCode),
+    year: firstDefinedText(payload?.year, metadataOverrides.year, payload?.preview_metadata?.year, preview?.year, fallback?.year),
+    mksOksCode: firstDefinedText(payload?.mks_oks_code, metadataOverrides.mks_oks_code, payload?.preview_metadata?.mks_oks_code, fallback?.mksOksCode),
+    okstuCode: firstDefinedText(payload?.okstu_code, metadataOverrides.okstu_code, payload?.preview_metadata?.okstu_code, fallback?.okstuCode),
+    era: firstDefinedText(payload?.era, metadataOverrides.era, payload?.preview_metadata?.era, fallback?.era, 'CURRENT'),
+    jurisdiction: firstDefinedText(payload?.jurisdiction, metadataOverrides.jurisdiction, payload?.preview_metadata?.jurisdiction, fallback?.jurisdiction, 'RU'),
+    issuingBody: firstDefinedText(payload?.issuing_body, metadataOverrides.issuing_body, payload?.preview_metadata?.issuing_body, fallback?.issuingBody),
+    validFrom: firstDefinedText(payload?.valid_from, metadataOverrides.valid_from, payload?.preview_metadata?.valid_from, fallback?.validFrom),
+    validUntil: firstDefinedText(payload?.valid_until, metadataOverrides.valid_until, payload?.preview_metadata?.valid_until, fallback?.validUntil),
     status,
     progress,
     confidence: Number(confidence ?? 0),
@@ -924,7 +929,7 @@ export const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<Draft
     notifications: notifications.length ? notifications : fallback?.notifications ?? [],
     createdAt,
     updatedAt,
-    note: fallback?.note ?? payload?.message ?? '',
+    note: firstNonEmptyText(payload?.message, payload?.error_message, payload?.comment, fallback?.note),
     gatewayTaskId: String(payload?.task_id ?? payload?.taskId ?? fallback?.gatewayTaskId ?? ''),
     gatewayVersionId: String(payload?.version_id ?? payload?.versionId ?? fallback?.gatewayVersionId ?? ''),
     gatewayDraftId: (() => {
@@ -1577,7 +1582,14 @@ export const KnowledgeProcessing: React.FC = () => {
     void (async () => {
       try {
         await draftsApi.startPreview(gatewayDraftId);
-        const previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
+
+        // Longpoll: повторяем waitPreview пока не получим терминальный статус
+        let previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
+        for (let attempt = 0; attempt < 6 && previewResponse?.status === 'processing'; attempt++) {
+          await new Promise(r => setTimeout(r, 1000));
+          previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
+        }
+
         const draftAfterPreview = getSelectedDraft(draftId);
         if (!draftAfterPreview) return;
 
@@ -1590,10 +1602,11 @@ export const KnowledgeProcessing: React.FC = () => {
           : [];
 
         const nextStatus = normalizeDraftStatusFromGateway(previewResponse?.status);
+        const isProcessing = previewResponse?.status === 'processing';
         updateDraft(draftId, {
           ...draftPatchFromGateway(previewResponse, draftAfterPreview),
           status: nextStatus === 'uploaded' ? 'ready_for_approve' : nextStatus,
-          progress: nextStatus === 'previewing' ? 38 : draftProgressByStatus[nextStatus] ?? 72,
+          progress: isProcessing ? 38 : draftProgressByStatus[nextStatus] ?? 72,
           confidence: Number(previewResponse?.confidence ?? draftAfterPreview.confidence ?? 0),
           preview:
             mapGatewayPreviewMetadata(previewResponse) ??
@@ -1605,19 +1618,25 @@ export const KnowledgeProcessing: React.FC = () => {
               revision: draftAfterPreview.sourceType === 'GOST' ? '1' : null,
             },
           duplicates,
-          note: nextStatus === 'review_required' || previewResponse?.decision_required
-            ? 'Проверка готова. Требуется решение.'
-            : 'Проверка готова. Можно принимать документ.',
+          note: isProcessing
+            ? 'Проверка ещё выполняется. Пожалуйста, подождите.'
+            : nextStatus === 'review_required' || previewResponse?.decision_required
+              ? 'Проверка готова. Требуется решение.'
+              : 'Проверка готова. Можно принимать документ.',
         });
-        setNotice(`Проверка черновика «${draftAfterPreview.title}» завершена.`);
+        if (!isProcessing) {
+          setNotice(`Проверка черновика «${draftAfterPreview.title}» завершена.`);
+        }
       } catch (error: any) {
+        const backendMsg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message;
+        const errorMsg = backendMsg ?? 'Не удалось получить статус проверки черновика.';
         updateDraft(draftId, {
           status: 'failed',
           progress: 100,
           note: 'Сервер не завершил проверку черновика.',
-          gatewayErrorMessage: error?.message ?? 'Не удалось получить статус проверки черновика.',
+          gatewayErrorMessage: errorMsg,
         });
-        setNotice(`Проверку черновика «${draft.title}» завершить не удалось.`);
+        setNotice(`Проверку черновика «${draft.title}» завершить не удалось. ${errorMsg}`);
       }
     })();
   };

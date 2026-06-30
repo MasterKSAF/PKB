@@ -8,6 +8,7 @@ Each test creates its own Task and TaskStep records via the
 TaskRepository and then exercises orchestrator methods.
 """
 
+import httpx
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -442,7 +443,7 @@ class TestApproveDraftFull:
             return_value=mock_registry,
         ), patch(
             "app.tasks.pipeline_formation.run_converter_full_step.delay",
-        ), patch(
+        ) as mock_converter_delay, patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ):
             orchestrator = PipelineOrchestrator(db_session)
@@ -464,6 +465,9 @@ class TestApproveDraftFull:
         assert "full_ocr" not in step_names
         assert "full_converter" in step_names
         assert "registry_creation" in step_names
+
+        # Verify converter task WAS dispatched (fix for full_preview missing dispatch)
+        mock_converter_delay.assert_called_once()
 
 
 class TestApproveDraftVersionId:
@@ -758,3 +762,267 @@ class TestOnStepFailedRetryExhausted:
         failed_step = await repo.get_task_steps(task.id)
         assert failed_step[0].status == "failed"
         assert failed_step[0].error_code == "OCR_ERROR"
+
+
+# ---------------------------------------------------------------------------
+#  _run_ocr_fallback — guard against duplicate OCR (B1)
+# ---------------------------------------------------------------------------
+
+
+class TestRunOcrFallback:
+    """Tests for _run_ocr_fallback guard (B1: OCR cycle prevention)."""
+
+    async def test_skips_when_ocr_already_completed(self, db_session: AsyncSession):
+        """_run_ocr_fallback returns early if OCR already completed."""
+        task = await _create_task(db_session, draft_id=100, total_steps=3)
+        repo = TaskRepository(db_session)
+        # Create Parser preview_ocr (completed)
+        parser_step = await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr", step_index=1,
+            service_name="Parser Service",
+            input_data={"file_key": "test.pdf", "mode": "preview"},
+        )
+        await repo.start_task_step(parser_step.id)
+        await repo.complete_task_step(parser_step.id, output_data={"pages": 3})
+
+        # Create OCR preview_ocr (already completed — this is the guard)
+        ocr_step = await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr", step_index=1,
+            service_name="OCR Service",
+            input_data={"file_key": "test.pdf", "mode": "preview"},
+        )
+        await repo.start_task_step(ocr_step.id)
+        await repo.complete_task_step(ocr_step.id, output_data={"pages": 3})
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ), patch(
+            "app.tasks.pipeline_formation.run_ocr_preview_step.delay",
+        ) as mock_delay:
+            orchestrator = PipelineOrchestrator(db_session)
+            await orchestrator._run_ocr_fallback(task, file_key="test.pdf")
+
+        # Verify that delay was NOT called (guard prevented new OCR)
+        mock_delay.assert_not_called()
+
+        # Verify no new step was created
+        steps = await repo.get_task_steps(task.id)
+        ocr_completed = [
+            s for s in steps
+            if s.step_name == "preview_ocr"
+            and s.service_name == "OCR Service"
+            and s.status == "completed"
+        ]
+        assert len(ocr_completed) == 1  # still only one OCR step
+
+    async def test_creates_new_step_when_no_completed_ocr(self, db_session: AsyncSession):
+        """_run_ocr_fallback creates new OCR step when none exists."""
+        task = await _create_task(db_session, draft_id=100, total_steps=3)
+        repo = TaskRepository(db_session)
+        # Only Parser step exists (completed)
+        parser_step = await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr", step_index=1,
+            service_name="Parser Service",
+            input_data={"file_key": "test.pdf", "mode": "preview"},
+        )
+        await repo.start_task_step(parser_step.id)
+        await repo.complete_task_step(parser_step.id, output_data={"pages": 3})
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ), patch(
+            "app.tasks.pipeline_formation.run_ocr_preview_step.delay",
+        ) as mock_delay:
+            orchestrator = PipelineOrchestrator(db_session)
+            await orchestrator._run_ocr_fallback(task, file_key="test.pdf")
+
+        # Verify delay was called
+        mock_delay.assert_called_once()
+
+        # Verify new OCR step was created AND started (running, not just pending)
+        steps = await repo.get_task_steps(task.id)
+        ocr_running = [
+            s for s in steps
+            if s.step_name == "preview_ocr"
+            and s.service_name == "OCR Service"
+            and s.status == "running"
+        ]
+        assert len(ocr_running) == 1, \
+            f"Expected 1 running OCR step, got {len(ocr_running)}. Steps: {[(s.step_name, s.service_name, s.status) for s in steps]}"
+
+    async def test_starts_existing_pending_step(self, db_session: AsyncSession):
+        """_run_ocr_fallback starts existing pending OCR step instead of creating duplicate."""
+        task = await _create_task(db_session, draft_id=100, total_steps=3)
+        repo = TaskRepository(db_session)
+        # Create Parser step (completed)
+        parser_step = await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr", step_index=1,
+            service_name="Parser Service",
+            input_data={"file_key": "test.pdf", "mode": "preview"},
+        )
+        await repo.start_task_step(parser_step.id)
+        await repo.complete_task_step(parser_step.id, output_data={"pages": 3})
+
+        # Create an existing OCR step left in "pending" (from a previous fallback attempt)
+        existing_ocr = await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr", step_index=1,
+            service_name="OCR Service",
+            input_data={"file_key": "test.pdf", "mode": "preview", "max_pages": 3, "draft_id": 100},
+        )
+        # Step stays pending — not started
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ), patch(
+            "app.tasks.pipeline_formation.run_ocr_preview_step.delay",
+        ) as mock_delay:
+            orchestrator = PipelineOrchestrator(db_session)
+            await orchestrator._run_ocr_fallback(task, file_key="test.pdf")
+
+        # Verify delay was called
+        mock_delay.assert_called_once()
+
+        # Verify NO new step was created (existing pending step was reused)
+        steps = await repo.get_task_steps(task.id)
+        ocr_steps = [
+            s for s in steps
+            if s.step_name == "preview_ocr"
+            and s.service_name == "OCR Service"
+        ]
+        assert len(ocr_steps) == 1, \
+            f"Expected 1 OCR step, got {len(ocr_steps)}"
+
+        # Verify existing step is now RUNNING (was started, not left pending)
+        assert ocr_steps[0].status == "running", \
+            f"Expected step to be running, got {ocr_steps[0].status}"
+
+
+# ---------------------------------------------------------------------------
+#  cleanup_stale_tasks — stale running steps with health check (B2)
+# ---------------------------------------------------------------------------
+
+
+class TestCleanupStaleRunningSteps:
+    """Tests for stale running steps detection in cleanup."""
+
+    async def test_fails_step_when_service_dead(self, db_session: AsyncSession):
+        """
+        cleanup_stale_tasks fails a stale running step
+        when the service health check fails (dead service).
+        """
+        task = await _create_task(db_session, draft_id=100, total_steps=3)
+        repo = TaskRepository(db_session)
+        step = await repo.create_task_step(
+            task_id=task.id, step_name="full_ocr", step_index=1,
+            service_name="Parser Service",
+            input_data={"file_key": "test.pdf"},
+        )
+        await repo.start_task_step(step.id)
+
+        # Set started_at far in the past
+        from datetime import datetime, timedelta, timezone
+        db_step = await db_session.get(type(step), step.id)
+        db_step.started_at = datetime.now(timezone.utc) - timedelta(minutes=15)
+        await db_session.flush()
+
+        with patch(
+            "app.core.pipeline.orchestrator.settings.pipeline.RUNNING_STEP_TIMEOUT",
+            600,
+        ), patch.object(
+            PipelineOrchestrator, "_check_service_health",
+            return_value=False,  # service is dead
+        ), patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ):
+            orchestrator = PipelineOrchestrator(db_session)
+            cleaned = await orchestrator.cleanup_stale_tasks()
+
+        assert cleaned >= 1
+        # Verify step was failed
+        failed = await repo.get_task_steps(task.id)
+        assert failed[0].status == "failed"
+        assert failed[0].error_code == "SERVICE_DEAD"
+
+    async def test_skips_step_when_service_alive(self, db_session: AsyncSession):
+        """
+        cleanup_stale_tasks does NOT fail a stale running step
+        when the service health check succeeds (just slow).
+        """
+        task = await _create_task(db_session, draft_id=100, total_steps=3)
+        repo = TaskRepository(db_session)
+        step = await repo.create_task_step(
+            task_id=task.id, step_name="full_ocr", step_index=1,
+            service_name="Parser Service",
+            input_data={"file_key": "test.pdf"},
+        )
+        await repo.start_task_step(step.id)
+
+        from datetime import datetime, timedelta, timezone
+        db_step = await db_session.get(type(step), step.id)
+        db_step.started_at = datetime.now(timezone.utc) - timedelta(minutes=15)
+        await db_session.flush()
+
+        with patch(
+            "app.core.pipeline.orchestrator.settings.pipeline.RUNNING_STEP_TIMEOUT",
+            600,
+        ), patch.object(
+            PipelineOrchestrator, "_check_service_health",
+            return_value=True,  # service is alive
+        ), patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ):
+            orchestrator = PipelineOrchestrator(db_session)
+            cleaned = await orchestrator.cleanup_stale_tasks()
+
+        # May clean up other stale items, but NOT our step
+        all_steps = await repo.get_task_steps(task.id)
+        our_step = next(s for s in all_steps if s.id == step.id)
+        assert our_step.status == "running"  # not failed
+
+
+class TestCheckServiceHealth:
+    """Tests for _check_service_health."""
+
+    async def test_returns_true_when_service_responds(self, db_session: AsyncSession):
+        """_check_service_health returns True for healthy service."""
+        class _MockHttpxClient:
+            """Fake httpx.AsyncClient that returns 200 for any GET."""
+            def __init__(self, *args, **kwargs):
+                pass
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+            async def get(self, url, **kwargs):
+                class MockResponse:
+                    status_code = 200
+                return MockResponse()
+
+        with patch("httpx.AsyncClient", _MockHttpxClient):
+            orchestrator = PipelineOrchestrator(db_session)
+            result = await orchestrator._check_service_health("Parser Service")
+            assert result is True
+
+    async def test_returns_false_when_service_unreachable(self, db_session: AsyncSession):
+        """_check_service_health returns False for unreachable service."""
+        class _MockDeadHttpxClient:
+            """Fake httpx.AsyncClient that raises ConnectError."""
+            def __init__(self, *args, **kwargs):
+                pass
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *args):
+                pass
+            async def get(self, url, **kwargs):
+                raise httpx.ConnectError("Connection refused")
+
+        with patch("httpx.AsyncClient", _MockDeadHttpxClient):
+            orchestrator = PipelineOrchestrator(db_session)
+            result = await orchestrator._check_service_health("Parser Service")
+            assert result is False
+
+    async def test_returns_true_for_unknown_service(self, db_session: AsyncSession):
+        """_check_service_health returns True for services without URL (cannot check)."""
+        orchestrator = PipelineOrchestrator(db_session)
+        result = await orchestrator._check_service_health("Orchestrator")
+        assert result is True

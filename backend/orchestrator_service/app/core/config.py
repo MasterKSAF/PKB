@@ -120,8 +120,14 @@ class PipelineConfig(BaseSettings):
 
     # Per-state timeout: max time a step can stay in 'pending' before being marked stale
     PENDING_STATE_TIMEOUT: int = Field(
-        default=30,
+        default=180,
         description="Max seconds a step can stay in pending state (P3S-1)",
+    )
+
+    # Running step timeout: max time a step can stay in 'running' before being checked
+    RUNNING_STEP_TIMEOUT: int = Field(
+        default=600,
+        description="Max seconds a step can stay in running before health check (B2)",
     )
 
     # Absolute task timeout: max total time for any pipeline task
@@ -182,6 +188,13 @@ class HTTPClientConfig(BaseSettings):
     # Read timeout (seconds)
     READ_TIMEOUT: int = Field(
         default=30, description="HTTP read/response timeout"
+    )
+
+    # Converter-validator specific read timeout (seconds) — full conversion
+    # can be slow on large documents (hierarchy build, LLM enrich, validation).
+    # Default: 180s, overridable via CONVERTER_READ_TIMEOUT env var.
+    CONVERTER_READ_TIMEOUT: int = Field(
+        default=180, description="HTTP read timeout for Converter-Validator requests"
     )
 
     # Pool timeout (seconds) — max time to wait for a connection from pool

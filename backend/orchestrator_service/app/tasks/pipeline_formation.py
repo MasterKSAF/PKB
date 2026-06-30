@@ -181,8 +181,10 @@ def run_converter_preview_step(
         if "doc_code" in result or "title" in result:
             # New flat format from /api/v1/converter/preview
             metadata = {k: v for k, v in result.items() if v is not None}
+            # Сканированные PDF: метаданные не извлечены → validated=False → OCR fallback
+            has_metadata = bool(metadata.get("doc_code") or metadata.get("title"))
             output_data = {
-                "validated": True,
+                "validated": has_metadata,
                 "metadata": metadata,
             }
         else:
@@ -420,6 +422,7 @@ def run_registry_step(
                         extra={"task_id": task_id, "draft_id": draft_id},
                     )
                     return {"status": "already_approved", "draft_id": draft_id}
+
                 raise
             finally:
                 await client.close()
