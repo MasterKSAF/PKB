@@ -25,20 +25,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 class TestReprocessCleanupFailed:
     """P1-8: ошибка cleanup (delete_index) в reprocess."""
 
-    async def test_delete_index_exception_triggers_retry(self):
-        """delete_index падает → run_reprocess_step вызывает self.retry."""
+    def test_delete_index_exception_triggers_retry(self):
+        """delete_index падает → run_reprocess_step вызывает self.retry.
+
+        _run_async вызывается дважды: для delete_index (должен упасть) и
+        для _notify_step_failed внутри except (не должен упасть, иначе
+        raise self.retry() не выполнится).
+        """
         from app.tasks.pipeline_indexation import run_reprocess_step
 
-        # Подменяем delete_index на исключение
-        async def _raise(*args, **kwargs):
-            raise RuntimeError("RAG Builder cleanup failed: 503")
+        # Счётчик: первый вызов _run_async → raise, остальные → silent
+        _call_no = [0]
+
+        def _run_async_side_effect(coro):
+            _call_no[0] += 1
+            if _call_no[0] == 1:
+                raise RuntimeError("RAG Builder cleanup failed: 503")
+            # subsequent calls return None (don't need to execute coro)
 
         # Мокируем _run_async, чтобы не запускать event loop
         with patch(
             "app.tasks.pipeline_indexation._run_async",
-            side_effect=_raise,
+            side_effect=_run_async_side_effect,
         ), patch.object(
-            run_reprocess_step, "retry", new=AsyncMock()
+            run_reprocess_step, "retry",
+            side_effect=RuntimeError("Celery retry"),
         ) as mock_retry:
             with pytest.raises(RuntimeError):
                 run_reprocess_step.run(task_id=1, document_id="12345")
@@ -46,25 +57,25 @@ class TestReprocessCleanupFailed:
         # Celery self.retry() вызван хотя бы раз
         assert mock_retry.call_count >= 1
 
-    async def test_cleanup_failure_does_not_call_index_document(self):
+    def test_cleanup_failure_does_not_call_index_document(self):
         """Если delete_index упал, index_document НЕ вызывается."""
         from app.tasks.pipeline_indexation import run_reprocess_step
 
         call_log = []
+        _call_no = [0]
 
-        async def _delete_raises(*args, **kwargs):
+        def _run_async_side_effect(coro):
+            _call_no[0] += 1
             call_log.append("delete")
-            raise RuntimeError("cleanup failed")
-
-        async def _track(*args, **kwargs):
-            call_log.append("index")
-            return {"status": "indexed"}
+            if _call_no[0] == 1:
+                raise RuntimeError("cleanup failed")
 
         with patch(
             "app.tasks.pipeline_indexation._run_async",
-            side_effect=_delete_raises,
+            side_effect=_run_async_side_effect,
         ), patch.object(
-            run_reprocess_step, "retry", new=AsyncMock()
+            run_reprocess_step, "retry",
+            side_effect=RuntimeError("Celery retry"),
         ):
             with pytest.raises(RuntimeError):
                 run_reprocess_step.run(task_id=1, document_id="12345")
@@ -73,7 +84,7 @@ class TestReprocessCleanupFailed:
         assert "index" not in call_log
         assert "delete" in call_log
 
-    async def test_reprocess_uses_max_retries_two(self):
+    def test_reprocess_uses_max_retries_two(self):
         """run_reprocess_step имеет max_retries=2 (Celery config)."""
         from app.tasks.pipeline_indexation import run_reprocess_step
 

@@ -82,8 +82,15 @@ class TestRegistryProxyErrors:
     def test_create_draft_registry_5xx_returns_500(
         self, client: TestClient, auth_header: dict
     ):
-        """POST /drafts при 5xx Registry → 500."""
+        """POST /drafts при 5xx Registry → 500.
+
+        Мокаем check_uniqueness (чтобы не блокировала DUPLICATE_FILE)
+        и create_draft (raise 5xx).
+        """
         from app.services.registry_client import RegistryServiceClient
+
+        async def _mock_uniqueness(self, **kwargs):
+            return {"data": {"is_duplicate_file": False, "is_duplicate": False, "candidates": []}}
 
         async def _raise_5xx(self, **kwargs):
             raise httpx.HTTPStatusError(
@@ -92,17 +99,19 @@ class TestRegistryProxyErrors:
                 response=httpx.Response(500),
             )
 
-        with patch.object(RegistryServiceClient, "create_draft", _raise_5xx):
+        with patch.object(RegistryServiceClient, "check_uniqueness", _mock_uniqueness), \
+             patch.object(RegistryServiceClient, "create_draft", _raise_5xx):
+            # File size > 1024 bytes to pass FILE_TOO_SMALL check
             response = client.post(
                 "/api/v1/drafts/",
                 headers=auth_header,
-                files={"file": ("a.pdf", b"%PDF-1.4 " * 50, "application/pdf")},
+                files={"file": ("a.pdf", b"%PDF-1.4 " * 150, "application/pdf")},
                 data={"document_key": "doc-5xx", "source_type": "GOST"},
             )
 
-        # 5xx → 500
-        assert response.status_code in (500, 502, 503), (
-            f"Expected 5xx, got {response.status_code}"
+        # 5xx → DRAFT_CREATION_FAILED (500) в except Exception
+        assert response.status_code == 500, (
+            f"Expected 500, got {response.status_code}: {response.text[:200]}"
         )
 
     def test_registry_client_call_raises_on_5xx_in_real_mode(self):

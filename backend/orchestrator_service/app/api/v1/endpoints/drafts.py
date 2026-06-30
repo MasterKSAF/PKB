@@ -1207,10 +1207,52 @@ async def decide_draft(
     orchestrator = PipelineOrchestrator(db)
 
     if request.action == "approve":
-        result_data = await orchestrator.approve_draft(
-            draft_id, task.id,
-            metadata_overrides=request.metadata_overrides,
-        )
+        try:
+            result_data = await orchestrator.approve_draft(
+                draft_id, task.id,
+                metadata_overrides=request.metadata_overrides,
+            )
+        except ValueError as exc:
+            err_msg = str(exc)
+            # BUSINESS_KEY_DRIFT — metadata changed between preview and approve
+            if "BUSINESS_KEY_DRIFT" in err_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "error": {
+                            "code": "BUSINESS_KEY_DRIFT",
+                            "message": "Бизнес-ключ изменился между preview и approve",
+                            "details": {"conflict": "title_hash_sha256"},
+                        }
+                    },
+                )
+            # DUPLICATE_FILE_AFTER_APPROVE — race condition with Registry
+            if "DUPLICATE_FILE_AFTER_APPROVE" in err_msg:
+                # Extract conflict_document_id from error message
+                conflict_id = None
+                _marker = "conflict_document_id="
+                _pos = err_msg.find(_marker)
+                if _pos != -1:
+                    _rest = err_msg[_pos + len(_marker):]
+                    _end = _rest.find(" ")
+                    _val = _rest[:_end] if _end != -1 else _rest
+                    try:
+                        conflict_id = int(_val)
+                    except (ValueError, TypeError):
+                        pass
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "error": {
+                            "code": "DUPLICATE_FILE_AFTER_APPROVE",
+                            "message": "Документ с таким файлом уже существует",
+                            "details": {"conflict_document_id": conflict_id},
+                        }
+                    },
+                )
+            # Other ValueErrors — re-raise as 500
+            raise
+
         # Set correlation IDs for downstream (CM-5)
         doc_id = result_data.get("document_id")
         ver_id = result_data.get("version_id")

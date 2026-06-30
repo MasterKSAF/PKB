@@ -8,7 +8,7 @@ Unit-тесты Saga Coordinator — компенсация при ошибка�
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.core.pipeline.orchestrator import PipelineOrchestrator
 from app.core.pipeline.saga import SagaCoordinator
@@ -393,9 +393,26 @@ class TestCompensateRagIndex:
         from app.core.pipeline.saga import SagaCoordinator
         from app.core.config import settings
 
-        # Mock db
+        # Mock db — need to configure execute() so SagaCoordinator's
+        # internal TaskRepository.get_task_steps() does not choke on mock.
         mock_db = AsyncMock()
         mock_db.flush = AsyncMock()
+
+        # Steps list that SagaCoordinator will see via its own TaskRepository
+        _saga_steps = [
+            MockStep("registry_creation", 4, status="completed",
+                     output_data={"registry_id": 100}),
+            MockStep("rag_index", 5, status="completed",
+                     output_data={"document_id": "42"}),
+            MockStep("some_step_after_rag", 6, status="failed"),
+        ]
+        # Configure db.execute → await → result.scalars().all() chain
+        mock_scalar_result = MagicMock()
+        mock_scalar_result.all.return_value = _saga_steps
+        mock_result = MagicMock()
+        mock_result.scalars.return_value = mock_scalar_result
+        mock_db.execute.return_value = mock_result
+
         orchestrator = PipelineOrchestrator(mock_db)
         orchestrator.task_repo = AsyncMock()
 

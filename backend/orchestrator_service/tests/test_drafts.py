@@ -16,6 +16,7 @@ NOTE: Runs in mock mode (all external services return mock data).
 
 import io
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1097,7 +1098,6 @@ class TestTimeoutCascade:
     @pytest.fixture
     def mock_db(self):
         """Mock AsyncSession для unit-тестов PipelineOrchestrator."""
-        from unittest.mock import AsyncMock
         m = AsyncMock()
         m.flush = AsyncMock()
         return m

@@ -200,17 +200,25 @@ In-memory кэш `_IDEMPOTENCY_CACHE` с TTL 1ч.
 Повторный запрос с тем же ключом → 200 + существующий draft_id.
 В production требуется замена на Redis.
 
-### 3.11. Расхождения docs vs code (27.06, тесты выявили)
-- `FILE_TOO_SMALL` (< 1КБ) описан в pipeline1-orchestrator_details.md, но НЕ реализован в production коде (есть только `EMPTY_FILE` для 0 байт).
-- `UNSUPPORTED_FILE_TYPE` (422) описан, в коде возвращается `400 BAD_REQUEST` для неподдерживаемых MIME.
-- `PREVIEW_IN_PROGRESS` (409) описан, в коде возвращается `PREVIEW_ALREADY_RUNNING`.
-- `DRAFT_ALREADY_DECIDED` (409) описан, в коде возвращается `TASK_ALREADY_TERMINAL`.
-- `DUPLICATE_FILE` (409) при check-uniqueness не блокирует создание черновика (только флаг `is_duplicate_file` в ответе).
-- `DUPLICATE_FILE_AFTER_APPROVE` с `superseded_by_document_id` не реализован.
-- `BUSINESS_KEY_DRIFT` не реализован.
-- confirm action описан в документации, но не реализован в коде.
-- Idempotency-Key для preview описан в P1-19, но не реализован.
-- Пороги качества (avg_confidence, max_critical) описаны, но не реализованы в production коде.
+### 3.11. Расхождения docs vs code — ИСПРАВЛЕНО (30.06)
+Были реализованы (todo_fix_docs_vs_code.md + todo_pipeline_impl.md):
+- `UNSUPPORTED_FILE_TYPE` → 422 ✅
+- `PREVIEW_IN_PROGRESS` вместо PREVIEW_ALREADY_RUNNING ✅
+- `DRAFT_ALREADY_DECIDED` вместо TASK_ALREADY_TERMINAL ✅
+- `FILE_TOO_SMALL` (< 1КБ) — проверка + код ✅
+- `DUPLICATE_FILE` (409) — блокировка создания при дубликате ✅
+- Пороги качества (AUTO_APPROVE_ENABLED, QUALITY_*_CONFIDENCE_BELOW) ✅
+- confirm action ✅
+- Idempotency-Key для preview ✅
+- Lock watchdog в cleanup_stale_tasks ✅
+- DB-чек в /health/ready ✅
+- Опрос downstream в /system/health ✅
+- NO_AVAILABLE_ENGINES в on_step_failed ✅
+
+### 3.11a. Особенности реализации (30.06)
+- `BUSINESS_KEY_DRIFT` и `DUPLICATE_FILE_AFTER_APPROVE` — orchestrator поднимает ValueError,
+  endpoint `decide_draft` ловит и конвертит в HTTP 409. Это осознанное разделение:
+  orchestrator не знает про HTTP, endpoint преобразует.
 
 ### 3.12. PATCH /metadata — Pydantic-схема, Optional preview_metadata (29.06)
 PATCH /drafts/{id}/metadata изменён с `payload: dict` на `PatchMetadataRequest`
