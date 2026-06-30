@@ -80,6 +80,31 @@ export type GatewayHealth = {
   raw?: unknown;
 };
 
+export type GatewayTaskStepStatus = {
+  stepName: string;
+  serviceName: string;
+  status: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  startedAt?: string;
+  completedAt?: string;
+};
+
+export type GatewayTaskStatusDetail = {
+  taskId: string;
+  draftId: string;
+  documentId?: string;
+  versionId?: string;
+  status: string;
+  pipelineStage: string;
+  progressPercent: number;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  steps: GatewayTaskStepStatus[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 type DraftCreateInput = {
   documentKey?: string;
   sourceType?: string;
@@ -943,6 +968,40 @@ function mapGatewayMonitorLogs(payload: any): MonitorLogRow[] {
   }));
 }
 
+function flattenGatewayQueueSteps(rawSteps: any): Array<{ stepName: string; status: string }> {
+  const steps: Array<{ stepName: string; status: string }> = [];
+
+  const visit = (node: any, path: string[]) => {
+    if (!node || typeof node !== 'object') return;
+
+    const status = node.status;
+    if (status !== undefined && typeof status !== 'object') {
+      steps.push({
+        stepName: path[path.length - 1] || 'step',
+        status: String(status),
+      });
+    }
+
+    Object.entries(node).forEach(([key, value]) => {
+      if (key === 'status' || !value || typeof value !== 'object') return;
+      visit(value, [...path, key]);
+    });
+  };
+
+  if (Array.isArray(rawSteps)) {
+    rawSteps.forEach((step, index) => {
+      steps.push({
+        stepName: String(step?.step_name ?? step?.stepName ?? `step_${index + 1}`),
+        status: String(step?.status ?? 'pending'),
+      });
+    });
+  } else {
+    visit(rawSteps, []);
+  }
+
+  return steps.slice(0, 8);
+}
+
 function mapGatewayQueueResponse(payload: any): ProcessingQueueItem[] {
   const queue = Array.isArray(payload) ? payload : payload.queue ?? payload.items ?? [];
 
@@ -962,24 +1021,32 @@ function mapGatewayQueueResponse(payload: any): ProcessingQueueItem[] {
       approved: 100,
       failed: 100,
     };
-    const stage =
+    const currentStep = String(item.current_step ?? item.currentStep ?? item.pipeline_stage ?? item.stage ?? '').trim();
+    const fallbackStage =
       status === 'parsing'
         ? 'Разбор таблиц'
         : ['indexing', 'indexed', 'completed', 'approved', 'failed'].includes(status)
           ? 'Индексация'
           : 'Распознавание текста';
+    const stage = currentStep ? mapGatewayTaskStage(currentStep) : fallbackStage;
 
     return {
       id: toGatewayStringId(item.document_id ?? item.draft_id ?? item.id, `gateway-queue-${index}`),
       document: item.title ?? item.document_title ?? item.filename ?? item.document_id ?? 'Документ базы знаний',
       stage,
-      progress: Number(item.progress ?? item.progress_percent ?? progressByStatus[status] ?? 45),
+      progress: normalizeProgressPercent(item.progress ?? item.progress_percent ?? progressByStatus[status] ?? 45),
       status:
         status === 'failed' || status === 'error'
           ? 'ошибка'
           : ['queued', 'uploaded', 'created'].includes(status)
             ? 'в очереди'
             : 'в работе',
+      docCode: item.doc_code ?? item.docCode,
+      sourceType: item.source_type ?? item.sourceType,
+      currentStep: currentStep || undefined,
+      createdBy: item.created_by ?? item.createdBy,
+      estimatedCompletion: item.estimated_completion ?? item.estimatedCompletion,
+      steps: flattenGatewayQueueSteps(item.steps),
     };
   });
 }
@@ -1226,6 +1293,46 @@ function mapGatewayTaskRetryStatus(status?: string): ProcessingLogItem['retrySta
   if (value === 'retry' || value === 'retrying') return 'Запланирована';
   if (value === 'completed' || value === 'done' || value === 'success') return 'Выполнена';
   return 'Не требуется';
+}
+
+function normalizeProgressPercent(value: unknown) {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.min(100, Math.max(0, Math.round(numeric)));
+}
+
+function mapGatewayTaskStatusDetail(payload: any): GatewayTaskStatusDetail {
+  const data = payload?.data ?? payload ?? {};
+  const taskId = toGatewayStringId(data.task_id ?? data.id, 'task');
+  const rawSteps = Array.isArray(data.steps) ? data.steps : [];
+
+  return {
+    taskId,
+    draftId: toGatewayStringId(data.draft_id ?? data.draftId),
+    documentId: toGatewayStringId(data.document_id ?? data.documentId),
+    versionId: toGatewayStringId(data.version_id ?? data.versionId),
+    status: String(data.status ?? 'unknown'),
+    pipelineStage: String(data.pipeline_stage ?? data.pipelineStage ?? ''),
+    progressPercent: normalizeProgressPercent(data.progress_percent ?? data.progressPercent ?? data.progress),
+    errorCode: data.error_code ?? data.errorCode ?? null,
+    errorMessage: data.error_message ?? data.errorMessage ?? null,
+    steps: rawSteps.map((step: any, index: number) => {
+      const outputData = step?.output_data ?? step?.outputData ?? {};
+      const outputError = outputData?.error ?? {};
+
+      return {
+        stepName: String(step?.step_name ?? step?.stepName ?? `step_${index + 1}`),
+        serviceName: String(step?.service_name ?? step?.serviceName ?? ''),
+        status: String(step?.status ?? 'pending'),
+        errorCode: step?.error_code ?? step?.errorCode ?? outputData?.error_code ?? outputError?.code ?? null,
+        errorMessage: step?.error_message ?? step?.errorMessage ?? outputData?.error_message ?? outputError?.message ?? null,
+        startedAt: step?.started_at ?? step?.startedAt,
+        completedAt: step?.completed_at ?? step?.completedAt,
+      };
+    }),
+    createdAt: data.created_at ?? data.createdAt,
+    updatedAt: data.updated_at ?? data.updatedAt,
+  };
 }
 
 function mapGatewayTaskStatusResponse(payload: any): ProcessingLogItem[] {
@@ -1790,6 +1897,28 @@ export const draftsApi = {
 };
 
 export const tasksApi = {
+  detail: async (taskId: string): Promise<GatewayTaskStatusDetail> => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/tasks/${taskId}/status`));
+    return mapGatewayTaskStatusDetail(response.data);
+  },
+  detailForDraft: async (draftId: string): Promise<GatewayTaskStatusDetail | null> => {
+    if (!/^\d+$/.test(draftId)) return null;
+    const response = await gatewayRequest<any>(() => apiClient.get(`/drafts/${draftId}/tasks`));
+    const tasks = Array.isArray(response.data?.tasks)
+      ? response.data.tasks
+      : Array.isArray(response.data?.items)
+        ? response.data.items
+        : Array.isArray(response.data?.data)
+          ? response.data.data
+          : [];
+    const selectedTask =
+      tasks.find((task: any) => String(task?.status ?? '').toLowerCase() === 'active') ??
+      tasks.find((task: any) => task?.task_id ?? task?.id) ??
+      null;
+    const taskId = selectedTask?.task_id ?? selectedTask?.id;
+
+    return taskId ? tasksApi.detail(String(taskId)) : null;
+  },
   status: async (taskId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/tasks/${taskId}/status`));
     return mapGatewayTaskStatusResponse(response.data);
