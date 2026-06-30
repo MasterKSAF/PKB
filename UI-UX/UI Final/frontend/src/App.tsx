@@ -74,8 +74,8 @@ export default function App() {
       ? currentUser.role
       : `${currentUser.position} · ${currentUser.role}`;
   const accessibleTabs = useMemo(
-    () => getAccessibleTabs(currentRole, currentUser?.availableTabs, workMode),
-    [currentRole, currentUser?.availableTabs, workMode],
+    () => getAccessibleTabs(currentRole, currentUser?.availableTabs, workMode, currentUser?.permissions),
+    [currentRole, currentUser?.availableTabs, currentUser?.permissions, workMode],
   );
   const activeNavHeaderBackground = themeMode === 'dark' ? '#242829' : '#e0f2fe';
   const activeNavHeaderBorder = themeMode === 'dark' ? 'rgba(198, 216, 240, 0.38)' : '#7dd3fc';
