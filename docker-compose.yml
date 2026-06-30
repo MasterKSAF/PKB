@@ -87,7 +87,6 @@ x-env-embeddings: &env-embeddings
   EMBEDDING_DIM: "${EMBEDDING_DIM:-2048}"
   VECTOR_DIMENSION: "${VECTOR_DIMENSION:-${EMBEDDING_DIM:-2048}}"
   EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-${ROUTERAI_API_KEY:-}}
-  EMBEDDING_TIMEOUT: "60"
   EMBEDDING_INSTRUCTION: ""
 
 # --- Reranker (Infinity локально) ---
@@ -367,7 +366,7 @@ services:
       DEFAULT_LLM_MAX_TOKENS: "4096"
       DEFAULT_LLM_TIMEOUT: "60"
       CONFIDENCE_THRESHOLD: "0.55"
-      REGISTRY_SERVICE_URL: http://registry:8084/api/v1
+      REGISTRY_SERVICE_URL: http://registry:8084
     depends_on:
       registry:
         condition: service_healthy
@@ -397,6 +396,7 @@ services:
       CHUNK_SIZE: "1024"
       EMBEDDING_BATCH_SIZE: "256"
       EMBEDDING_RETRIES: "3"
+      EMBEDDING_TIMEOUT: "120"
     depends_on:
       postgres:
         condition: service_healthy
@@ -424,16 +424,20 @@ services:
     ports:
       - "8091:8091"
     environment:
-      <<: [*env-db, *env-embeddings, *env-rerank]
-      LOG_LEVEL: DEBUG
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      POSTGRES_USER: pkb
-      POSTGRES_PASSWORD: pkb
-      POSTGRES_DB: pkb_neuro
-      SEARCH_STRATEGY: dense_rerank
-      SEARCH_TOP_K: "10"
-      CONTEXT_EXPANSION: "2"
+          <<: [*env-db, *env-embeddings, *env-rerank]
+          LOG_LEVEL: DEBUG
+          # Таймаут 10с — эмбеддинг один и мелкий, долгого ожидания быть не может, сразу retry.
+          EMBEDDING_TIMEOUT: "10"
+          POSTGRES_HOST: postgres
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: pkb
+          POSTGRES_PASSWORD: pkb
+          POSTGRES_DB: pkb_neuro
+          SEARCH_STRATEGY: dense_rerank
+          SEARCH_TOP_K: "10"
+          CONTEXT_EXPANSION: "2"
+          # Множитель: top_k * fetch_multiplier = 10*2 = 20 кандидатов на rerank
+          RERANKER_FETCH_MULTIPLIER: "2"
     depends_on:
       postgres:
         condition: service_healthy
@@ -601,7 +605,7 @@ services:
       GATEWAY_PORT: "8080"
       ENV: ${ENV:-development}
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-0}
-      GATEWAY_REQUEST_TIMEOUT: "120"
+      GATEWAY_REQUEST_TIMEOUT: "300"
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
       PROJECT_DIR: /project
       HOST_PROC: /host/proc

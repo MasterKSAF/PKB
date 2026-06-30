@@ -203,7 +203,9 @@ async def hybrid_search(
         )
 
     settings = get_settings()
-    fetch_k = settings.rerank_top_n if rerank else settings.search_fetch_multiplier
+    # Множитель для dense/sparse запроса: сколько кандидатов на каждый top_k.
+    # reranker_fetch_multiplier — при rerank, search_fetch_multiplier — без rerank.
+    fetch_k = settings.reranker_fetch_multiplier if rerank else settings.search_fetch_multiplier
 
     results: dict[int, float] = {}
     total_found: int = 0

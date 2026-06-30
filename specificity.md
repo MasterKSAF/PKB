@@ -259,3 +259,7 @@ registry_creation completed → enqueue rag_index`
 ```bash
 set EXTRACT_FRAGMENTS=10 && python data/tests/test_universal_pdf_loader.py data/pdf/ОСТ5_2067_73_Имущество_АСИ_ППИ_и_ЗИП_Крепление_на_судах.pdf
 ```
+
+### R4. Документы застревают в validating после pipeline
+
+Orchestrator намеренно ставит статус `validating`. Переход в `active` не автоматизирован.

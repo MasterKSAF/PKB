@@ -21,7 +21,11 @@ export type AnswerStatus =
   | 'generating'
   | 'enriching_citations'
   | 'answered'
-  | 'failed';
+  | 'failed'
+  | 'not_found'
+  | 'out_of_scope'
+  | 'needs_clarification'
+  | 'source_conflict';
 
 export interface ChatMessage {
   id: string;

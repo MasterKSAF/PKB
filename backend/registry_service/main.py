@@ -48,6 +48,13 @@ async def lifespan(app: FastAPI):
 
             try:
                 Base.metadata.create_all(bind=engine)
+                if engine.dialect.name != "sqlite":
+                    try:
+                        with engine.connect() as conn:
+                            conn.execute(text("ALTER TABLE IF EXISTS registry.drafts ADD COLUMN IF NOT EXISTS original_filename TEXT"))
+                            conn.commit()
+                    except Exception as migration_err:
+                        log_event("WARNING", "startup", error=f"Draft compatibility migration failed: {str(migration_err)}")
                 log_event("INFO", "startup", data={"message": "All database schemas and models created successfully"})
                 
                 # Load initial data straight after database modifications

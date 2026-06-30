@@ -16,6 +16,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 beforeEach(() => {
+  window.localStorage.clear();
   useUIStore.setState(useUIStore.getInitialState(), true);
   useUIStore.getState().setWorkMode('prod');
 });
@@ -91,6 +92,21 @@ describe('live Gateway response contracts', () => {
     expect(config?.timeout).toBe(120_000);
   });
 
+  it('sends Authorization on draft preview pipeline requests', async () => {
+    window.localStorage.setItem('pkb_gateway_access_token_v2', 'test-access-token');
+    let authorization: string | null = null;
+
+    server.use(
+      http.post(`${apiBase}/drafts/21/preview`, ({ request }) => {
+        authorization = request.headers.get('authorization');
+        return HttpResponse.json({ task_id: 21, status: 'processing' }, { status: 202 });
+      }),
+    );
+
+    await expect(draftsApi.startPreview('21')).resolves.toMatchObject({ task_id: 21 });
+    expect(authorization).toBe('Bearer test-access-token');
+  });
+
   it('omits nonnumeric project ids when creating chat sessions', async () => {
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
       data: { session_id: 7, title: 'Новый чат' },
@@ -112,6 +128,34 @@ describe('live Gateway response contracts', () => {
     );
 
     expect(put).not.toHaveBeenCalled();
+  });
+
+  it('does not create a Gateway chat session implicitly when sending a message', async () => {
+    const post = vi.spyOn(apiClient, 'post');
+
+    await expect(chatApi.send('проверка')).rejects.toThrow('Сначала создайте или выберите чат');
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('treats Query Service not_found as a final chat status', async () => {
+    useUIStore.getState().setCurrentGatewaySessionId('12');
+
+    server.use(
+      http.post(`${apiBase}/chat/sessions/12/messages`, () => HttpResponse.json({ message_id: 91 })),
+      http.get(`${apiBase}/chat/sessions/12/messages/91`, () =>
+        HttpResponse.json({
+          message_id: 91,
+          status: 'not_found',
+          message: 'По запросу ничего не найдено.',
+        }),
+      ),
+    );
+
+    await expect(chatApi.send('неизвестный запрос')).resolves.toMatchObject({
+      status: 'failed',
+      content: 'По запросу ничего не найдено.',
+    });
   });
 
   it('keeps task converter errors visible in processing logs', async () => {

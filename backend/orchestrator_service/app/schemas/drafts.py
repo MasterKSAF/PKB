@@ -29,6 +29,12 @@ class DraftCreateResponse(BaseModel):
     title_key: Optional[str] = Field(
         None, description="Исходная строка конкатенации для title_hash_sha256 (DB-28)"
     )
+    original_filename: Optional[str] = Field(
+        None, description="Оригинальное имя загруженного файла"
+    )
+    display_name: Optional[str] = Field(
+        None, description="Отображаемое имя черновика для UI"
+    )
     created_at: datetime = Field(..., description="Время создания")
 
 

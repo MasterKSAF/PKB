@@ -1951,7 +1951,8 @@ def create_draft(
             document_key=payload.document_key,
             status=payload.status,
             raw_data=payload.raw_data,
-            created_by=payload.created_by
+            created_by=payload.created_by,
+            original_filename=payload.original_filename,
         )
         return JSONResponse(status_code=201, content={'data': DraftSchema.model_validate(draft).model_dump(mode='json', by_alias=True, exclude_none=True)})
     except Exception as e:

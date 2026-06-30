@@ -792,6 +792,7 @@ const draftProgressByStatus: Record<DraftStatus, number> = {
 
 const isActiveDraftStatus = (status: DraftStatus) => status !== 'approved' && status !== 'discarded';
 const shouldPollDraftDetails = (status?: DraftStatus | null) => status === 'previewing' || status === 'validation';
+const isPreviewStartConflict = (error: any) => error?.response?.status === 409;
 
 const normalizeDraftStatusFromGateway = (status?: string): DraftStatus => {
   const normalized = String(status ?? '').toLowerCase();
@@ -887,23 +888,25 @@ export const mapGatewayDraftRecordToUi = (payload: any, fallback?: Partial<Draft
   const draftId = String(fallback?.id ?? payload?.draft_id ?? payload?.id ?? `draft-${Date.now()}`);
   const documentKey = firstNonEmptyText(payload?.document_key, payload?.documentKey, fallback?.gatewayDocumentKey);
   const fileKey = firstNonEmptyText(payload?.file_key, payload?.fileKey);
-  const fallbackLabel = documentKey || fileKey || `Черновик #${draftId}`;
-  const fileName = firstNonEmptyText(
+  const fallbackLabel = `Черновик #${draftId}`;
+  const displayName = firstNonEmptyText(
+    payload?.display_name,
+    payload?.displayName,
+    payload?.original_filename,
+    payload?.originalFilename,
     payload?.filename,
     payload?.file_name,
+    fallback?.title,
     fallback?.fileName,
-    payload?.title,
     fallbackLabel,
   );
+  const fileName = displayName;
   const title = firstNonEmptyText(
+    displayName,
     payload?.title,
     metadataOverrides.title,
     payload?.preview_metadata?.title,
     fallback?.title,
-    payload?.filename,
-    payload?.file_name,
-    documentKey,
-    fileKey,
     fallbackLabel,
   );
 
@@ -1030,6 +1033,10 @@ export const KnowledgeProcessing: React.FC = () => {
     queryKey: ['gateway-documents', workMode],
     queryFn: documentsApi.list,
     staleTime: 30_000,
+    refetchInterval:
+      workMode === 'prod' && (activeKnowledgeProcessingSection as KnowledgeProcessingSection) === 'registry'
+        ? 10_000
+        : false,
   });
   const gatewayQueueQuery = useQuery({
     queryKey: ['gateway-documents-queue', workMode],
@@ -1581,10 +1588,17 @@ export const KnowledgeProcessing: React.FC = () => {
 
     void (async () => {
       try {
-        await draftsApi.startPreview(gatewayDraftId);
+        let previewResponse;
+        try {
+          await draftsApi.startPreview(gatewayDraftId);
+        } catch (error) {
+          if (!isPreviewStartConflict(error)) throw error;
+          // The server has already moved the draft out of "uploaded"; read the current preview state instead.
+          previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
+        }
 
         // Longpoll: повторяем waitPreview пока не получим терминальный статус
-        let previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
+        previewResponse ??= await draftsApi.waitPreview(gatewayDraftId, 15);
         for (let attempt = 0; attempt < 6 && previewResponse?.status === 'processing'; attempt++) {
           await new Promise(r => setTimeout(r, 1000));
           previewResponse = await draftsApi.waitPreview(gatewayDraftId, 15);
@@ -1603,10 +1617,15 @@ export const KnowledgeProcessing: React.FC = () => {
 
         const nextStatus = normalizeDraftStatusFromGateway(previewResponse?.status);
         const isProcessing = previewResponse?.status === 'processing';
+        const resolvedStatus: DraftStatus = previewResponse?.decision_required
+          ? 'review_required'
+          : nextStatus === 'uploaded'
+            ? 'ready_for_approve'
+            : nextStatus;
         updateDraft(draftId, {
           ...draftPatchFromGateway(previewResponse, draftAfterPreview),
-          status: nextStatus === 'uploaded' ? 'ready_for_approve' : nextStatus,
-          progress: isProcessing ? 38 : draftProgressByStatus[nextStatus] ?? 72,
+          status: resolvedStatus,
+          progress: isProcessing ? 38 : draftProgressByStatus[resolvedStatus] ?? 72,
           confidence: Number(previewResponse?.confidence ?? draftAfterPreview.confidence ?? 0),
           preview:
             mapGatewayPreviewMetadata(previewResponse) ??
@@ -1620,7 +1639,7 @@ export const KnowledgeProcessing: React.FC = () => {
           duplicates,
           note: isProcessing
             ? 'Проверка ещё выполняется. Пожалуйста, подождите.'
-            : nextStatus === 'review_required' || previewResponse?.decision_required
+            : resolvedStatus === 'review_required'
               ? 'Проверка готова. Требуется решение.'
               : 'Проверка готова. Можно принимать документ.',
         });
@@ -1707,7 +1726,11 @@ export const KnowledgeProcessing: React.FC = () => {
         metadataOverrides,
       });
       const nextStatus = normalizeDraftStatusFromGateway(response?.status);
-      const shouldRemoveDraft = action === 'reject' || nextStatus === 'approved' || nextStatus === 'discarded' || Boolean(response?.document_id);
+      // Orchestrator returns status: "proceeding" when approve starts async indexing.
+      // The draft should NOT be removed yet — keep it visible with "validation" status
+      // until the backend reports a terminal status ("approved"/"discarded"/"failed").
+      const isProceedingAfterApprove = action === 'approve' && response?.status === 'proceeding';
+      const shouldRemoveDraft = action === 'reject' || nextStatus === 'approved' || nextStatus === 'discarded' || (Boolean(response?.document_id) && !isProceedingAfterApprove);
 
       if (shouldRemoveDraft) {
         setDrafts((current) => current.filter((item) => item.id !== draftId));
@@ -1720,9 +1743,11 @@ export const KnowledgeProcessing: React.FC = () => {
           progress: draftProgressByStatus[nextStatus] ?? draft.progress,
           gatewayMetadataOverrides: metadataOverrides,
           note:
-            action === 'confirm'
-              ? 'Черновик подтверждён. Запущена повторная проверка.'
-              : response?.message ?? draft.note,
+            action === 'approve' && isProceedingAfterApprove
+              ? 'Документ создан, запущена индексация. Черновик исчезнет после завершения.'
+              : action === 'confirm'
+                ? 'Черновик подтверждён. Запущена повторная проверка.'
+                : response?.message ?? draft.note,
         });
       }
 

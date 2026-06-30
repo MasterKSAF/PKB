@@ -24,7 +24,7 @@
 | Роль | Назначение | Права |
 |---|---|---|
 | engineer | Инженер-конструктор | documents:read, search, history:read |
-| knowledge_admin | Администратор знаний | documents:read, documents:write, search, history:read |
+| knowledge_admin | Администратор знаний | documents:read, documents:write, search, history:read, audit:read |
 | system_admin | Администратор системы | users:manage, roles:manage, audit:read, documents:read, documents:write, search, history:read |
 
 ## Быстрый старт

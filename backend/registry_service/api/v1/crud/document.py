@@ -186,13 +186,13 @@ def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Documen
         from api.v1.models import Draft, File, DocumentVersion
         draft = db.query(Draft).filter(Draft.draft_id == document.draft_id).first()
         if draft and draft.file_key:
-            filename = None
+            filename = draft.original_filename
             file_size = 0
             file_hash = None
             
             if draft.raw_data and isinstance(draft.raw_data, dict):
                 source = draft.raw_data.get('document', {}).get('source', {})
-                filename = source.get('file_name')
+                filename = filename or source.get('file_name')
                 file_size = source.get('file_size_bytes') or source.get('page_count') or 0
                 file_hash = source.get('file_hash_sha256')
                 

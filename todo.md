@@ -1,18 +1,21 @@
-# Fix dispatching full_ocr / OCR fallback in orchestrator
+# Баг: Исчезновение черновика после обработки / approval
 
-## Analysis findings
+## Статус: ИСПРАВЛЕНО
 
-### Bugs identified:
+### Корневая причина
+Оркестратор (`decide_draft`) при approve возвращает `status: "proceeding"`, а фронтенд ожидал `"approved"` и удалял черновик по наличию `document_id`. Документ при этом ещё не проиндексирован (Pipeline 2).
 
-1. **`_run_ocr_fallback` (line 349):** New OCR preview step is created with `status="pending"` but never started via `start_task_step`. When OCR task completes, `on_step_completed` finds a "pending" step and completes it directly (skipping "running" state). This breaks step lifecycle.
+### Сделанные изменения
 
-2. **`approve_draft` else branch (line 1197):** When `need_full_processing=False` (full preview mode or `full_completed=True`), the `full_converter` step is started but `run_converter_full_step.delay()` is NEVER called. The step stays `running` forever — no Celery task is dispatched to process it.
+**Файл**: `UI-UX/UI Final/frontend/src/components/KnowledgeProcessing.tsx`
 
-3. **`_run_ocr_fallback` missing import guard:** After creating the step, `.delay()` is called but if the local import or dispatch fails, there's no error handling.
+**Fix 1** (строки 1728–1752): В `handleDecision` при approve:
+- Добавлен флаг `isProceedingAfterApprove` — true, когда ответ оркестратора `{ status: "proceeding" }`
+- `shouldRemoveDraft` теперь учитывает этот флаг: не удаляет черновик при "proceeding" даже если есть `document_id`
+- Вместо удаления — обновляет черновик со статусом `"validation"` (маппинг `"proceeding"` → `"validation"`)
+- Note: "Документ создан, запущена индексация. Черновик исчезнет после завершения."
+- 5-сек опрос `gatewayDraftsQuery` подхватит финальный `"approved"` и `isActiveDraftStatus` отфильтрует
 
-### Plan:
-
-- [x] Fix 1: `_run_ocr_fallback` — start the new OCR step after creation
-- [x] Fix 2: `approve_draft` else branch — dispatch `run_converter_full_step.delay()` when skipping Parser/OCR
-- [x] Review all dispatch sites for consistency
-- [x] Run tests
+**Fix 2** (строка 1036–1039): `publishedDocumentsQuery`
+- Добавлен `refetchInterval: 10_000` при активной секции `registry`
+- Реестр автоматически обновляется и подхватывает проиндексированные документы

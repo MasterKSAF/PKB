@@ -28,7 +28,7 @@ def reset_rate_limiter():
 
 DEFAULT_ROLES = {
     "engineer": ["documents:read", "search", "history:read"],
-    "knowledge_admin": ["documents:read", "documents:write", "search", "history:read"],
+    "knowledge_admin": ["documents:read", "documents:write", "search", "history:read", "audit:read"],
     "system_admin": ["users:manage", "roles:manage", "audit:read", "documents:read", "documents:write", "search", "history:read"],
 }
 
@@ -62,6 +62,7 @@ async def seeded_db(db: AsyncSession) -> AsyncSession:
     admin = User(
         email=settings.default_admin_email,
         full_name="Admin User",
+        position="Системный администратор",
         password_hash=hash_password(settings.default_admin_password),
         roles=[roles["system_admin"]],
     )

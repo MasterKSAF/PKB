@@ -6,6 +6,7 @@
 import hashlib
 import json
 import logging
+import unicodedata
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -87,6 +88,11 @@ def _compute_sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def _normalize_original_filename(filename: Optional[str]) -> Optional[str]:
+    value = unicodedata.normalize("NFC", str(filename or "")).strip()
+    return value or None
+
+
 # ---------------------------------------------------------------------------
 #  POST /drafts  — Upload file & create draft
 # ---------------------------------------------------------------------------
@@ -126,6 +132,8 @@ async def create_draft(
     возвращает 200 с существующим draft_id (вместо 202).
     TTL ключа: 1 час.
     """
+    original_filename = _normalize_original_filename(file.filename)
+
     # --- Idempotency check ---
     if idempotency_key:
         cached = _IDEMPOTENCY_CACHE.get(idempotency_key)
@@ -155,6 +163,8 @@ async def create_draft(
                         "draft_id": cached["draft_id"],
                         "task_id": task_id,
                         "status": "uploaded",
+                        "original_filename": cached.get("original_filename") or original_filename,
+                        "display_name": cached.get("display_name") or original_filename,
                         "message": "Черновик уже создан (idempotent)",
                     }),
                     media_type="application/json",
@@ -365,6 +375,9 @@ async def create_draft(
         metadata_fields["issuing_body"] = issuing_body
     # Merge any parsed metadata on top
     metadata_fields.update(parsed_metadata)
+    if original_filename:
+        metadata_fields["original_filename"] = original_filename
+        metadata_fields["display_name"] = original_filename
 
     # --- Check duplicates via Registry ---
     registry = RegistryServiceClient()
@@ -413,6 +426,7 @@ async def create_draft(
             file_hash_sha256=file_hash,
             title_hash_sha256=title_hash,
             title_key=title_key,
+            original_filename=original_filename,
             metadata_fields=metadata_fields if metadata_fields else None,
         )
         draft_id = draft_result.get("data", {}).get("id", 0)
@@ -439,6 +453,8 @@ async def create_draft(
             "draft_id": draft_id,
             "task_id": None,  # Will be filled after task creation
             "created_at": datetime.now(timezone.utc),
+            "original_filename": original_filename,
+            "display_name": original_filename,
         }
 
     # --- Check: Task for this draft_id already exists? ---
@@ -507,6 +523,8 @@ async def create_draft(
         is_duplicate_document=is_duplicate_document,
         title_hash_sha256=title_hash,
         title_key=title_key,
+        original_filename=original_filename,
+        display_name=original_filename,
         created_at=datetime.now(timezone.utc),
     )
 

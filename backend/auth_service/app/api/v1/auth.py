@@ -79,6 +79,7 @@ async def me(current_user=Depends(get_current_user)):
     return UserMeResponse(
         user_id=current_user.user_id,
         full_name=current_user.full_name,
+        position=current_user.position,
         role=role,
         role_title=_ROLE_TITLES.get(role, role),
         available_tabs=_get_available_tabs(perms_set),
