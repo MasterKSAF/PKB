@@ -55,6 +55,8 @@ class MockTask:
         self.retry_count = 0
         self.current_step_index = 0
         self.current_step_name = ""
+        self.locked_by = None
+        self.locked_at = None
 
 
 # ============================================================================

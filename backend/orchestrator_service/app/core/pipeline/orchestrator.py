@@ -1529,6 +1529,32 @@ class PipelineOrchestrator:
             )
             use_ocr_fallback = True
 
+        # --- Engine-availability guard (todo_pipeline_coverage §1.2) ---
+        # Если оба движка выключены — retry/fallback невозможен.
+        # Помечаем task как failed с понятным кодом, а не молча ретраим.
+        if (
+            step_name in ("preview_ocr", "full_ocr")
+            and not settings.services.PARSER_ENABLED
+            and not settings.services.OCR_ENABLED
+        ):
+            logger.error(
+                f"No engines available for {step_name}: PARSER_ENABLED=False, "
+                f"OCR_ENABLED=False",
+                extra={"task_id": task_id, "draft_id": task.draft_id},
+            )
+            await self.task_repo.set_task_error(
+                task_id,
+                error_code="NO_AVAILABLE_ENGINES",
+                error_message="Both PARSER_ENABLED and OCR_ENABLED are false",
+            )
+            await self.task_repo.update_task_status(
+                task_id, status=TaskStatus.FAILED.value
+            )
+            # Release lock on terminal task.
+            if task.locked_by is not None:
+                await self.task_repo.unlock_task(task_id)
+            return
+
         if use_ocr_fallback:
             # Fall back to OCR — create new OCR step (if not already pending) and enqueue
             file_key = ""
@@ -1621,6 +1647,15 @@ class PipelineOrchestrator:
             await self.task_repo.update_task_status(
                 task_id, status=TaskStatus.FAILED.value
             )
+            # Release lock (todo_pipeline_coverage §14):
+            # terminal task must not hold a worker lock.
+            if task.locked_by is not None:
+                await self.task_repo.unlock_task(task_id)
+                logger.info(
+                    f"Lock released on terminal task {task_id} "
+                    f"(was held by {task.locked_by!r})",
+                    extra={"task_id": task_id, "old_worker": task.locked_by},
+                )
 
             # Run Saga compensation (rollback completed steps)
             saga = SagaCoordinator(self.db)
@@ -1695,6 +1730,33 @@ class PipelineOrchestrator:
                 task.id,
                 error_code="ABSOLUTE_TIMEOUT",
                 error_message=f"Task exceeded absolute timeout of {abs_timeout}h",
+            )
+            cleaned += 1
+
+        # Handle stale locks (todo_pipeline_coverage §14)
+        # Lock with locked_at older than MAX_JOB_RUNNING_TIME is considered
+        # orphaned (worker crashed without unlock). Auto-release and warn.
+        from datetime import timedelta as _td
+        from datetime import datetime as _dt
+        from datetime import timezone as _tz
+        lock_threshold = _dt.now(_tz.utc) - _td(seconds=max_time)
+        from sqlalchemy import select as _select
+        from app.models.pipeline import Task as _Task
+        result = await self.db.execute(
+            _select(_Task).where(
+                _Task.locked_at.is_not(None),
+                _Task.locked_at < lock_threshold,
+                _Task.deleted_at.is_(None),
+            )
+        )
+        stale_locks = list(result.scalars().all())
+        for task in stale_locks:
+            old_worker = task.locked_by
+            await self.task_repo.unlock_task(task.id)
+            logger.warning(
+                f"Auto-released stale lock on task {task.id} "
+                f"(was held by {old_worker!r}, locked_at={task.locked_at})",
+                extra={"task_id": task.id, "old_worker": old_worker},
             )
             cleaned += 1
 
