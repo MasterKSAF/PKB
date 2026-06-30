@@ -16,6 +16,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 beforeEach(() => {
+  window.localStorage.clear();
   useUIStore.setState(useUIStore.getInitialState(), true);
   useUIStore.getState().setWorkMode('prod');
 });
@@ -89,6 +90,21 @@ describe('live Gateway response contracts', () => {
     expect((form as FormData).get('file')).toBeInstanceOf(File);
     expect(config?.headers).not.toHaveProperty('Content-Type');
     expect(config?.timeout).toBe(120_000);
+  });
+
+  it('sends Authorization on draft preview pipeline requests', async () => {
+    window.localStorage.setItem('pkb_gateway_access_token_v2', 'test-access-token');
+    let authorization: string | null = null;
+
+    server.use(
+      http.post(`${apiBase}/drafts/21/preview`, ({ request }) => {
+        authorization = request.headers.get('authorization');
+        return HttpResponse.json({ task_id: 21, status: 'processing' }, { status: 202 });
+      }),
+    );
+
+    await expect(draftsApi.startPreview('21')).resolves.toMatchObject({ task_id: 21 });
+    expect(authorization).toBe('Bearer test-access-token');
   });
 
   it('omits nonnumeric project ids when creating chat sessions', async () => {

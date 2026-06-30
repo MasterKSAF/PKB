@@ -381,7 +381,7 @@ function clearGatewaySession() {
   store.setApiStatus(store.workMode === 'demo' ? 'demo' : 'offline');
 }
 
-apiClient.interceptors.request.use((config) => {
+function attachGatewayAuth(config: any) {
   const headers = config.headers as any;
   if (headers?.[SKIP_AUTH_HEADER]) {
     delete headers[SKIP_AUTH_HEADER];
@@ -394,7 +394,10 @@ apiClient.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
-});
+}
+
+apiClient.interceptors.request.use(attachGatewayAuth);
+pipelineClient.interceptors.request.use(attachGatewayAuth);
 
 async function refreshGatewayAccessToken() {
   const refreshToken = getRefreshToken();
