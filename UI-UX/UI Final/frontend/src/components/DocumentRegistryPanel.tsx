@@ -539,6 +539,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewSearch, setPreviewSearch] = useState('');
   const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>([]);
+  const [versionSelectionTouched, setVersionSelectionTouched] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [validFromDraft, setValidFromDraft] = useState('');
   const [validUntilDraft, setValidUntilDraft] = useState('');
@@ -715,10 +716,10 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const currentPreviewText = selectedPreviewPage?.lines.join('\n') ?? '';
   const compareVersions = versions.filter((version) => selectedVersionIds.includes(version.id)).slice(0, 2);
   const totalVersions = Number(detail?.total_versions ?? versions.length ?? 0);
-  const selectedVersionRows = useMemo(() => {
-    if (selectedVersionIds.length) return versions.filter((version) => selectedVersionIds.includes(version.id)).slice(0, 2);
-    return versions.slice(0, 2);
-  }, [selectedVersionIds, versions]);
+  const selectedVersionRows = useMemo(
+    () => versions.filter((version) => selectedVersionIds.includes(version.id)).slice(0, 2),
+    [selectedVersionIds, versions],
+  );
   const previewSearchMatchCount = useMemo(() => {
     const normalized = previewSearch.trim().toLowerCase();
     if (!normalized || !selectedPreviewPage) return 0;
@@ -727,10 +728,10 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   }, [currentPreviewText, previewSearch]);
 
   useEffect(() => {
-    if (versionsOpen && !selectedVersionIds.length && selectedVersionRows.length) {
-      setSelectedVersionIds(selectedVersionRows.map((version) => version.id));
+    if (versionsOpen && !versionSelectionTouched && !selectedVersionIds.length && versions.length) {
+      setSelectedVersionIds(versions.slice(0, 2).map((version) => version.id));
     }
-  }, [selectedVersionIds.length, selectedVersionRows, versionsOpen]);
+  }, [selectedVersionIds.length, versionSelectionTouched, versions, versionsOpen]);
 
   useEffect(() => {
     setPreviewOpen(false);
@@ -741,6 +742,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     setRegistryNotice('');
     setRegistryError('');
     setSelectedVersionIds([]);
+    setVersionSelectionTouched(false);
     setActionsAnchorEl(null);
   }, [selectedDocumentId]);
 
@@ -1652,6 +1654,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                             checked={checked}
                             onChange={(event) => {
                               const isChecked = event.target.checked;
+                              setVersionSelectionTouched(true);
                               setSelectedVersionIds((current) => {
                                 if (isChecked) {
                                   return Array.from(new Set([...current, version.id])).slice(0, 2);
