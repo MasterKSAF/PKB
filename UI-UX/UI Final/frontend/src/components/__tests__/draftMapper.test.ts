@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mapGatewayDraftRecordToUi } from '../KnowledgeProcessing';
 
 describe('Gateway draft mapper', () => {
-  it('uses document_key when the backend does not return a title or filename', () => {
+  it('uses a stable draft label when the backend does not return a display name', () => {
     const draft = mapGatewayDraftRecordToUi({
       draft_id: 17,
       document_key: 'sha256-document-key',
@@ -11,19 +11,22 @@ describe('Gateway draft mapper', () => {
 
     expect(draft.id).toBe('17');
     expect(draft.gatewayDraftId).toBe('17');
-    expect(draft.title).toBe('sha256-document-key');
-    expect(draft.fileName).toBe('sha256-document-key');
+    expect(draft.title).toBe('Черновик #17');
+    expect(draft.fileName).toBe('Черновик #17');
+    expect(draft.gatewayDocumentKey).toBe('sha256-document-key');
   });
 
-  it('uses file_key before falling back to the numeric id', () => {
+  it('uses original_filename before technical keys', () => {
     const draft = mapGatewayDraftRecordToUi({
       id: 18,
       file_key: 'drafts/18/source.pdf',
+      original_filename: 'ГОСТ 10059-80.pdf',
       status: 'uploaded',
     });
 
     expect(draft.gatewayDraftId).toBe('18');
-    expect(draft.title).toBe('drafts/18/source.pdf');
+    expect(draft.title).toBe('ГОСТ 10059-80.pdf');
+    expect(draft.fileName).toBe('ГОСТ 10059-80.pdf');
   });
 
   it('normalizes backend metadata values to strings before they reach form fields', () => {

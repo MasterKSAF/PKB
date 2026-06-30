@@ -5,10 +5,19 @@ from sqlalchemy import func
 
 from api.v1.models import Draft
 
-def create_draft(db: Session, file_key: str, document_key: str, status: str, raw_data: Optional[dict], created_by: str) -> Draft:
+def create_draft(
+    db: Session,
+    file_key: str,
+    document_key: str,
+    status: str,
+    raw_data: Optional[dict],
+    created_by: str,
+    original_filename: Optional[str] = None,
+) -> Draft:
     draft = Draft(
         file_key=file_key,
         document_key=document_key,
+        original_filename=original_filename,
         status=status,
         raw_data=raw_data,
         created_by=created_by,

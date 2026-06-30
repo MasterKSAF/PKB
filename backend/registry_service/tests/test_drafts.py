@@ -5,6 +5,7 @@ def test_create_draft(client):
     payload = {
         "file_key": "f-123",
         "document_key": "doc-123",
+        "original_filename": "ГОСТ 10059-80.pdf",
         "status": "uploaded",
         "raw_data": {"test": "data"},
         "created_by": "orchestrator"
@@ -15,6 +16,8 @@ def test_create_draft(client):
     assert "id" in data
     assert data["file_key"] == "f-123"
     assert data["document_key"] == "doc-123"
+    assert data["original_filename"] == "ГОСТ 10059-80.pdf"
+    assert data["display_name"] == "ГОСТ 10059-80.pdf"
     assert data["status"] == "uploaded"
     assert data["raw_data"] == {"test": "data"}
 

@@ -561,8 +561,14 @@ function mapGatewaySource(source: any, index = 0): Citation {
   };
 }
 
+function unwrapGatewayMessagePayload(payload: any) {
+  const nestedMessage = payload?.message;
+  return nestedMessage && typeof nestedMessage === 'object' && !Array.isArray(nestedMessage) ? nestedMessage : payload;
+}
+
 function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
-  const messagePayload = payload?.message ?? payload;
+  const messagePayload = unwrapGatewayMessagePayload(payload);
+  const normalizedStatus = String(messagePayload.status ?? '').toLowerCase();
   const answerItems = Array.isArray(messagePayload.answer_items) ? messagePayload.answer_items : [];
   const directSources = Array.isArray(messagePayload.sources) ? messagePayload.sources : [];
   const itemSources = answerItems.flatMap((item: any) =>
@@ -570,7 +576,7 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
   );
   const citations = itemSources.length ? itemSources : directSources.map((source: any, index: number) => mapGatewaySource(source, index));
 
-  if (messagePayload.scenario === 'needs_clarification') {
+  if (messagePayload.scenario === 'needs_clarification' || normalizedStatus === 'needs_clarification') {
     return {
       id: messagePayload.message_id ?? messagePayload.answer_id ?? Math.random().toString(36).slice(2),
       role: 'assistant',
@@ -581,13 +587,23 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
     };
   }
 
-  if (messagePayload.scenario === 'conflict') {
+  if (messagePayload.scenario === 'conflict' || normalizedStatus === 'source_conflict') {
     return {
       id: messagePayload.message_id ?? messagePayload.answer_id ?? Math.random().toString(36).slice(2),
       role: 'assistant',
       content: messagePayload.message ?? 'Система обнаружила конфликт источников.',
       status: 'answered',
       limitation: 'Gateway вернул сценарий conflict; статус сообщения оставлен в документированной FSM.',
+      timestamp: toUiTimestamp(messagePayload.timestamp),
+    };
+  }
+
+  if (normalizedStatus === 'not_found' || normalizedStatus === 'out_of_scope') {
+    return {
+      id: messagePayload.message_id ?? messagePayload.answer_id ?? Math.random().toString(36).slice(2),
+      role: 'assistant',
+      content: messagePayload.message ?? messagePayload.content ?? 'По запросу не найден подходящий ответ в базе знаний.',
+      status: 'failed',
       timestamp: toUiTimestamp(messagePayload.timestamp),
     };
   }
@@ -619,7 +635,9 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
 
 function isFinalChatStatus(status?: string) {
   const normalized = String(status ?? '').toLowerCase();
-  return normalized === 'answered' || normalized === 'completed' || normalized === 'failed';
+  return ['answered', 'completed', 'failed', 'not_found', 'out_of_scope', 'needs_clarification', 'source_conflict'].includes(
+    normalized,
+  );
 }
 
 async function waitForGatewayChatMessage(sessionId: string, messageId: string, longpoll = 15, maxAttempts = 4) {
@@ -633,14 +651,15 @@ async function waitForGatewayChatMessage(sessionId: string, messageId: string, l
     );
 
     lastResponse = response.data;
-    const messagePayload = response.data?.message ?? response.data;
+    const messagePayload = unwrapGatewayMessagePayload(response.data);
 
     if (isFinalChatStatus(messagePayload?.status)) {
       return response.data;
     }
   }
 
-  const lastStatus = lastResponse?.message?.status ?? lastResponse?.status ?? 'unknown';
+  const lastPayload = unwrapGatewayMessagePayload(lastResponse);
+  const lastStatus = lastPayload?.status ?? 'unknown';
   throw new Error(`Gateway chat longpoll did not reach final status. session_id=${sessionId}, message_id=${messageId}, status=${lastStatus}`);
 }
 
@@ -1242,6 +1261,15 @@ function mapGatewayDraftRecord(payload: any) {
   const previewMetadata = normalizePreviewMetadata(data.preview_metadata ?? data.preview ?? null);
   const rawData = data.raw_data ?? data.raw ?? data;
   const metadataOverrides = data.metadata_overrides ?? data.metadataOverrides ?? {};
+  const originalFilename =
+    data.original_filename ??
+    data.originalFilename ??
+    data.display_name ??
+    data.displayName ??
+    data.filename ??
+    data.file_name ??
+    null;
+  const displayName = data.display_name ?? data.displayName ?? originalFilename ?? null;
   const notifications = Array.isArray(data.notifications)
     ? data.notifications
     : Array.isArray(data.quality?.notifications)
@@ -1254,6 +1282,12 @@ function mapGatewayDraftRecord(payload: any) {
     task_id: data.task_id ?? data.taskId,
     version_id: data.version_id ?? data.versionId,
     file_key: data.file_key ?? data.fileKey,
+    original_filename: originalFilename,
+    originalFilename,
+    display_name: displayName,
+    displayName,
+    filename: data.filename ?? originalFilename,
+    file_name: data.file_name ?? originalFilename,
     document_key: data.document_key ?? data.documentKey ?? deriveDocumentKey(data.file_hash_sha256 ?? data.fileHashSha256),
     file_hash_sha256: data.file_hash_sha256 ?? data.fileHashSha256,
     title_hash_sha256: data.title_hash_sha256 ?? data.titleHashSha256 ?? previewMetadata?.title_hash_sha256,
@@ -1521,6 +1555,11 @@ export const chatApi = {
   },
   send: async (query: string): Promise<ChatMessage> => {
     const demoMode = isDemoMode();
+    const createSessionRequiredError = (message: string) => {
+      const error = new Error(message) as Error & { code?: string };
+      error.code = 'CHAT_SESSION_REQUIRED';
+      return error;
+    };
 
     if (demoMode) {
       useUIStore.getState().setApiStatus('demo');
@@ -1528,34 +1567,6 @@ export const chatApi = {
     }
 
     try {
-      const resolveGatewayProjectId = async () => {
-        const currentProjectId = useUIStore.getState().activeProjectId;
-        if (currentProjectId && /^\d+$/.test(currentProjectId)) {
-          return currentProjectId;
-        }
-
-        const projects = await projectsApi.list();
-        const resolvedProjectId = projects.find((project) => /^\d+$/.test(project.id))?.id ?? projects[0]?.id;
-
-        if (resolvedProjectId) {
-          useUIStore.getState().setActiveProjectId(resolvedProjectId);
-          return resolvedProjectId;
-        }
-
-        return currentProjectId || undefined;
-      };
-
-      const createAndSelectSession = async () => {
-        const projectId = await resolveGatewayProjectId();
-        const created = await chatApi.createSession(query.slice(0, 70) || 'Новый чат', projectId);
-        const sessionId = created.session_id ?? created.id ?? created.session?.session_id;
-
-        if (sessionId) {
-          useUIStore.getState().setCurrentGatewaySessionId(sessionId);
-        }
-
-        return sessionId;
-      };
       const sendToSession = (sessionId: string) =>
         gatewayRequest<any>(() =>
           apiClient.post(`/chat/sessions/${sessionId}/messages`, {
@@ -1567,13 +1578,11 @@ export const chatApi = {
         return status === 400 || status === 404 || status === 410 || status === 422;
       };
 
-      let activeSessionId = useUIStore.getState().currentGatewaySessionId;
+      const activeSessionId = useUIStore.getState().currentGatewaySessionId;
 
       if (!activeSessionId) {
-        activeSessionId = await createAndSelectSession();
+        throw createSessionRequiredError('Сначала создайте или выберите чат');
       }
-
-      if (!activeSessionId) throw new Error('Gateway session was not created');
 
       let response;
 
@@ -1583,9 +1592,7 @@ export const chatApi = {
         if (!isStaleSessionError(sessionError)) throw sessionError;
 
         useUIStore.getState().setCurrentGatewaySessionId(null);
-        activeSessionId = await createAndSelectSession();
-        if (!activeSessionId) throw sessionError;
-        response = await sendToSession(activeSessionId);
+        throw createSessionRequiredError('Выбранный чат недоступен. Сначала создайте или выберите чат');
       }
 
       const messageId = response.data?.message_id ?? response.data?.answer_id;
@@ -1605,7 +1612,9 @@ export const chatApi = {
       useUIStore.getState().setApiStatus('online');
       return mapGatewayChatResponse(finalResponse ?? { ...response.data, session_id: activeSessionId }, query);
     } catch (error) {
-      useUIStore.getState().setApiStatus('offline');
+      if ((error as { code?: string })?.code !== 'CHAT_SESSION_REQUIRED') {
+        useUIStore.getState().setApiStatus('offline');
+      }
       throw error;
     }
   },

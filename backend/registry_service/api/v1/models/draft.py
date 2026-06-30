@@ -14,6 +14,7 @@ class Draft(Base):
     document_key = Column('document_key', Text)
     
     file_key = Column('file_key', Text)
+    original_filename = Column('original_filename', Text)
     confidence = Column('confidence', Float)
     raw_data = Column('raw_data', JSONB)
     error_code = Column('error_code', Text)

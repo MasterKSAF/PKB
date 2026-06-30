@@ -26,6 +26,7 @@ class CreateDraftRequest(BaseModel):
     file_hash_sha256: Optional[str] = Field(None, description="SHA-256 хэш файла")
     title_hash_sha256: Optional[str] = Field(None, description="SHA-256 хэш названия")
     title_key: Optional[str] = Field(None, description="Исходная строка конкатенации для title_hash_sha256 (DB-28)")
+    original_filename: Optional[str] = Field(None, description="Оригинальное имя загруженного файла")
     metadata_fields: Optional[Dict[str, Any]] = Field(
         None, description="Метаданные из формы POST /drafts: source_type, doc_code, mks_oks_code и др."
     )

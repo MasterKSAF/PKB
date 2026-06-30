@@ -360,9 +360,15 @@ export const Chat: React.FC = () => {
       setExpandedCitations((prev) => ({ ...prev, [data.id]: false }));
     },
   });
+  const mustSelectGatewayChat = workMode === 'prod' && !currentGatewaySessionId;
+  const chatSessionGuardMessage = mustSelectGatewayChat ? 'Сначала создайте или выберите чат' : '';
 
   const handleSend = () => {
     if (!input.trim() || chatMutation.isPending) return;
+    if (mustSelectGatewayChat) {
+      chatMutation.reset();
+      return;
+    }
 
     chatMutation.reset();
 
@@ -827,7 +833,12 @@ export const Chat: React.FC = () => {
                   </Box>
                 </Box>
               )}
-              {chatMutation.isError && (
+              {chatSessionGuardMessage && (
+                <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2.2 }}>
+                  {chatSessionGuardMessage}
+                </Alert>
+              )}
+              {chatMutation.isError && !chatSessionGuardMessage && (
                 <Alert severity="error" variant="outlined" sx={{ borderRadius: 2.2 }}>
                   {getGatewayErrorMessage(chatMutation.error)}
                 </Alert>
@@ -866,7 +877,7 @@ export const Chat: React.FC = () => {
                   multiline
                   minRows={1}
                   maxRows={4}
-                  placeholder="Задайте вопрос ассистенту"
+                  placeholder={mustSelectGatewayChat ? 'Сначала создайте или выберите чат' : 'Задайте вопрос ассистенту'}
                   variant="standard"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -893,12 +904,12 @@ export const Chat: React.FC = () => {
                   aria-label="Отправить вопрос"
                   color="primary"
                   onClick={handleSend}
-                  disabled={chatMutation.isPending}
+                  disabled={chatMutation.isPending || mustSelectGatewayChat}
                   sx={{
                     ml: 0.8,
                     border: '1.5px solid',
                     borderColor: assistantAccent,
-                    bgcolor: input.trim()
+                    bgcolor: input.trim() && !mustSelectGatewayChat
                       ? isLight
                         ? 'rgba(2, 132, 199, 0.13)'
                         : 'rgba(152, 217, 216, 0.16)'

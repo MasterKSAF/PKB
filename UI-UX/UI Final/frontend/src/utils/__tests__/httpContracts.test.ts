@@ -130,6 +130,34 @@ describe('live Gateway response contracts', () => {
     expect(put).not.toHaveBeenCalled();
   });
 
+  it('does not create a Gateway chat session implicitly when sending a message', async () => {
+    const post = vi.spyOn(apiClient, 'post');
+
+    await expect(chatApi.send('проверка')).rejects.toThrow('Сначала создайте или выберите чат');
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('treats Query Service not_found as a final chat status', async () => {
+    useUIStore.getState().setCurrentGatewaySessionId('12');
+
+    server.use(
+      http.post(`${apiBase}/chat/sessions/12/messages`, () => HttpResponse.json({ message_id: 91 })),
+      http.get(`${apiBase}/chat/sessions/12/messages/91`, () =>
+        HttpResponse.json({
+          message_id: 91,
+          status: 'not_found',
+          message: 'По запросу ничего не найдено.',
+        }),
+      ),
+    );
+
+    await expect(chatApi.send('неизвестный запрос')).resolves.toMatchObject({
+      status: 'failed',
+      content: 'По запросу ничего не найдено.',
+    });
+  });
+
   it('keeps task converter errors visible in processing logs', async () => {
     server.use(
       http.get(`${apiBase}/tasks/27/status`, () =>
