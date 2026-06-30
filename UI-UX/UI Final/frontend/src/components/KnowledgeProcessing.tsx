@@ -11,6 +11,7 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  LinearProgress,
   MenuItem,
   IconButton,
   Paper,
@@ -36,12 +37,26 @@ import {
   XCircle,
   X,
 } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '../store/uiStore';
 import { DocumentRegistryPanel } from './DocumentRegistryPanel';
-import { adminApi, draftsApi, documentsApi, tasksApi, type DraftMetadataOverrides } from '../utils/http';
+import {
+  adminApi,
+  draftsApi,
+  documentsApi,
+  tasksApi,
+  type DraftMetadataOverrides,
+  type GatewayTaskStatusDetail,
+  type GatewayTaskStepStatus,
+} from '../utils/http';
 import { downloadPreviewFile } from '../utils/downloadPreview';
-import { MOCK_DOCUMENTS, MOCK_PROCESSING_LOGS, MOCK_PROCESSING_QUEUE, type ProcessingLogItem } from '../utils/mockData';
+import {
+  MOCK_DOCUMENTS,
+  MOCK_PROCESSING_LOGS,
+  MOCK_PROCESSING_QUEUE,
+  type ProcessingLogItem,
+  type ProcessingQueueItem,
+} from '../utils/mockData';
 
 type DraftStatus = 'uploaded' | 'previewing' | 'ready_for_approve' | 'review_required' | 'validation' | 'approved' | 'discarded' | 'failed';
 
@@ -428,6 +443,51 @@ const getStatusColor = (status: DraftStatus) => {
   }
 };
 
+type UiTone = 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
+
+const getTaskStatusLabel = (status?: string) => {
+  const normalized = String(status ?? '').toLowerCase();
+  if (normalized === 'active' || normalized === 'running' || normalized === 'processing') return 'В работе';
+  if (normalized === 'completed' || normalized === 'done' || normalized === 'success') return 'Завершено';
+  if (normalized === 'failed' || normalized === 'error') return 'Ошибка';
+  if (normalized === 'pending' || normalized === 'queued') return 'Ожидает';
+  return status || 'неизвестно';
+};
+
+const getTaskStatusColor = (status?: string): UiTone => {
+  const normalized = String(status ?? '').toLowerCase();
+  if (normalized === 'completed' || normalized === 'done' || normalized === 'success') return 'success';
+  if (normalized === 'failed' || normalized === 'error') return 'error';
+  if (normalized === 'active' || normalized === 'running' || normalized === 'processing') return 'info';
+  if (normalized === 'pending' || normalized === 'queued') return 'default';
+  return 'default';
+};
+
+const getTaskStageLabel = (stage?: string, serviceName?: string) => {
+  const normalized = String(stage ?? '').toLowerCase();
+  const service = String(serviceName ?? '').toLowerCase();
+
+  if (normalized === 'upload') return 'Загрузка';
+  if (normalized === 'preview' || normalized === 'preview_ocr' || service.includes('ocr')) return 'Предпросмотр / OCR';
+  if (normalized === 'preview_converter' || service.includes('converter')) return 'Проверка метаданных';
+  if (normalized === 'decision') return 'Ожидание решения';
+  if (normalized === 'full' || normalized === 'full_ocr') return 'Полная обработка';
+  if (normalized === 'full_converter') return 'Полная конвертация';
+  if (normalized === 'registry' || normalized === 'registry_creation') return 'Запись в реестр';
+  if (normalized === 'rag_index' || normalized === 'indexation') return 'Индексация RAG';
+  return stage || 'не передано';
+};
+
+const getCurrentTaskStep = (steps: GatewayTaskStepStatus[]) => {
+  const running = steps.find((step) => ['running', 'processing', 'active'].includes(String(step.status).toLowerCase()));
+  if (running) return running;
+  const failed = steps.find((step) => ['failed', 'error'].includes(String(step.status).toLowerCase()));
+  if (failed) return failed;
+  const pending = steps.find((step) => ['pending', 'queued'].includes(String(step.status).toLowerCase()));
+  if (pending) return pending;
+  return steps.length ? steps[steps.length - 1] : null;
+};
+
 const getStatusDotColor = (status: DraftStatus) => {
   switch (status) {
     case 'approved':
@@ -454,6 +514,12 @@ const getQueueColor = (status: string) => {
   if (status === 'в очереди') return 'default';
   if (status === 'ошибка') return 'error';
   return 'success';
+};
+
+const getQueueProgressColor = (status: string): 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
+  if (status === 'ошибка') return 'error';
+  if (status === 'в работе') return 'warning';
+  return 'primary';
 };
 
 const getLogDotColor = (retryStatus: ProcessingLogItem['retryStatus']) => {
@@ -794,6 +860,105 @@ const isActiveDraftStatus = (status: DraftStatus) => status !== 'approved' && st
 const shouldPollDraftDetails = (status?: DraftStatus | null) => status === 'previewing' || status === 'validation';
 const isPreviewStartConflict = (error: any) => error?.response?.status === 409;
 
+const getDraftQueueStage = (status: DraftStatus) => {
+  switch (status) {
+    case 'uploaded':
+      return 'Загрузка';
+    case 'previewing':
+      return 'Предпросмотр / OCR';
+    case 'ready_for_approve':
+    case 'review_required':
+      return 'Ожидание решения';
+    case 'validation':
+      return 'Проверка метаданных';
+    case 'failed':
+      return 'Ошибка обработки';
+    default:
+      return 'Обработка';
+  }
+};
+
+const getDraftQueueStatus = (status: DraftStatus): ProcessingQueueItem['status'] => {
+  if (status === 'failed') return 'ошибка';
+  if (status === 'uploaded') return 'в очереди';
+  return 'в работе';
+};
+
+const getTaskQueueStatus = (status?: string): ProcessingQueueItem['status'] => {
+  const normalized = String(status ?? '').toLowerCase();
+  if (normalized === 'failed' || normalized === 'error') return 'ошибка';
+  if (normalized === 'pending' || normalized === 'queued') return 'в очереди';
+  return 'в работе';
+};
+
+const mapDraftToQueueItem = (draft: DraftItem, taskStatus?: GatewayTaskStatusDetail | null): ProcessingQueueItem => {
+  const draftProgress = Math.min(100, Math.max(0, Math.round(draft.progress ?? draftProgressByStatus[draft.status] ?? 0)));
+  const currentTaskStep = taskStatus ? getCurrentTaskStep(taskStatus.steps) : null;
+
+  return {
+    id: `draft-${draft.gatewayDraftId || draft.id}`,
+    document: draft.fileName || draft.title,
+    stage: currentTaskStep
+      ? getTaskStageLabel(currentTaskStep.stepName, currentTaskStep.serviceName)
+      : taskStatus?.pipelineStage
+        ? getTaskStageLabel(taskStatus.pipelineStage)
+        : getDraftQueueStage(draft.status),
+    progress: taskStatus ? taskStatus.progressPercent : draftProgress,
+    status: taskStatus ? getTaskQueueStatus(taskStatus.status) : getDraftQueueStatus(draft.status),
+    docCode: draft.docCode || undefined,
+    sourceType: draft.sourceType || undefined,
+    currentStep: currentTaskStep?.stepName || taskStatus?.pipelineStage || draft.status,
+    estimatedCompletion: draft.status === 'uploaded' || draft.status === 'previewing' ? 'обновляется автоматически' : undefined,
+    steps: taskStatus?.steps.length
+      ? taskStatus.steps.map((step) => ({
+          stepName: step.stepName,
+          status: step.status,
+        }))
+      : [
+          {
+            stepName: 'upload',
+            status: draft.status === 'uploaded' ? 'running' : draft.status === 'failed' ? 'failed' : 'completed',
+          },
+          {
+            stepName: 'preview_ocr',
+            status:
+              draft.status === 'previewing'
+                ? 'running'
+                : ['ready_for_approve', 'review_required', 'validation'].includes(draft.status)
+                  ? 'completed'
+                  : draft.status === 'failed'
+                    ? 'failed'
+                    : 'pending',
+          },
+          {
+            stepName: 'decision',
+            status: 'pending',
+          },
+        ],
+  };
+};
+
+const mergeProcessingQueues = (serverQueue: ProcessingQueueItem[], draftQueue: ProcessingQueueItem[]) => {
+  const merged: ProcessingQueueItem[] = [];
+  const seen = new Set<string>();
+
+  const addItem = (item: ProcessingQueueItem) => {
+    const keys = [
+      item.id.trim().toLowerCase(),
+      item.document.trim().toLowerCase(),
+    ].filter(Boolean);
+
+    if (keys.some((key) => seen.has(key))) return;
+    keys.forEach((key) => seen.add(key));
+    merged.push(item);
+  };
+
+  serverQueue.forEach(addItem);
+  draftQueue.forEach(addItem);
+
+  return merged;
+};
+
 const normalizeDraftStatusFromGateway = (status?: string): DraftStatus => {
   const normalized = String(status ?? '').toLowerCase();
   if (normalized === 'preview_ready' || normalized === 'ready_for_approve') return 'ready_for_approve';
@@ -1042,6 +1207,7 @@ export const KnowledgeProcessing: React.FC = () => {
     queryKey: ['gateway-documents-queue', workMode],
     queryFn: documentsApi.queue,
     staleTime: 20_000,
+    refetchInterval: workMode === 'prod' && activeTab === 'knowledgeProcessing' ? 5_000 : false,
   });
   const processingAuditQuery = useQuery({
     queryKey: ['gateway-processing-audit', workMode],
@@ -1145,6 +1311,7 @@ export const KnowledgeProcessing: React.FC = () => {
       setPreviewPanelOpen(false);
       setPreviewSearch('');
       setPreviewPageIndex(0);
+      setProcessingStatusOpen(false);
       return;
     }
 
@@ -1155,6 +1322,50 @@ export const KnowledgeProcessing: React.FC = () => {
   const sortedDrafts = useMemo(() => sortDrafts(drafts, draftSort), [drafts, draftSort]);
   const selectedDraft = drafts.find((draft) => draft.id === selectedDraftId) ?? null;
   const selectedGatewayDraftId = workMode === 'prod' ? (selectedDraft?.gatewayDraftId || '') : '';
+  const selectedGatewayTaskId = workMode === 'prod' ? (selectedDraft?.gatewayTaskId || '') : '';
+  const hasSelectedTaskSource = /^\d+$/.test(selectedGatewayTaskId) || /^\d+$/.test(selectedGatewayDraftId);
+  const taskStatusQuery = useQuery({
+    queryKey: ['gateway-task-status-detail', workMode, selectedGatewayTaskId, selectedGatewayDraftId],
+    queryFn: () =>
+      /^\d+$/.test(selectedGatewayTaskId)
+        ? tasksApi.detail(selectedGatewayTaskId)
+        : tasksApi.detailForDraft(selectedGatewayDraftId),
+    enabled: workMode === 'prod' && activeTab === 'knowledgeProcessing' && Boolean(selectedDraft) && hasSelectedTaskSource,
+    staleTime: 3_000,
+    refetchInterval:
+      workMode === 'prod' &&
+      activeTab === 'knowledgeProcessing' &&
+      selectedDraft &&
+      !['approved', 'discarded', 'failed'].includes(selectedDraft.status)
+        ? 5_000
+        : false,
+  });
+  const uploadQueueTaskSources = drafts
+    .filter((draft) => isActiveDraftStatus(draft.status))
+    .map((draft) => ({
+      localId: draft.id,
+      gatewayDraftId: draft.gatewayDraftId || '',
+      gatewayTaskId: draft.gatewayTaskId || '',
+      status: draft.status,
+    }));
+  const uploadQueueTaskQueries = useQueries({
+    queries: uploadQueueTaskSources.map((source) => {
+      const hasTaskId = /^\d+$/.test(source.gatewayTaskId);
+      const hasDraftId = /^\d+$/.test(source.gatewayDraftId);
+      const shouldPollQueueTask =
+        workMode === 'prod' &&
+        activeTab === 'knowledgeProcessing' &&
+        !['approved', 'discarded', 'failed'].includes(source.status);
+
+      return {
+        queryKey: ['gateway-upload-queue-task-status', workMode, source.gatewayTaskId, source.gatewayDraftId],
+        queryFn: () => (hasTaskId ? tasksApi.detail(source.gatewayTaskId) : tasksApi.detailForDraft(source.gatewayDraftId)),
+        enabled: workMode === 'prod' && activeTab === 'knowledgeProcessing' && (hasTaskId || hasDraftId),
+        staleTime: 3_000,
+        refetchInterval: shouldPollQueueTask ? 5_000 : (false as const),
+      };
+    }),
+  });
   const draftTasksQuery = useQuery({
     queryKey: ['gateway-draft-tasks', workMode, selectedGatewayDraftId],
     queryFn: () => tasksApi.forDraft(selectedGatewayDraftId),
@@ -1176,6 +1387,17 @@ export const KnowledgeProcessing: React.FC = () => {
         ? gatewayQueueQuery.data
         : MOCK_PROCESSING_QUEUE
       : gatewayQueueQuery.data ?? [];
+  const queueTaskStatusByDraftId = new Map<string, GatewayTaskStatusDetail>();
+  uploadQueueTaskSources.forEach((source, index) => {
+    const taskStatus = uploadQueueTaskQueries[index]?.data;
+    if (!taskStatus) return;
+    queueTaskStatusByDraftId.set(source.localId, taskStatus);
+    if (source.gatewayDraftId) queueTaskStatusByDraftId.set(source.gatewayDraftId, taskStatus);
+  });
+  const draftQueue = drafts
+    .filter((draft) => isActiveDraftStatus(draft.status))
+    .map((draft) => mapDraftToQueueItem(draft, queueTaskStatusByDraftId.get(draft.id) ?? queueTaskStatusByDraftId.get(draft.gatewayDraftId || '')));
+  const uploadQueue = workMode === 'demo' ? gatewayQueue : mergeProcessingQueues(gatewayQueue, draftQueue);
   const gatewayProcessingLogs =
     workMode === 'demo'
       ? processingAuditQuery.data?.length
@@ -1879,6 +2101,18 @@ export const KnowledgeProcessing: React.FC = () => {
   const normalizedPreviewSearch = previewSearch.trim().toLowerCase();
   const previewSearchMatchCount = countTextMatches(currentPreviewText, normalizedPreviewSearch);
   const workspaceDraft = selectedDraft ?? buildWorkspaceDraft(draftForm, selectedFilesLabel || '');
+  const selectedTaskStatus: GatewayTaskStatusDetail | null = taskStatusQuery.data ?? null;
+  const selectedTaskSteps = selectedTaskStatus?.steps ?? [];
+  const selectedTaskCurrentStep = getCurrentTaskStep(selectedTaskSteps);
+  const selectedTaskProgress = selectedTaskStatus?.progressPercent ?? workspaceDraft.progress;
+  const selectedTaskStatusLabel = selectedTaskStatus
+    ? getTaskStatusLabel(selectedTaskStatus.status)
+    : getStatusLabel(workspaceDraft.status);
+  const selectedTaskStageLabel = selectedTaskStatus
+    ? getTaskStageLabel(selectedTaskStatus.pipelineStage)
+    : 'не передано';
+  const selectedTaskErrorMessage = selectedTaskStatus?.errorMessage || workspaceDraft.gatewayErrorMessage || '';
+  const selectedTaskErrorCode = selectedTaskStatus?.errorCode || workspaceDraft.gatewayErrorCode || '';
   const hasWorkspaceInput = Boolean(
     selectedDraft ||
       selectedFiles.length ||
@@ -2812,35 +3046,125 @@ export const KnowledgeProcessing: React.FC = () => {
                     >
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
                         <Typography sx={draftSectionTitleSx}>Статус обработки</Typography>
-                        <Chip label={getStatusLabel(workspaceDraft.status)} size="small" variant="outlined" />
+                        <Chip
+                          label={selectedTaskStatusLabel}
+                          size="small"
+                          variant="outlined"
+                          color={selectedTaskStatus ? getTaskStatusColor(selectedTaskStatus.status) : undefined}
+                        />
+                        {taskStatusQuery.isFetching && <Chip label="обновляется" size="small" variant="outlined" />}
                       </Stack>
                     </Button>
                     <Divider sx={headerDividerSx} />
                     <Collapse in={processingStatusOpen}>
-                      <Box
-                        sx={{
-                          display: 'grid',
-                          gridTemplateColumns: { xs: '1fr', md: '0.75fr 1fr 0.75fr 1fr' },
-                          gap: 1,
-                          p: 1.25,
-                        }}
-                      >
-                        {[
-                          ['Статус', getStatusLabel(workspaceDraft.status)],
-                          ['Прогресс', `${workspaceDraft.progress}%`],
-                          ['Обновлен', workspaceDraft.updatedAt],
-                          ['Комментарий', workspaceDraft.note],
-                        ].map(([label, value]) => (
-                          <React.Fragment key={label}>
+                      <Stack spacing={1.15} sx={{ p: 1.25 }}>
+                        {taskStatusQuery.isError && (
+                          <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                            Статус задачи сейчас недоступен. Показываем последний статус черновика.
+                          </Alert>
+                        )}
+
+                        {selectedTaskStatus?.status === 'failed' && (selectedTaskErrorMessage || selectedTaskErrorCode) && (
+                          <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
+                            <Typography sx={{ fontWeight: 560 }}>Обработка завершилась с ошибкой</Typography>
+                            <Typography variant="body2">
+                              {selectedTaskErrorMessage || 'Причина не передана'}
+                              {selectedTaskErrorCode ? ` · ${selectedTaskErrorCode}` : ''}
+                            </Typography>
+                          </Alert>
+                        )}
+
+                        <Box>
+                          <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 0.55 }}>
                             <Typography variant="caption" color="text.secondary">
-                              {label}
+                              Прогресс обработки
                             </Typography>
-                            <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
-                              {displayValue(value)}
+                            <Typography variant="caption" sx={{ fontWeight: 620 }}>
+                              {selectedTaskProgress}%
                             </Typography>
-                          </React.Fragment>
-                        ))}
-                      </Box>
+                          </Stack>
+                          <LinearProgress
+                            variant="determinate"
+                            value={selectedTaskProgress}
+                            sx={{
+                              height: 8,
+                              borderRadius: 999,
+                              bgcolor: isLight ? 'rgba(15,23,42,0.08)' : 'rgba(233,237,243,0.12)',
+                            }}
+                          />
+                        </Box>
+
+                        <Box
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', md: '0.75fr 1fr 0.75fr 1fr' },
+                            gap: 1,
+                          }}
+                        >
+                          {[
+                            ['Статус', selectedTaskStatusLabel],
+                            ['Этап', selectedTaskStageLabel],
+                            ['Текущий шаг', selectedTaskCurrentStep ? getTaskStageLabel(selectedTaskCurrentStep.stepName, selectedTaskCurrentStep.serviceName) : 'не передан'],
+                            ['Обновлен', selectedTaskStatus?.updatedAt ?? workspaceDraft.updatedAt],
+                            ['task_id', selectedTaskStatus?.taskId ?? workspaceDraft.gatewayTaskId],
+                            ['Комментарий', selectedTaskErrorMessage || workspaceDraft.note],
+                          ].map(([label, value]) => (
+                            <React.Fragment key={label}>
+                              <Typography variant="caption" color="text.secondary">
+                                {label}
+                              </Typography>
+                              <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
+                                {displayValue(value)}
+                              </Typography>
+                            </React.Fragment>
+                          ))}
+                        </Box>
+
+                        <Divider sx={headerDividerSx} />
+
+                        <Stack spacing={0.65}>
+                          <Typography variant="caption" color="text.secondary">
+                            Шаги пайплайна
+                          </Typography>
+                          {selectedTaskSteps.length ? (
+                            selectedTaskSteps.slice(0, 8).map((step) => (
+                              <Box
+                                key={`${step.stepName}-${step.serviceName}`}
+                                sx={{
+                                  display: 'grid',
+                                  gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1fr) auto' },
+                                  gap: 0.75,
+                                  alignItems: 'center',
+                                  p: 0.75,
+                                  borderRadius: 1.8,
+                                  bgcolor: isLight ? 'rgba(15,23,42,0.035)' : 'rgba(233,237,243,0.055)',
+                                }}
+                              >
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 560, overflowWrap: 'anywhere' }}>
+                                    {getTaskStageLabel(step.stepName, step.serviceName)}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+                                    {step.serviceName || step.stepName}
+                                    {step.errorMessage ? ` · ${step.errorMessage}` : ''}
+                                  </Typography>
+                                </Box>
+                                <Chip
+                                  label={getTaskStatusLabel(step.status)}
+                                  size="small"
+                                  variant="outlined"
+                                  color={getTaskStatusColor(step.status)}
+                                  sx={{ justifySelf: { xs: 'start', sm: 'end' } }}
+                                />
+                              </Box>
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              Шаги задачи пока не переданы.
+                            </Typography>
+                          )}
+                        </Stack>
+                      </Stack>
                     </Collapse>
                   </Paper>
                 </Stack>
@@ -2964,17 +3288,17 @@ export const KnowledgeProcessing: React.FC = () => {
                 Не удалось загрузить очередь обработки с сервера.
               </Alert>
             )}
-            {!queueHasError && gatewayQueue.length === 0 && (
+            {!queueHasError && uploadQueue.length === 0 && (
               <Alert severity="info" variant="outlined" sx={{ borderRadius: 2, mb: 1.2 }}>
                 Очередь обработки пуста.
               </Alert>
             )}
-            {gatewayQueue.length > 0 && (
+            {uploadQueue.length > 0 && (
               <Paper variant="outlined" sx={{ overflow: 'hidden', borderRadius: 1.8, ...tableSx }}>
                 <Box
                   sx={{
-                    display: 'grid',
-                    gridTemplateColumns: { xs: '1.6fr 0.9fr 0.6fr 0.7fr' },
+                    display: { xs: 'none', md: 'grid' },
+                    gridTemplateColumns: 'minmax(0, 1.35fr) minmax(150px, 0.75fr) minmax(180px, 0.85fr) minmax(96px, 0.5fr)',
                     gap: 1,
                     alignItems: 'center',
                     px: 1.2,
@@ -2983,7 +3307,7 @@ export const KnowledgeProcessing: React.FC = () => {
                     bgcolor: isLight ? 'rgba(15, 23, 42, 0.035)' : 'rgba(255,255,255,0.025)',
                   }}
                 >
-                  {['Документ', 'Этап', 'Прогресс', 'Статус'].map((label, index) => (
+                  {['Документ', 'Текущий этап', 'Прогресс', 'Статус'].map((label, index) => (
                     <Typography
                       key={label}
                       variant="caption"
@@ -3001,34 +3325,63 @@ export const KnowledgeProcessing: React.FC = () => {
                   ))}
                 </Box>
                 <Stack divider={<Divider flexItem sx={{ borderColor: 'rgba(198, 214, 236, 0.12)' }} />}>
-                  {gatewayQueue.map((item, index) => (
-                    <Box
-                      key={item.id}
-                      sx={{
-                        display: 'grid',
-                        gridTemplateColumns: { xs: '1.6fr 0.9fr 0.6fr 0.7fr' },
-                        gap: 1,
-                        alignItems: 'center',
-                        px: 1.2,
-                        py: 0.85,
-                        bgcolor: index % 2 === 0 ? 'rgba(255,255,255,0.012)' : 'transparent',
-                        '&:hover': {
-                          bgcolor: isLight ? 'rgba(14, 116, 144, 0.05)' : 'rgba(123, 166, 227, 0.055)',
-                        },
-                      }}
-                    >
-                      <Typography sx={{ fontSize: '0.84rem', fontWeight: 520, pr: 1 }}>{item.document}</Typography>
-                      <Typography variant="caption" sx={{ color: isLight ? 'rgba(15, 23, 42, 0.64)' : 'rgba(222, 230, 241, 0.68)' }}>
-                        {item.stage}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: isLight ? 'rgba(15, 23, 42, 0.64)' : 'rgba(222, 230, 241, 0.68)' }}>
-                        {item.progress}%
-                      </Typography>
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <Chip label={item.status} size="small" color={getQueueColor(item.status)} variant="outlined" />
+                  {uploadQueue.map((item, index) => {
+                    return (
+                      <Box
+                        key={item.id}
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            md: 'minmax(0, 1.35fr) minmax(150px, 0.75fr) minmax(180px, 0.85fr) minmax(96px, 0.5fr)',
+                          },
+                          gap: { xs: 0.75, md: 1 },
+                          alignItems: 'center',
+                          px: 1.2,
+                          py: 0.95,
+                          bgcolor: index % 2 === 0 ? 'rgba(255,255,255,0.012)' : 'transparent',
+                          '&:hover': {
+                            bgcolor: isLight ? 'rgba(14, 116, 144, 0.05)' : 'rgba(123, 166, 227, 0.055)',
+                          },
+                        }}
+                      >
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography sx={{ fontSize: '0.84rem', fontWeight: 560, pr: 1, overflowWrap: 'anywhere' }}>
+                            {item.document}
+                          </Typography>
+                        </Box>
+
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 620, color: isLight ? 'rgba(15, 23, 42, 0.72)' : 'rgba(222, 230, 241, 0.78)' }}>
+                            {item.stage}
+                          </Typography>
+                        </Box>
+
+                        <Box sx={{ minWidth: 0 }}>
+                          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 0.4 }}>
+                            <Box />
+                            <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                              {item.progress}%
+                            </Typography>
+                          </Stack>
+                          <LinearProgress
+                            variant="determinate"
+                            value={item.progress}
+                            color={getQueueProgressColor(item.status)}
+                            sx={{
+                              height: 8,
+                              borderRadius: 999,
+                              bgcolor: isLight ? 'rgba(15,23,42,0.08)' : 'rgba(233,237,243,0.12)',
+                            }}
+                          />
+                        </Box>
+
+                        <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
+                          <Chip label={item.status} size="small" color={getQueueColor(item.status)} variant="outlined" />
+                        </Box>
                       </Box>
-                    </Box>
-                  ))}
+                    );
+                  })}
                 </Stack>
               </Paper>
             )}

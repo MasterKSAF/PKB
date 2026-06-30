@@ -130,6 +130,15 @@ export interface ProcessingQueueItem {
   stage: string;
   progress: number;
   status: 'в очереди' | 'в работе' | 'ошибка';
+  docCode?: string;
+  sourceType?: string;
+  currentStep?: string;
+  createdBy?: string;
+  estimatedCompletion?: string;
+  steps?: Array<{
+    stepName: string;
+    status: string;
+  }>;
 }
 
 export const MOCK_CITATIONS: Citation[] = [

@@ -178,4 +178,34 @@ describe('live Gateway response contracts', () => {
     expect(logs[0].event).toContain('CONVERTER_ERROR');
     expect(logs[0].event).toContain('422 Unprocessable Content');
   });
+
+  it('maps task status detail for draft processing UI', async () => {
+    server.use(
+      http.get(`${apiBase}/tasks/28/status`, () =>
+        HttpResponse.json({
+          task_id: 28,
+          draft_id: 12,
+          status: 'active',
+          pipeline_stage: 'preview',
+          progress_percent: 65,
+          steps: [
+            { step_name: 'upload', service_name: 'orchestrator', status: 'completed' },
+            { step_name: 'preview_ocr', service_name: 'ocr', status: 'running' },
+          ],
+        }),
+      ),
+    );
+
+    await expect(tasksApi.detail('28')).resolves.toMatchObject({
+      taskId: '28',
+      draftId: '12',
+      status: 'active',
+      pipelineStage: 'preview',
+      progressPercent: 65,
+      steps: [
+        { stepName: 'upload', serviceName: 'orchestrator', status: 'completed' },
+        { stepName: 'preview_ocr', serviceName: 'ocr', status: 'running' },
+      ],
+    });
+  });
 });
