@@ -306,7 +306,7 @@ def run_activate_document_step(self, document_id: int):
 
         # Step 1: Wait for async indexing to complete via longpoll
         status_result = _run_async(rag.get_build_status(
-            document_id=document_id, longpoll=15,
+            document_id=document_id, longpoll=1,
         ))
         final_status = status_result.get("status", "")
 

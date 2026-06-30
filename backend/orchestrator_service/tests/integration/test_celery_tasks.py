@@ -254,6 +254,97 @@ class TestRunRegistryStep:
             "task_id": 3,
         }
 
+    def test_with_document_data(self):
+        """Registry step with converter document_data saves to Registry and reads sections with IDs."""
+        mock_client = AsyncMock()
+        mock_client.create_document = AsyncMock(return_value={
+            "data": {
+                "document_id": 42,
+                "version_id": 421,
+                "sections": [
+                    {"section_id": 4201, "type": "text", "clause": "1", "path": "1", "page": 1},
+                    {"section_id": 4202, "type": "text", "clause": "2", "path": "2", "page": 1},
+                ],
+                "registry": {"document_id": 42, "version_id": 421, "sections_count": 2},
+            }
+        })
+        mock_client.get_document_sections = AsyncMock(return_value={
+            "data": {
+                "document": {"id": 42, "title": "Test"},
+                "sections": [
+                    {"section_id": 4201, "document_id": 42, "type": "text",
+                     "clause": "1", "path": "1", "page": 1,
+                     "content": {"text": "Section 1"}},
+                    {"section_id": 4202, "document_id": 42, "type": "text",
+                     "clause": "2", "path": "2", "page": 1,
+                     "content": {"text": "Section 2"}},
+                ],
+            }
+        })
+        mock_client.update_draft_status = AsyncMock(return_value={
+            "data": {"status": "approved", "document_id": 42}
+        })
+        mock_client.close = AsyncMock()
+
+        notify_completed = AsyncMock()
+
+        document_data = {
+            "metadata": {"doc_code": "ГОСТ 1234-56"},
+            "content": [
+                {"clause": "1", "type": "text", "path": "1", "page": 1,
+                 "content": {"text": "Section 1"}},
+                {"clause": "2", "type": "text", "path": "2", "page": 1,
+                 "content": {"text": "Section 2"}},
+            ],
+        }
+
+        with patch(
+            "app.tasks.pipeline_formation.RegistryServiceClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_completed",
+            notify_completed,
+        ):
+            from app.tasks.pipeline_formation import run_registry_step
+
+            result = run_registry_step.run(
+                task_id=3, draft_id=DRAFT_ID, document_id=42, version_id=421,
+                document_data=document_data,
+            )
+
+        # Verify: create_document called with full payload
+        mock_client.create_document.assert_awaited_once()
+        payload = mock_client.create_document.await_args[0][0]
+        assert payload.get("draft_id") == DRAFT_ID
+        assert "document" in payload
+        assert payload["document"] == document_data
+
+        # Verify: get_document_sections called to read sections with IDs
+        mock_client.get_document_sections.assert_awaited_once_with(42)
+
+        # Verify: update_draft_status still called
+        mock_client.update_draft_status.assert_awaited_once_with(
+            draft_id=DRAFT_ID, status="approved", document_id=42
+        )
+
+        # Verify notify contains sections in output_data
+        notify_completed.assert_awaited_once()
+        args, _ = notify_completed.await_args
+        assert args[1] == "registry_creation"
+        output = args[3]
+        assert output["registry_id"] == 42
+        assert "sections" in output
+        assert len(output["sections"]) == 2
+        assert output["sections"][0]["section_id"] == 4201
+        assert output["sections"][1]["section_id"] == 4202
+        assert output["document_id"] == 42
+
+        assert result == {
+            "status": "completed",
+            "step": "registry_creation",
+            "task_id": 3,
+        }
+
 
 class TestRunOcrFullStep:
     """Tests for run_ocr_full_step Celery task."""
@@ -296,7 +387,7 @@ class TestRunOcrFullStep:
         assert args[0] == 4
         assert args[1] == "full_ocr"
         assert args[2] == {"file_key": "drafts/10/file.pdf", "mode": "full", "draft_id": DRAFT_ID}
-        assert args[3] == {"pages_processed": 15, "status": "completed"}
+        assert args[3] == {"pages_processed": 15, "full_result": {"pages_processed": 15, "status": "completed"}, "status": "completed"}
 
         assert result == {
             "status": "completed",

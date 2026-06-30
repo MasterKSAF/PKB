@@ -720,7 +720,7 @@ class TestRunActivateDocumentStep:
 
         assert result == {"status": "active", "document_id": 42}
         mock_rag.get_build_status.assert_awaited_once_with(
-            document_id=42, longpoll=15,
+            document_id=42, longpoll=1,
         )
         mock_rag.check_index.assert_awaited_once_with(document_id=42)
         mock_registry.update_document_status.assert_awaited_once_with(

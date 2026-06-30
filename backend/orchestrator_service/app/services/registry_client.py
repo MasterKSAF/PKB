@@ -338,20 +338,91 @@ class RegistryServiceClient(ServiceClient):
 
     @staticmethod
     def _mock_create_document(storage: dict, body: dict) -> dict:
+        # UPSERT: если документ с таким draft_id уже существует — обновляем секции
+        existing_doc_id = None
+        for did, d in storage["documents"].items():
+            if d.get("draft_id") == body.get("draft_id"):
+                existing_doc_id = did
+                break
+
+        def _assign_section_ids(items: list, base_id: int, doc_id: int) -> list:
+            result = []
+            for idx, item in enumerate(items):
+                item["section_id"] = base_id + idx + 1
+                item["document_id"] = doc_id
+                if "parent_id" not in item:
+                    item["parent_id"] = None
+                result.append(item)
+            return result
+
+        if existing_doc_id is not None:
+            existing_doc = storage["documents"][existing_doc_id]
+            # Сохраняем оригинальные поля от approve_draft
+            existing_doc.update(body)
+            existing_doc["updated_at"] = "2026-06-08T10:00:00Z"
+            # Если есть content от конвертера — маппим в sections с ID
+            doc_wrapper = body.get("document", {})
+            if isinstance(doc_wrapper, dict):
+                content_items = doc_wrapper.get("content", [])
+                if content_items:
+                    existing_doc["sections"] = _assign_section_ids(
+                        list(content_items), existing_doc_id * 100, existing_doc_id
+                    )
+            storage["documents"][existing_doc_id] = existing_doc
+            resp_sections = [
+                {"section_id": s["section_id"], "type": s.get("type", "text"),
+                 "clause": s.get("clause", ""), "path": s.get("path", ""),
+                 "page": s.get("page", 1)}
+                for s in (existing_doc.get("sections") or [])
+            ]
+            return {
+                "data": {
+                    **existing_doc,
+                    "sections": resp_sections,
+                    "registry": {
+                        "document_id": existing_doc_id,
+                        "version_id": existing_doc.get("version_id", existing_doc_id * 10 + 1),
+                        "sections_count": len(resp_sections),
+                        "created_at": existing_doc.get("created_at", "2026-06-08T10:00:00Z"),
+                    },
+                }
+            }
+
+        # Create new document
         storage["doc_seq"] += 1
         doc_id = storage["doc_seq"]
-        is_new = not any(
-            d.get("draft_id") == body.get("draft_id")
-            for d in storage["documents"].values()
-        )
         doc = {
             "document_id": doc_id,
             "version_id": doc_id * 10 + 1,
-            "is_new_document": is_new,
+            "is_new_document": True,
             **body,
         }
+        doc_wrapper = body.get("document", {})
+        if isinstance(doc_wrapper, dict):
+            content_items = doc_wrapper.get("content", [])
+            if content_items:
+                doc["sections"] = _assign_section_ids(
+                    list(content_items), doc_id * 100, doc_id
+                )
         storage["documents"][doc_id] = doc
-        return {"data": dict(doc)}
+        resp_sections = [
+            {"section_id": s["section_id"], "type": s.get("type", "text"),
+             "clause": s.get("clause", ""), "path": s.get("path", ""),
+             "page": s.get("page", 1)}
+            for s in (doc.get("sections") or [])
+        ]
+        return {
+            "data": {
+                **doc,
+                "sections": resp_sections,
+                "registry": {
+                    "document_id": doc_id,
+                    "version_id": doc_id * 10 + 1,
+                    "sections_count": len(resp_sections),
+                    "created_at": "2026-06-08T10:00:00Z",
+                },
+            }
+        }
 
     @classmethod
     def _mock_update_document_status(cls, storage: dict, doc_id: int, body: dict) -> dict:

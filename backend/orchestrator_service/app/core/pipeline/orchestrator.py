@@ -790,7 +790,12 @@ class PipelineOrchestrator:
             )
 
             from app.tasks.pipeline_formation import run_registry_step
-            # Pass document_id and version_id to registry step
+            # Extract document data from converter step output for Registry save
+            document_data = None
+            for s in steps:
+                if s.step_name == "full_converter" and s.output_data:
+                    document_data = s.output_data.get("document")
+                    break
             document_id = getattr(task, 'document_id', None) or task.draft_id
             logger.info(
                 "Enqueuing registry creation step",
@@ -798,10 +803,14 @@ class PipelineOrchestrator:
                     "celery_task": "tasks.pipeline.run_registry_step",
                     "queue": "pipeline",
                     "params": {"task_id": task.id, "draft_id": task.draft_id,
-                               "document_id": document_id, "version_id": version_id},
+                               "document_id": document_id, "version_id": version_id,
+                               "has_document_data": document_data is not None},
                 },
             )
-            run_registry_step.delay(task.id, task.draft_id, document_id, version_id, trace_id=trace_id)
+            run_registry_step.delay(
+                task.id, task.draft_id, document_id, version_id,
+                document_data=document_data, trace_id=trace_id,
+            )
 
         elif step_name == "registry_creation":
             # Registry done — now dispatch RAG indexing
@@ -811,27 +820,66 @@ class PipelineOrchestrator:
             )
 
             from app.tasks.pipeline_formation import run_rag_index_step
-            # Extract sections from step outputs for RAG Builder.
-            # Try full_converter first (fast path), fall back to full_ocr (OCR path).
+
+            # Extract sections for RAG Builder — priority chain:
+            # 1. registry_creation step output (saved by run_registry_step via create_document)
+            # 2. Registry API (get_document_sections) — fallback if step output empty
+            # 3. full_converter output (content[]) — fallback if Registry unavailable
+            # 4. full_ocr output (sections from parser) — legacy path
             sections = None
-            # Try full_converter first (fast path) — конвертер отдаёт content[]
+            document_id = getattr(task, 'document_id', None) or task.draft_id
+
+            # Priority 1: из step output registry_creation (уже с section_id от Registry)
             for s in steps:
-                if s.step_name == "full_converter" and s.output_data:
-                    content_items = (s.output_data.get("document") or {}).get("content")
-                    if content_items:
-                        # RAG Builder Section требует section_id (int), level, path, type, content.
-                        # У конвертера section_id нет — назначаем от индекса.
-                        sections = []
-                        for idx, item in enumerate(content_items):
-                            sec = dict(item)
-                            sec["section_id"] = idx + 1
-                            sections.append(sec)
+                if s.step_name == "registry_creation" and s.output_data:
+                    sections = s.output_data.get("sections")
+                    step_doc_id = s.output_data.get("document_id")
+                    if step_doc_id:
+                        document_id = step_doc_id
+                    if sections:
                         logger.info(
-                            f"Extracted {len(sections)} sections from full_converter content",
+                            f"Got {len(sections)} sections from registry_creation output",
                             extra={"task_id": task.id, "draft_id": task.draft_id},
                         )
                     break
-            # Fallback to OCR path (sections уже с section_id от парсера)
+
+            # Priority 2: читаем из Registry API
+            if not sections:
+                try:
+                    registry = RegistryServiceClient()
+                    sec_result = await registry.get_document_sections(document_id)
+                    sec_data = sec_result.get("data", {})
+                    sections = sec_data.get("sections", [])
+                    await registry.close()
+                    if sections:
+                        logger.info(
+                            f"Got {len(sections)} sections via get_document_sections",
+                            extra={"task_id": task.id, "draft_id": task.draft_id},
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to read sections from Registry: {e}",
+                        extra={"draft_id": task.draft_id, "document_id": document_id},
+                    )
+
+            # Priority 3: fallback к конвертеру (content[] → section format с ручным ID)
+            if not sections:
+                for s in steps:
+                    if s.step_name == "full_converter" and s.output_data:
+                        content_items = (s.output_data.get("document") or {}).get("content")
+                        if content_items:
+                            sections = []
+                            for idx, item in enumerate(content_items):
+                                sec = dict(item)
+                                sec["section_id"] = idx + 1
+                                sections.append(sec)
+                            logger.info(
+                                f"Extracted {len(sections)} sections from full_converter content",
+                                extra={"task_id": task.id, "draft_id": task.draft_id},
+                            )
+                        break
+
+            # Priority 4: legacy fallback к OCR/parser
             if not sections:
                 for s in steps:
                     if s.step_name == "full_ocr" and s.output_data:
@@ -842,18 +890,20 @@ class PipelineOrchestrator:
                                 extra={"task_id": task.id, "draft_id": task.draft_id},
                             )
                         break
-            document_id = getattr(task, 'document_id', None) or task.draft_id
-            # Fix document_id in sections to match registry document_id (P1F-10)
+
+            # Fix document_id in sections to match actual registry document_id
             if sections:
                 for s in sections:
                     s['document_id'] = document_id
+
             logger.info(
                 "Enqueuing RAG index step",
                 extra={
                     "celery_task": "tasks.pipeline.run_rag_index_step",
                     "queue": "pipeline",
                     "params": {"task_id": task.id, "draft_id": task.draft_id,
-                               "document_id": document_id, "sections_count": len(sections) if sections else 0},
+                               "document_id": document_id,
+                               "sections_count": len(sections) if sections else 0},
                 },
             )
             run_rag_index_step.delay(

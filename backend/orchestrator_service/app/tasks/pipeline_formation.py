@@ -236,6 +236,7 @@ def run_ocr_full_step(
         input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         output_data = {
             "pages_processed": result.get("data", {}).get("pages_processed", 0),
+            "full_result": result.get("data", result),
             "status": "completed",
         }
 
@@ -397,9 +398,16 @@ def run_converter_full_step(
 )
 def run_registry_step(
     self, task_id: int, draft_id: int, document_id: int, version_id: Optional[int] = None,
+    document_data: Optional[dict] = None,
     trace_id: str = "",
 ):
-    """Registry step — persist document in the registry."""
+    """Registry step — persist document in the registry.
+
+    Args:
+        document_data: Converter output document (with content/sections).
+                       If provided, saves full document to Registry via create_document
+                       and reads back sections with assigned section_ids.
+    """
     if trace_id:
         set_trace_id(trace_id)
     try:
@@ -407,13 +415,50 @@ def run_registry_step(
 
         async def _do_registry():
             client = RegistryServiceClient()
+            current_doc_id = document_id
+            saved_sections = None
             try:
-                # approve_draft already updated status to "approved";
-                # this call is idempotent — 409 means already done, treat as success
-                result = await client.update_draft_status(
-                    draft_id=draft_id, status="approved", document_id=document_id,
+                # --- Step 1: Save full document to Registry (if converter data available) ---
+                if document_data:
+                    logger.info(
+                        f"Saving full document to Registry: draft={draft_id} doc={current_doc_id}",
+                        extra={"task_id": task_id, "draft_id": draft_id},
+                    )
+                    # Build payload in Registry format (section 3.3 API spec)
+                    # Converter's document already has content[] in the right format
+                    doc_payload = {
+                        "draft_id": draft_id,
+                        "document": document_data,
+                    }
+                    doc_result = await client.create_document(doc_payload)
+                    doc_data = doc_result.get("data", {})
+                    # Registry may assign a new document_id (if upsert created new)
+                    new_doc_id = doc_data.get("document_id")
+                    if new_doc_id and new_doc_id != current_doc_id:
+                        logger.info(
+                            f"Document ID updated by Registry: {current_doc_id} -> {new_doc_id}",
+                            extra={"task_id": task_id, "draft_id": draft_id},
+                        )
+                        current_doc_id = new_doc_id
+
+                    # --- Step 2: Read sections with assigned IDs from Registry ---
+                    sections_result = await client.get_document_sections(current_doc_id)
+                    sections_data = sections_result.get("data", {})
+                    saved_sections = sections_data.get("sections", [])
+                    logger.info(
+                        f"Document saved to Registry: doc={current_doc_id} sections={len(saved_sections)}",
+                        extra={"task_id": task_id, "draft_id": draft_id},
+                    )
+
+                # --- Step 3: Update draft status (idempotent) ---
+                await client.update_draft_status(
+                    draft_id=draft_id, status="approved", document_id=current_doc_id,
                 )
-                return result
+                return {
+                    "document_id": current_doc_id,
+                    "sections": saved_sections,
+                    "status": "registered",
+                }
             except Exception as exc:
                 # 409 Conflict = draft already in approved state (idempotent)
                 if "409" in str(exc) or "DRAFT_ALREADY_DECIDED" in str(exc):
@@ -421,20 +466,30 @@ def run_registry_step(
                         f"Draft {draft_id} already approved, treating registry step as completed (idempotent)",
                         extra={"task_id": task_id, "draft_id": draft_id},
                     )
-                    return {"status": "already_approved", "draft_id": draft_id}
+                    return {
+                        "status": "already_approved",
+                        "draft_id": draft_id,
+                        "document_id": current_doc_id,
+                        "sections": saved_sections,
+                    }
 
                 raise
             finally:
                 await client.close()
 
         result = _run_async(_do_registry())
+        new_document_id = result.get("document_id", document_id)
+        saved_sections = result.get("sections")
 
         input_data = {"draft_id": draft_id, "document_id": document_id}
         output_data = {
-            "registry_id": document_id,
+            "registry_id": new_document_id,
             "version_id": version_id,
             "status": "registered",
         }
+        if saved_sections is not None:
+            output_data["sections"] = saved_sections
+            output_data["document_id"] = new_document_id
 
         _run_async(_notify_step_completed(task_id, "registry_creation", input_data, output_data))
 
@@ -473,7 +528,7 @@ def run_rag_index_step(
                     # Poll until indexing completes
                     for i in range(12):
                         status_resp = await client.get_build_status(
-                            document_id=str(document_id), longpoll=10
+                            document_id=str(document_id), longpoll=1
                         )
                         idx_status = status_resp.get("status", "")
                         if idx_status in ("indexed", "completed"):
