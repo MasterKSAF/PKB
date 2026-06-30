@@ -260,34 +260,6 @@ registry_creation completed → enqueue rag_index`
 set EXTRACT_FRAGMENTS=10 && python data/tests/test_universal_pdf_loader.py data/pdf/ОСТ5_2067_73_Имущество_АСИ_ППИ_и_ЗИП_Крепление_на_судах.pdf
 ```
 
-### R1. Infinity reranker — несовместимость формата TEI/Infinity v2
-
-**Проблема:** `TEIRerankerProvider` ожидал поля `score` и `text`, но Infinity v2 возвращает `relevance_score` и `document`. Reranker падал с `KeyError` → fallback `score=1.0`.
-
-**Решение:** Создан `InfinityRerankerProvider` в `infinity_provider.py`, фабрика выбирает провайдер по URL (infinity → Infinity, иначе TEI).
-
-**Статус:** Исправлено.
-
-### R2. Converter-validator — двойной /api/v1 в REGISTRY_SERVICE_URL
-
-**Проблема:** `REGISTRY_SERVICE_URL=http://registry:8084/api/v1` + в коде добавлялся `/api/v1/registry/...` → 404.
-
-**Решение:** Убрал `/api/v1` из URL в docker-compose.yml.
-
-**Статус:** Исправлено.
-
-### R3. Reranker_fetch_multiplier — баг в hybrid_search
-
-**Проблема:** `hybrid_search` использовал `rerank_top_n` (50) как множитель вместо `reranker_fetch_multiplier` (5). `limit = 10*50 = 500` кандидатов → rerank 13.5с.
-
-**Решение:** Исправлен `fetch_k` на `reranker_fetch_multiplier`. В docker-compose `RERANKER_FETCH_MULTIPLIER: "2"` → 20 кандидатов, время 2.8с.
-
-**Статус:** Исправлено.
-
 ### R4. Документы застревают в validating после pipeline
 
-**Проблема:** Orchestrator намеренно переводит документ в `validating`, а не в `active`. Нет шага автоматической активации.
-
-**Решение:** Не исправлено — архитектурное решение (требует ручной/автоматической валидации).
-
-**Статус:** Не исправлено, требует реализации.
+Orchestrator намеренно ставит статус `validating`. Переход в `active` не автоматизирован.
