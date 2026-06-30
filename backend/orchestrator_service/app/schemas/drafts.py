@@ -68,6 +68,18 @@ class DraftPreviewStatusResponse(BaseModel):
     decision_required: bool = Field(False, description="Требуется решение пользователя")
 
 
+class PatchMetadataRequest(BaseModel):
+    """Request for PATCH /drafts/{id}/metadata.
+
+    preview_metadata — partial update, merge with existing (не replace)
+    metadata_overrides — переопределение полей при approve
+    updated_by — кто обновил
+    """
+    preview_metadata: Optional[dict] = Field(None, description="Частичное обновление метаданных (merge)")
+    metadata_overrides: Optional[dict] = Field(None, description="Переопределение полей метаданных")
+    updated_by: Optional[str] = Field("system", description="Кто обновил")
+
+
 class DecideRequest(BaseModel):
     """Decision request after preview.
 

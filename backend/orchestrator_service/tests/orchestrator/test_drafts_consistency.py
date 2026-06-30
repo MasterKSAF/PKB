@@ -52,7 +52,7 @@ class TestApproveConsistency:
         """
         # Advance task to decision stage
         from sqlalchemy import select
-        from app.models.pipeline import Task
+        from app.models.pipeline import Task, TaskStep
 
         result = await db_session.execute(
             select(Task).where(Task.draft_id == created_draft)
@@ -61,6 +61,14 @@ class TestApproveConsistency:
         assert task is not None
         task.pipeline_stage = "decision"
         task.status = "active"
+
+        # Complete preview steps to pass 5.3 check
+        steps_result = await db_session.execute(
+            select(TaskStep).where(TaskStep.task_id == task.id)
+        )
+        for step in steps_result.scalars().all():
+            step.status = "completed"
+
         await db_session.flush()
         await db_session.commit()
 
@@ -101,7 +109,7 @@ class TestApproveConsistency:
     ):
         """document_id и version_id в ответе decide после approve."""
         from sqlalchemy import select
-        from app.models.pipeline import Task
+        from app.models.pipeline import Task, TaskStep
 
         result = await db_session.execute(
             select(Task).where(Task.draft_id == created_draft)
@@ -110,6 +118,14 @@ class TestApproveConsistency:
         assert task is not None
         task.pipeline_stage = "decision"
         task.status = "active"
+
+        # Complete preview steps to pass 5.3 check
+        steps_result = await db_session.execute(
+            select(TaskStep).where(TaskStep.task_id == task.id)
+        )
+        for step in steps_result.scalars().all():
+            step.status = "completed"
+
         await db_session.flush()
         await db_session.commit()
 

@@ -39,6 +39,7 @@ from app.schemas.drafts import (
     DraftCreateResponse,
     DraftPreviewResponse,
     DraftPreviewStatusResponse,
+    PatchMetadataRequest,
     PreviewMetadata,
 )
 from app.models.pipeline import Task
@@ -860,6 +861,7 @@ async def _build_preview_status(
     draft_id: int,
     task,
     steps: list,
+    metadata_overrides: Optional[dict] = None,
 ) -> DraftPreviewStatusResponse:
     """Build DraftPreviewStatusResponse from current task/steps state."""
     from app.models.pipeline import TaskStep
@@ -903,6 +905,10 @@ async def _build_preview_status(
                         issuing_body=str(meta.get("issuing_body")) if meta.get("issuing_body") is not None else None,
                         udk_code=str(meta.get("udk_code")) if meta.get("udk_code") is not None else None,
                     )
+                    # Apply metadata_overrides from Registry on top of preview metadata
+                    if metadata_overrides:
+                        override_dict = {k: str(v) for k, v in metadata_overrides.items() if v is not None}
+                        preview_meta = preview_meta.model_copy(update=override_dict)
                     break
         decision_required = task.pipeline_stage == "decision"
     elif any_failed:
@@ -974,6 +980,7 @@ async def get_preview_status(
 
     # Проверяем, что draft существует через Registry (не через локальную БД)
     registry = RegistryServiceClient()
+    metadata_overrides = None
     try:
         draft_result = await registry.get_draft(draft_id)
         if "error" in draft_result:
@@ -986,6 +993,13 @@ async def get_preview_status(
                     }
                 },
             )
+        # Extract metadata_overrides for preview status display
+        draft_data = draft_result.get("data", {})
+        metadata_overrides = draft_data.get("metadata_overrides")
+        if metadata_overrides is None:
+            # Also check inside preview_metadata if stored there
+            pm = draft_data.get("preview_metadata") or {}
+            metadata_overrides = pm.get("metadata_overrides")
     except HTTPException:
         raise
     except Exception as exc:
@@ -1001,7 +1015,7 @@ async def get_preview_status(
             select(TaskStep).where(TaskStep.task_id == task.id).order_by(TaskStep.step_index)
         )
         steps = list(steps_result.scalars().all())
-        return await _build_preview_status(db, draft_id, task, steps)
+        return await _build_preview_status(db, draft_id, task, steps, metadata_overrides=metadata_overrides)
 
     # Check current preview status — maybe it's already done
     steps_result = await db.execute(
@@ -1010,8 +1024,21 @@ async def get_preview_status(
     steps = list(steps_result.scalars().all())
 
     preview_steps = [s for s in steps if s.step_name in ("preview_ocr", "preview_converter")]
-    if not preview_steps or all(s.status in ("completed", "failed") for s in preview_steps):
-        return await _build_preview_status(db, draft_id, task, steps)
+    # Deduplicate by step_name to handle duplicate steps from Celery retry
+    # Status priority: failed > completed > running > pending
+    best_status = {}
+    for s in preview_steps:
+        cur = best_status.get(s.step_name)
+        if s.status == "failed":
+            best_status[s.step_name] = "failed"
+        elif s.status == "completed" and cur != "failed":
+            best_status[s.step_name] = "completed"
+        elif s.status == "running" and cur not in ("failed", "completed"):
+            best_status[s.step_name] = "running"
+        elif cur is None:
+            best_status[s.step_name] = s.status
+    if not preview_steps or all(v in ("completed", "failed") for v in best_status.values()):
+        return await _build_preview_status(db, draft_id, task, steps, metadata_overrides=metadata_overrides)
 
     # Still processing — wait with polling
     poll_result = await _wait_for_preview(db, task.id, timeout=longpoll)
@@ -1021,7 +1048,7 @@ async def get_preview_status(
         select(TaskStep).where(TaskStep.task_id == task.id).order_by(TaskStep.step_index)
     )
     steps = list(steps_result.scalars().all())
-    return await _build_preview_status(db, draft_id, task, steps)
+    return await _build_preview_status(db, draft_id, task, steps, metadata_overrides=metadata_overrides)
 
 
 # ---------------------------------------------------------------------------
@@ -1112,6 +1139,40 @@ async def decide_draft(
                     }
                 },
             )
+        # For approve/proceed/force_new_version — verify preview steps are done
+        if request.action in ("approve", "proceed", "force_new_version"):
+            from app.models.pipeline import TaskStep
+            steps_result = await db.execute(
+                select(TaskStep).where(TaskStep.task_id == task.id)
+            )
+            steps = list(steps_result.scalars().all())
+
+            # Deduplicate preview steps by step_name
+            preview_step_names = ("preview_ocr", "preview_converter")
+            best_status = {}
+            for s in steps:
+                if s.step_name not in preview_step_names:
+                    continue
+                cur = best_status.get(s.step_name)
+                if s.status == "failed":
+                    best_status[s.step_name] = "failed"
+                elif s.status == "completed" and cur != "failed":
+                    best_status[s.step_name] = "completed"
+                elif s.status == "running" and cur not in ("failed", "completed"):
+                    best_status[s.step_name] = "running"
+                elif cur is None:
+                    best_status[s.step_name] = s.status
+
+            if any(v in ("running", "pending") for v in best_status.values()):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "error": {
+                            "code": "PREVIEW_IN_PROGRESS",
+                            "message": "Preview ещё выполняется. Дождитесь завершения.",
+                        }
+                    },
+                )
 
     if request.action == "confirm":
         if task.pipeline_stage not in ("decision",):
@@ -1268,7 +1329,7 @@ async def decide_draft(
 )
 async def patch_draft_metadata(
     draft_id: int,
-    payload: dict,
+    payload: PatchMetadataRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     """Update draft metadata (proxies to Registry)."""
@@ -1276,9 +1337,9 @@ async def patch_draft_metadata(
     try:
         result = await registry.update_draft_metadata(
             draft_id,
-            preview_metadata=payload.get("preview_metadata", {}),
-            metadata_overrides=payload.get("metadata_overrides"),
-            updated_by=payload.get("updated_by", "system"),
+            preview_metadata=payload.preview_metadata,
+            metadata_overrides=payload.metadata_overrides,
+            updated_by=payload.updated_by or "system",
         )
         if "error" in result:
             raise HTTPException(
@@ -1294,7 +1355,6 @@ async def patch_draft_metadata(
         data = result.get("data", {})
         return {
             "draft_id": data.get("id") if data.get("id") is not None else data.get("draft_id"),
-            "title": payload.get("title"),
             "status": data.get("status"),
             "preview_metadata": data.get("preview_metadata"),
             "updated_at": data.get("updated_at"),

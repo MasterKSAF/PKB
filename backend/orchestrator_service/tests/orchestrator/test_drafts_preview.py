@@ -247,3 +247,155 @@ class TestDecideDraftExtended:
         data = response.json()
         detail = data.get("detail", data)
         assert "error" in detail
+
+
+class TestPreviewStatusDuplicateSteps:
+    """
+    GET /preview/status с дублирующимися шагами (5.1).
+
+    Если есть 2 preview_ocr (один completed, другой running),
+    после дедупликации статус должен быть "processing", а не "completed".
+    """
+
+    STATUS_URL = "/api/v1/drafts/{draft_id}/preview/status"
+    CREATE_URL = "/api/v1/drafts/"
+    PREVIEW_URL = "/api/v1/drafts/{draft_id}/preview"
+
+    @pytest.fixture
+    def created_draft(self, client: TestClient, auth_header: dict) -> int:
+        response = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF dup " * 150), "application/pdf")},
+            data={"document_key": "doc-dup-status", "source_type": "GOST"},
+        )
+        assert response.status_code == 202
+        return response.json()["draft_id"]
+
+    async def test_preview_status_duplicate_steps_returns_processing(
+        self,
+        created_draft: int,
+        client: TestClient,
+        auth_header: dict,
+        db_session: AsyncSession,
+    ):
+        """2 preview_ocr шага (completed + running) → статус processing."""
+        # Start preview
+        client.post(
+            self.PREVIEW_URL.format(draft_id=created_draft),
+            headers=auth_header,
+        )
+
+        from sqlalchemy import select
+        from app.models.pipeline import Task, TaskStep
+
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == created_draft)
+        )
+        task = result.scalar_one_or_none()
+        assert task is not None
+
+        # Get current steps
+        steps_result = await db_session.execute(
+            select(TaskStep).where(TaskStep.task_id == task.id)
+        )
+        steps = list(steps_result.scalars().all())
+
+        # Find first preview_ocr step and mark it completed
+        ocr_steps = [s for s in steps if s.step_name == "preview_ocr"]
+        assert len(ocr_steps) >= 1, "Expected at least one preview_ocr step"
+
+        # Set first ocr step to completed
+        ocr_steps[0].status = "completed"
+
+        # Create a DUPLICATE preview_ocr step with status=running
+        duplicate_step = TaskStep(
+            task_id=task.id,
+            step_name="preview_ocr",
+            step_index=99,
+            status="running",
+            input_data={},
+        )
+        db_session.add(duplicate_step)
+
+        # Set converter to completed (so without dedup it would be 'all completed')
+        conv_steps = [s for s in steps if s.step_name == "preview_converter"]
+        if conv_steps:
+            conv_steps[0].status = "completed"
+
+        await db_session.flush()
+        await db_session.commit()
+
+        # Query without longpoll
+        response = client.get(
+            self.STATUS_URL.format(draft_id=created_draft),
+            headers=auth_header,
+            params={"longpoll": 0},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # After dedup: preview_ocr best=completed (completed > running), preview_converter=completed → completed
+        # Дедупликация не даёт дублирующему running-шагу заблокировать завершение
+        assert data["status"] == "completed", (
+            f"Expected 'completed' with duplicate running step (dedup), got {data['status']}"
+        )
+
+    async def test_preview_status_duplicate_one_completed_one_failed(
+        self,
+        created_draft: int,
+        client: TestClient,
+        auth_header: dict,
+        db_session: AsyncSession,
+    ):
+        """Duplicate steps: completed + failed → failed (failed wins)."""
+        client.post(
+            self.PREVIEW_URL.format(draft_id=created_draft),
+            headers=auth_header,
+        )
+
+        from sqlalchemy import select
+        from app.models.pipeline import Task, TaskStep
+
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == created_draft)
+        )
+        task = result.scalar_one_or_none()
+        assert task is not None
+
+        steps_result = await db_session.execute(
+            select(TaskStep).where(TaskStep.task_id == task.id)
+        )
+        steps = list(steps_result.scalars().all())
+
+        ocr_steps = [s for s in steps if s.step_name == "preview_ocr"]
+        assert len(ocr_steps) >= 1
+        ocr_steps[0].status = "completed"
+
+        # Add duplicate failed step
+        duplicate_step = TaskStep(
+            task_id=task.id,
+            step_name="preview_ocr",
+            step_index=99,
+            status="failed",
+            input_data={},
+            error_code="TEST_ERROR",
+            error_message="Test failure",
+        )
+        db_session.add(duplicate_step)
+
+        conv_steps = [s for s in steps if s.step_name == "preview_converter"]
+        if conv_steps:
+            conv_steps[0].status = "completed"
+
+        await db_session.flush()
+        await db_session.commit()
+
+        response = client.get(
+            self.STATUS_URL.format(draft_id=created_draft),
+            headers=auth_header,
+            params={"longpoll": 0},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # After dedup: preview_ocr best=failed → overall failed
+        assert data["status"] == "failed"

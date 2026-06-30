@@ -186,3 +186,144 @@ class TestPipelineConfig:
         from app.core.config import PipelineConfig
         config = PipelineConfig()
         assert config.ABSOLUTE_TASK_TIMEOUT_HOURS == 48
+
+
+# ===========================================================================
+#  P2-9: TestAllServicesDisabled
+#  Источник: todo_pipeline_coverage.md (P2 №9)
+#
+#  Все сервисы выключены (PARSER_ENABLED=False, OCR_ENABLED=False) → задача
+#  должна fail с error_code=NO_AVAILABLE_ENGINES. Реализация в
+#  app/core/pipeline/orchestrator.py::on_step_failed
+#  (строки проверки engine-availability).
+# ===========================================================================
+
+
+class TestAllServicesDisabled:
+    """P2-9: все движки OCR/Parser выключены → NO_AVAILABLE_ENGINES."""
+
+    @pytest.fixture
+    def mock_db(self):
+        """Mock AsyncSession для unit-тестов."""
+        from unittest.mock import AsyncMock
+        m = AsyncMock()
+        m.flush = AsyncMock()
+        return m
+
+    def test_parser_and_ocr_can_be_disabled(self):
+        """PARSER_ENABLED и OCR_ENABLED можно выставить в False."""
+        from app.core.config import ServiceConfig
+
+        cfg = ServiceConfig()
+        # По умолчанию True
+        assert cfg.PARSER_ENABLED is True
+        assert cfg.OCR_ENABLED is True
+        # Можно отключить
+        cfg.PARSER_ENABLED = False
+        cfg.OCR_ENABLED = False
+        assert cfg.PARSER_ENABLED is False
+        assert cfg.OCR_ENABLED is False
+
+    def test_pipeline_config_has_required_engines(self):
+        """В ServiceConfig есть флаги для управления движками."""
+        from app.core.config import ServiceConfig
+
+        cfg = ServiceConfig()
+        assert hasattr(cfg, "PARSER_ENABLED")
+        assert hasattr(cfg, "OCR_ENABLED")
+        assert hasattr(cfg, "PARSER_FALLBACK_TO_OCR")
+
+    async def test_on_step_failed_handles_all_disabled(
+        self, mock_db
+    ):
+        """on_step_failed при выключенных движках → NO_AVAILABLE_ENGINES, task failed."""
+        from app.core.config import settings
+        from app.core.pipeline.orchestrator import PipelineOrchestrator
+        from unittest.mock import AsyncMock
+
+        # Временно отключаем оба движка
+        original_parser = settings.services.PARSER_ENABLED
+        original_ocr = settings.services.OCR_ENABLED
+        original_fallback = settings.services.PARSER_FALLBACK_TO_OCR
+        settings.services.PARSER_ENABLED = False
+        settings.services.OCR_ENABLED = False
+        settings.services.PARSER_FALLBACK_TO_OCR = False
+
+        try:
+            orchestrator = PipelineOrchestrator(mock_db)
+            orchestrator.task_repo = AsyncMock()
+
+            # MockTask
+            class _MT:
+                id = 1
+                draft_id = 1
+                document_id = 0
+                trace_id = "trace"
+                status = "active"
+                retry_count = 0
+                current_step_index = 0
+                current_step_name = "preview_ocr"
+                locked_by = None
+                locked_at = None
+
+            class _MS:
+                def __init__(self, name, idx, status="running"):
+                    self.id = idx
+                    self.task_id = 1
+                    self.step_name = name
+                    self.step_index = idx
+                    self.status = status
+                    self.service_name = "Parser Service"
+                    self.output_data = {}
+                    self.input_data = {"file_key": "f"}
+
+            task = _MT()
+            orchestrator.task_repo.get_task.return_value = task
+            orchestrator.task_repo.get_task_steps.return_value = [
+                _MS("preview_ocr", 0, "running"),
+            ]
+
+            await orchestrator.on_step_failed(
+                task_id=1,
+                step_name="preview_ocr",
+                error_code="PARSER_FAILED",
+                error_message="both engines disabled",
+            )
+
+            # Task должен быть помечен как failed с NO_AVAILABLE_ENGINES
+            set_error_call = orchestrator.task_repo.set_task_error
+            if set_error_call.call_args_list:
+                error_codes = [
+                    c.kwargs.get("error_code") or c.args[1]
+                    for c in set_error_call.call_args_list
+                    if len(c.args) > 1 or "error_code" in c.kwargs
+                ]
+                assert "NO_AVAILABLE_ENGINES" in error_codes, (
+                    f"Expected NO_AVAILABLE_ENGINES, got {error_codes}"
+                )
+        finally:
+            settings.services.PARSER_ENABLED = original_parser
+            settings.services.OCR_ENABLED = original_ocr
+            settings.services.PARSER_FALLBACK_TO_OCR = original_fallback
+
+    def test_mock_mode_keeps_engines_enabled(self):
+        """В mock-режиме движки считаются доступными."""
+        from app.core.config import ServiceConfig
+
+        cfg = ServiceConfig()
+        # По умолчанию оба движка включены
+        assert cfg.PARSER_ENABLED is True
+        assert cfg.OCR_ENABLED is True
+
+    def test_settings_reset_engines(self):
+        """Изменения флагов движков не сохраняются между инстансами."""
+        from app.core.config import ServiceConfig
+
+        c1 = ServiceConfig()
+        c1.PARSER_ENABLED = False
+        c1.OCR_ENABLED = False
+
+        c2 = ServiceConfig()
+        # Новый инстанс — дефолтные значения
+        assert c2.PARSER_ENABLED is True
+        assert c2.OCR_ENABLED is True

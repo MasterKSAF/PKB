@@ -73,9 +73,8 @@ class TestDecideActionStageMatrix:
         db_session: AsyncSession,
     ):
         """Проверка одной комбинации действие × этап."""
-        # Set task to the target stage
         from sqlalchemy import select
-        from app.models.pipeline import Task
+        from app.models.pipeline import Task, TaskStep
 
         result = await db_session.execute(
             select(Task).where(Task.draft_id == created_draft)
@@ -85,6 +84,15 @@ class TestDecideActionStageMatrix:
 
         task.pipeline_stage = stage
         task.status = "active"
+
+        # For approve/proceed/force_new_version — complete preview steps (5.3 check)
+        if expected_status == 200 and action in ("approve", "proceed", "force_new_version"):
+            steps_result = await db_session.execute(
+                select(TaskStep).where(TaskStep.task_id == task.id)
+            )
+            for step in steps_result.scalars().all():
+                step.status = "completed"
+
         await db_session.flush()
         await db_session.commit()
 

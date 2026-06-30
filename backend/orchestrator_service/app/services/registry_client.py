@@ -286,14 +286,14 @@ class RegistryServiceClient(ServiceClient):
             draft = dict(seed)
             storage["drafts"][draft_id] = draft
 
-        preview_metadata = body.get("preview_metadata", {})
+        # Only update preview_metadata if explicitly provided in body
+        if "preview_metadata" in body:
+            preview_metadata = body["preview_metadata"]
+            existing_meta = draft.get("metadata_fields") or {}
+            existing_meta.update(preview_metadata)
+            draft["metadata_fields"] = existing_meta
+
         metadata_overrides = body.get("metadata_overrides")
-
-        # Merge preview_metadata into metadata_fields
-        existing_meta = draft.get("metadata_fields") or {}
-        existing_meta.update(preview_metadata)
-        draft["metadata_fields"] = existing_meta
-
         if metadata_overrides is not None:
             draft["metadata_overrides"] = metadata_overrides
 
@@ -302,7 +302,7 @@ class RegistryServiceClient(ServiceClient):
             "data": {
                 "draft_id": draft_id,
                 "status": draft.get("status", "uploaded"),
-                "preview_metadata": preview_metadata,
+                "preview_metadata": body.get("preview_metadata", draft.get("metadata_fields", {})),
                 "updated_at": draft["updated_at"],
             }
         }
@@ -744,13 +744,13 @@ class RegistryServiceClient(ServiceClient):
             },
         )
 
-    async def update_draft_metadata(self, draft_id: int, preview_metadata: dict, metadata_overrides: Optional[dict] = None, updated_by: str = "system") -> dict:
+    async def update_draft_metadata(self, draft_id: int, preview_metadata: Optional[dict] = None, metadata_overrides: Optional[dict] = None, updated_by: str = "system") -> dict:
         """Update draft metadata (PATCH /api/v1/registry/drafts/{draft_id}/metadata)."""
-        body = {
-            "preview_metadata": preview_metadata,
-            "metadata_overrides": metadata_overrides,
-            "updated_by": updated_by,
-        }
+        body = {"updated_by": updated_by}
+        if preview_metadata is not None:
+            body["preview_metadata"] = preview_metadata
+        if metadata_overrides is not None:
+            body["metadata_overrides"] = metadata_overrides
         return await self.call(
             "PATCH",
             f"/api/v1/registry/drafts/{draft_id}/metadata",

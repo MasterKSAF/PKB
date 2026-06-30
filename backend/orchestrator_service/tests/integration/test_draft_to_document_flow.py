@@ -71,7 +71,7 @@ class TestDraftToDocumentFlow:
 
         # Step 3: Advance task to decision stage (Celery is mocked, steps won't run)
         from sqlalchemy import select
-        from app.models.pipeline import Task
+        from app.models.pipeline import Task, TaskStep
 
         result = await db_session.execute(
             select(Task).where(Task.draft_id == draft_id)
@@ -80,6 +80,14 @@ class TestDraftToDocumentFlow:
         assert task is not None
         task.pipeline_stage = "decision"
         task.status = "active"
+
+        # Complete preview steps to pass 5.3 check
+        steps_result = await db_session.execute(
+            select(TaskStep).where(TaskStep.task_id == task.id)
+        )
+        for step in steps_result.scalars().all():
+            step.status = "completed"
+
         await db_session.flush()
         await db_session.commit()
 

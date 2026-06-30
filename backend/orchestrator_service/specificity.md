@@ -212,10 +212,28 @@ In-memory кэш `_IDEMPOTENCY_CACHE` с TTL 1ч.
 - Idempotency-Key для preview описан в P1-19, но не реализован.
 - Пороги качества (avg_confidence, max_critical) описаны, но не реализованы в production коде.
 
-### 3.12. PATCH /metadata — прокси без валидации (27.06)
-PATCH /drafts/{id}/metadata — прокси в Registry. Оркестратор не валидирует source_type,
-era, jurisdiction и другие поля. Валидация происходит на стороне Registry.
-Это означает, что невалидные source_type проходят через оркестратор.
+### 3.12. PATCH /metadata — Pydantic-схема, Optional preview_metadata (29.06)
+PATCH /drafts/{id}/metadata изменён с `payload: dict` на `PatchMetadataRequest`
+(Pydantic-схема). `preview_metadata` теперь `Optional[dict] = None` — если не передан,
+исключается из тела запроса к Registry (не затирает существующие данные).
+`metadata_overrides` передаются отдельным полем.
+
+**Registry CRUD (`update_draft_metadata`)** — в рамках orchestrator_service не доступен.
+Требуется синхронизация: Registry должен выполнять merge (а не replace) при получении
+`preview_metadata`.
+
+### 3.13. Preview status — дедупликация в раннем return (29.06, ИСПРАВЛЕНО 5.1)
+Ранний return в `get_preview_status` (longpoll=0) применяет ту же дедупликацию
+по step_name, что и `_build_preview_status`. Предотвращает ложный уход в
+`_wait_for_preview` при дублирующихся шагах (completed + running).
+
+### 3.14. approve/proceed/force_new_version — проверка preview (29.06, ДОБАВЛЕНО 5.3)
+`decide_draft` теперь проверяет, что preview-шаги завершены (с дедупликацией)
+перед approve/proceed/force_new_version. Если лучший статус preview_ocr или
+preview_converter — running/pending → 409 PREVIEW_IN_PROGRESS.
+Это ломает тесты, которые раньше не завершали preview перед approve.
+
+**Код ошибки:** `PREVIEW_IN_PROGRESS` (уже определён в guide.md).
 
 ## 4. Проблемы при запуске (ошибки в Python-сервисах)
 

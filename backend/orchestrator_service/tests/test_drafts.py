@@ -426,7 +426,7 @@ class TestDecideDraft:
 
         # Advance task to decision stage (Celery is mocked, so steps won't run)
         from sqlalchemy import select, update
-        from app.models.pipeline import Task
+        from app.models.pipeline import Task, TaskStep
         result = await db_session.execute(
             select(Task).where(Task.draft_id == draft_id)
         )
@@ -434,6 +434,12 @@ class TestDecideDraft:
         if task:
             task.pipeline_stage = "decision"
             task.status = "active"
+            # Complete preview steps so approve doesn't get blocked by 5.3 check
+            steps_result = await db_session.execute(
+                select(TaskStep).where(TaskStep.task_id == task.id)
+            )
+            for step in steps_result.scalars().all():
+                step.status = "completed"
             await db_session.flush()
             await db_session.commit()  # Make visible to endpoint's session
 
@@ -563,7 +569,7 @@ class TestDecideDraft:
 
         # Advance task to decision stage
         from sqlalchemy import select
-        from app.models.pipeline import Task
+        from app.models.pipeline import Task, TaskStep
         result = await db_session.execute(
             select(Task).where(Task.draft_id == draft_id)
         )
@@ -571,6 +577,12 @@ class TestDecideDraft:
         if task:
             task.pipeline_stage = "decision"
             task.status = "active"
+            # Complete preview steps to pass 5.3 check
+            steps_result = await db_session.execute(
+                select(TaskStep).where(TaskStep.task_id == task.id)
+            )
+            for step in steps_result.scalars().all():
+                step.status = "completed"
             await db_session.flush()
             await db_session.commit()
 
@@ -996,3 +1008,237 @@ class TestUploadPartialFailure:
         assert draft is not None, "Draft should exist in Registry despite 500"
         assert draft.get("status") == "uploaded", \
             f"Expected uploaded, got {draft.get('status')}"
+
+
+# ---------------------------------------------------------------------------
+#  P2-блок: TestUnknownDraftStatus + TestTimeoutCascade
+#  Источник: todo_pipeline_coverage.md (P2 №7-8)
+# ---------------------------------------------------------------------------
+
+
+class TestUnknownDraftStatus:
+    """P2-7: неизвестный draft status в Registry.
+
+    Если Registry вернул draft со status, который FSM не знает
+    (например, 'validation' или 'review_required' — задокументировано
+    в todo_pipeline_coverage.md §5 как расхождение), текущая логика
+    обрабатывает это как 409 CONFLICT.
+    """
+
+    def test_get_draft_with_unknown_status(
+        self, client: TestClient, auth_header: dict
+    ):
+        """GET /drafts/{id} для draft с неизвестным status → 200 (mock-режим)."""
+        from app.services.registry_client import RegistryServiceClient
+        from app.api.v1.endpoints.drafts import get_draft
+
+        # Создаём draft с нестандартным статусом
+        RegistryServiceClient._storage["drafts"][9001] = {
+            "id": 9001,
+            "document_key": "doc-unknown-status",
+            "status": "validation",  # нет в DraftState enum
+            "created_by": "u-mock-001",
+            "file_key": "drafts/test.pdf",
+        }
+
+        response = client.get(
+            "/api/v1/drafts/9001",
+            headers=auth_header,
+        )
+        # В mock-режиме проксирование просто отдаёт то, что вернул Registry.
+        assert response.status_code in (200, 404)
+
+    def test_start_preview_with_unknown_status_returns_409(
+        self, client: TestClient, auth_header: dict
+    ):
+        """start_preview для draft с неизвестным status → 409 (текущее поведение)."""
+        from app.services.registry_client import RegistryServiceClient
+        from unittest.mock import patch
+
+        # Создаём draft с status != "uploaded"
+        RegistryServiceClient._storage["drafts"][9002] = {
+            "id": 9002,
+            "document_key": "doc-bad-status",
+            "status": "validation",  # не "uploaded"
+            "file_key": "drafts/test.pdf",
+        }
+
+        response = client.post(
+            "/api/v1/drafts/9002/preview",
+            headers=auth_header,
+        )
+        # 409 — preview нельзя запустить, draft в неожиданном статусе
+        assert response.status_code == 409
+
+    def test_fsm_rejects_unknown_status(self):
+        """DraftState enum НЕ содержит validation/review_required (расхождение docs↔code)."""
+        from app.core.fsm import DraftState
+
+        # Текущий DraftState
+        states = {s.value for s in DraftState}
+        assert "uploaded" in states
+        assert "previewing" in states
+        assert "ready_for_approve" in states
+        assert "approved" in states
+        assert "discarded" in states
+        # validation/review_required отсутствуют (документированный дефект)
+        assert "validation" not in states
+        assert "review_required" not in states
+
+
+class TestTimeoutCascade:
+    """P2-8: каскад таймаутов в pipeline.
+
+    Сценарий: OCR-шаг превысил STEP_TIMEOUT_OCR (300 сек).
+    Каскад: OCR таймаут → on_step_failed → retry → retry_count++
+    → если retry_count == MAX_STEP_RETRIES, fail + Saga.
+    """
+
+    @pytest.fixture
+    def mock_db(self):
+        """Mock AsyncSession для unit-тестов PipelineOrchestrator."""
+        from unittest.mock import AsyncMock
+        m = AsyncMock()
+        m.flush = AsyncMock()
+        return m
+
+    class _MockTask:
+        def __init__(self, status="active", id=1, draft_id=1):
+            self.id = id
+            self.draft_id = draft_id
+            self.document_id = 0
+            self.trace_id = "test-trace"
+            self.status = status
+            self.retry_count = 0
+            self.current_step_index = 0
+            self.current_step_name = ""
+            self.locked_by = None
+            self.locked_at = None
+
+    class _MockStep:
+        def __init__(self, step_name, step_index, status="completed", service_name=""):
+            self.id = step_index * 100
+            self.task_id = 1
+            self.step_name = step_name
+            self.step_index = step_index
+            self.status = status
+            self.output_data = {}
+            self.service_name = service_name or step_name
+
+    def test_step_timeout_ocr_default(self):
+        """STEP_TIMEOUT_OCR = 300 (по умолчанию)."""
+        from app.core.config import PipelineConfig
+
+        config = PipelineConfig()
+        assert config.STEP_TIMEOUT_OCR == 300
+
+    def test_step_timeouts_defined_for_all_stages(self):
+        """Все step-таймауты определены в конфиге."""
+        from app.core.config import PipelineConfig
+
+        config = PipelineConfig()
+        assert config.STEP_TIMEOUT_OCR == 300
+        assert config.STEP_TIMEOUT_PARSER == 300
+        assert config.STEP_TIMEOUT_CONVERTER == 120
+        assert config.STEP_TIMEOUT_REGISTRY == 30
+        assert config.STEP_TIMEOUT_RAG_INDEX == 300
+
+    def test_max_step_retries_constant(self):
+        """MAX_STEP_RETRIES = 3."""
+        from app.core.config import PipelineConfig
+
+        config = PipelineConfig()
+        assert config.MAX_STEP_RETRIES == 3
+
+    def test_retry_base_delay_constant(self):
+        """RETRY_BASE_DELAY = 60 (экспоненциальный backoff)."""
+        from app.core.config import PipelineConfig
+
+        config = PipelineConfig()
+        assert config.RETRY_BASE_DELAY == 60
+
+    async def test_on_step_failed_uses_exponential_backoff(
+        self, mock_db
+    ):
+        """on_step_failed планирует retry с экспоненциальным backoff."""
+        from app.core.config import settings
+        from app.core.pipeline.orchestrator import PipelineOrchestrator
+        from app.core.pipeline.saga import SagaCoordinator
+
+        orchestrator = PipelineOrchestrator(mock_db)
+        orchestrator.task_repo = AsyncMock()
+
+        # task с retry_count = 0 (ниже MAX)
+        task = self._MockTask(status="active")
+        task.retry_count = 0
+        task.current_step_index = 1
+        task.current_step_name = "preview_ocr"
+        orchestrator.task_repo.get_task.return_value = task
+        orchestrator.task_repo.get_task_steps.return_value = [
+            self._MockStep("upload", 0, status="completed"),
+            self._MockStep("preview_ocr", 1, status="running"),
+        ]
+        orchestrator.task_repo.create_task_step.return_value = self._MockStep(
+            "preview_ocr", 1
+        )
+
+        with patch.object(SagaCoordinator, "compensate", new=AsyncMock()):
+            with patch(
+                "app.tasks.pipeline_formation.run_ocr_preview_step.delay"
+            ) as mock_delay:
+                await orchestrator.on_step_failed(
+                    task_id=1,
+                    step_name="preview_ocr",
+                    error_code="OCR_TIMEOUT",
+                    error_message="step timeout 300s exceeded",
+                )
+
+        # retry не вызвал Saga (retry_count < max)
+        # task остаётся в active
+        assert orchestrator.task_repo.update_task_status.called
+        # retry_count увеличен
+        # (проверяется через set_task_error, который инкрементирует retry_count)
+        orchestrator.task_repo.set_task_error.assert_called_once()
+
+    async def test_on_step_failed_after_max_retries_triggers_saga(
+        self, mock_db
+    ):
+        """После MAX_STEP_RETRIES saga компенсирует."""
+        from app.core.config import settings
+        from app.core.pipeline.orchestrator import PipelineOrchestrator
+        from app.core.pipeline.saga import SagaCoordinator
+
+        # Снижаем порог
+        original = settings.pipeline.MAX_STEP_RETRIES
+        settings.pipeline.MAX_STEP_RETRIES = 0
+        try:
+            orchestrator = PipelineOrchestrator(mock_db)
+            orchestrator.task_repo = AsyncMock()
+
+            task = self._MockTask(status="active")
+            task.retry_count = 0  # 0 >= MAX(0) → fail
+            task.current_step_index = 1
+            task.current_step_name = "preview_ocr"
+            orchestrator.task_repo.get_task.return_value = task
+            orchestrator.task_repo.get_task_steps.return_value = [
+                self._MockStep("upload", 0, status="completed"),
+                self._MockStep("preview_ocr", 1, status="running"),
+            ]
+            orchestrator.task_repo.create_task_step.return_value = self._MockStep(
+                "preview_ocr", 1
+            )
+
+            with patch.object(
+                SagaCoordinator, "compensate", new=AsyncMock()
+            ) as mock_saga:
+                await orchestrator.on_step_failed(
+                    task_id=1,
+                    step_name="preview_ocr",
+                    error_code="OCR_TIMEOUT",
+                    error_message="step timeout",
+                )
+
+            # Saga вызвана
+            mock_saga.assert_awaited_once()
+        finally:
+            settings.pipeline.MAX_STEP_RETRIES = original

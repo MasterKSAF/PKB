@@ -49,21 +49,21 @@ class TestPatchMetadataNormal:
         auth_header: dict,
         db_session: AsyncSession,
     ):
-        """PATCH /metadata с корректными полями → 200."""
+        """PATCH /metadata с preview_metadata → 200."""
         draft_id = draft_in_decision
 
         response = client.patch(
             self.METADATA_URL.format(draft_id=draft_id),
             headers=auth_header,
             json={
-                "doc_code": "ГОСТ 1234-2024",
-                "title": "Updated Title",
-                "source_type": "GOST",
+                "preview_metadata": {
+                    "doc_code": "ГОСТ 1234-2024",
+                    "title": "Updated Title",
+                    "source_type": "GOST",
+                },
             },
         )
-        # Note: PATCH /metadata может не быть реализован в mock-режиме Registry
-        # Проверяем что ответ не 500
-        assert response.status_code in (200, 404, 400), f"Unexpected status: {response.status_code}"
+        assert response.status_code == 200, f"Unexpected status: {response.status_code}"
 
     async def test_patch_metadata_no_fields_noop(
         self,
@@ -109,20 +109,15 @@ class TestPatchMetadataValidation:
         client: TestClient,
         auth_header: dict,
     ):
-        """Невалидный source_type — PATCH /metadata проксирует в Registry.
-
-        Registry mock принимает любые значения, поэтому может быть 200.
-        В production Registry может валидировать source_type и вернуть 400.
-        """
+        """Невалидный source_type через preview_metadata — PATCH /metadata."""
         draft_id = draft_in_decision
 
         response = client.patch(
             self.METADATA_URL.format(draft_id=draft_id),
             headers=auth_header,
-            json={"source_type": "INVALID_TYPE_XYZ"},
+            json={"preview_metadata": {"source_type": "INVALID_TYPE_XYZ"}},
         )
         # В mock-режиме Registry принимает любые значения → 200
-        # В production будет 400/422
         assert response.status_code in (200, 400, 422)
 
 
@@ -165,9 +160,124 @@ class TestPatchMetadataStateValidation:
         response = client.patch(
             self.METADATA_URL.format(draft_id=99999),
             headers=auth_header,
-            json={"doc_code": "TEST"},
+            json={"preview_metadata": {"doc_code": "TEST"}},
         )
-        # PATCH /metadata — прокси в Registry
-        # Registry mock может вернуть 200 (создаст) или 404
-        # В любом случае не 500
         assert response.status_code != 500
+
+
+class TestPatchMetadataMerge:
+    """PATCH /metadata — проверка merge (5.2).
+
+    preview_metadata должен merge-иться с существующими данными, а не заменять их.
+    Пустое тело не должно затирать существующие метаданные.
+    """
+
+    METADATA_URL = "/api/v1/drafts/{draft_id}/metadata"
+    CREATE_URL = "/api/v1/drafts/"
+
+    @pytest.fixture
+    async def draft_in_decision(
+        self, client: TestClient, auth_header: dict, db_session: AsyncSession
+    ) -> int:
+        response = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF merge " * 150), "application/pdf")},
+            data={"document_key": "doc-merge-test", "source_type": "GOST"},
+        )
+        assert response.status_code == 202
+        return response.json()["draft_id"]
+
+    async def test_patch_metadata_merge(
+        self,
+        draft_in_decision: int,
+        client: TestClient,
+        auth_header: dict,
+        db_session: AsyncSession,
+    ):
+        """PATCH с одним полем → другие поля сохраняются (merge, не replace)."""
+        draft_id = draft_in_decision
+
+        # First PATCH: set doc_code
+        response1 = client.patch(
+            self.METADATA_URL.format(draft_id=draft_id),
+            headers=auth_header,
+            json={"preview_metadata": {"doc_code": "ГОСТ 1234-2024"}},
+        )
+        assert response1.status_code == 200
+
+        # Second PATCH: set title (should NOT clear doc_code)
+        response2 = client.patch(
+            self.METADATA_URL.format(draft_id=draft_id),
+            headers=auth_header,
+            json={"preview_metadata": {"title": "Updated Title"}},
+        )
+        assert response2.status_code == 200
+
+        # Verify via mock storage that both fields exist (merge happened)
+        from app.services.registry_client import RegistryServiceClient
+        storage = RegistryServiceClient._storage
+        draft = storage["drafts"].get(draft_id)
+        meta = (draft or {}).get("metadata_fields", {})
+        assert meta.get("doc_code") == "ГОСТ 1234-2024", "doc_code was lost after second PATCH"
+        assert meta.get("title") == "Updated Title"
+
+    async def test_patch_metadata_empty_body_noop(
+        self,
+        draft_in_decision: int,
+        client: TestClient,
+        auth_header: dict,
+        db_session: AsyncSession,
+    ):
+        """Пустое тело → metadata не меняется."""
+        draft_id = draft_in_decision
+
+        # First: set some metadata
+        client.patch(
+            self.METADATA_URL.format(draft_id=draft_id),
+            headers=auth_header,
+            json={"preview_metadata": {"doc_code": "TEST-KEY", "title": "Test Title"}},
+        )
+
+        # Second: empty body (no preview_metadata)
+        response = client.patch(
+            self.METADATA_URL.format(draft_id=draft_id),
+            headers=auth_header,
+            json={},
+        )
+        assert response.status_code == 200
+
+        # Verify metadata unchanged
+        from app.services.registry_client import RegistryServiceClient
+        storage = RegistryServiceClient._storage
+        draft = storage["drafts"].get(draft_id)
+        meta = (draft or {}).get("metadata_fields", {})
+        assert meta.get("doc_code") == "TEST-KEY", "doc_code was cleared by empty PATCH"
+        assert meta.get("title") == "Test Title"
+
+    async def test_patch_metadata_overrides_stored(
+        self,
+        draft_in_decision: int,
+        client: TestClient,
+        auth_header: dict,
+        db_session: AsyncSession,
+    ):
+        """PATCH metadata_overrides → проверяем что overrides сохранены в Registry."""
+        draft_id = draft_in_decision
+
+        overrides = {"title": "Overridden Title", "doc_code": "OVERRIDE-001"}
+        response = client.patch(
+            self.METADATA_URL.format(draft_id=draft_id),
+            headers=auth_header,
+            json={"metadata_overrides": overrides},
+        )
+        assert response.status_code == 200
+
+        # Verify overrides stored in Registry mock
+        from app.services.registry_client import RegistryServiceClient
+        storage = RegistryServiceClient._storage
+        draft = storage["drafts"].get(draft_id)
+        assert draft is not None
+        stored_overrides = draft.get("metadata_overrides", {})
+        assert stored_overrides.get("title") == "Overridden Title"
+        assert stored_overrides.get("doc_code") == "OVERRIDE-001"
