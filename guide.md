@@ -73,3 +73,29 @@ Gateway проксирует `/api/v1/rag/...` на rag_search. Но если tr
 - Docker CLI не было в образе → установил, diagnostics получил docker логи
 
 Недостаток данных diagnostics — это не тупик, а задача.
+
+## Chat FSM — статусы сообщений
+
+Бэкенд (`query_service`) и фронтенд (`UI Final`) должны быть синхронизированы по набору статусов.
+
+**Финальные статусы (бэкенд `_FINAL_STATUSES`):**
+
+| Статус | Когда выставляется | Frontend-маппинг |
+|--------|--------------------|------------------|
+| `answered` | Успешный ответ с фрагментами | `mapGatewayStatus` → `'answered'` |
+| `failed` | Ошибка поиска/LLM | `mapGatewayStatus` → `'failed'` |
+| `not_found` | Нет фрагментов в БЗ | `mapGatewayStatus` → `'not_found'` |
+| `out_of_scope` | Запрос вне области знаний | `mapGatewayStatus` → `'out_of_scope'` |
+| `needs_clarification` | Недостаточно контекста | `mapGatewayStatus` → `'needs_clarification'` |
+| `source_conflict` | Конфликт источников | `mapGatewayStatus` → `'source_conflict'` |
+
+**Промежуточные статусы:** `pending` → `enriching` → `searching` → `generating` → `enriching_citations`
+
+**Ключевые точки синхронизации:**
+- Бэкенд: `_FINAL_STATUSES` в `backend/query_service/app/routes/chat.py` (строка 31)
+- Фронтенд: `isFinalChatStatus` в `UI-UX/UI Final/frontend/src/utils/http.ts`
+- Фронтенд: `mapGatewayStatus` в том же файле
+- Фронтенд: `AnswerStatus` тип в `UI-UX/UI Final/frontend/src/utils/mockData.ts`
+- Фронтенд: `statusLabel`/`statusTone` в `UI-UX/UI Final/frontend/src/components/Chat.tsx`
+
+При добавлении нового статуса — править все 5 точек одновременно.

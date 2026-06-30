@@ -1033,6 +1033,10 @@ export const KnowledgeProcessing: React.FC = () => {
     queryKey: ['gateway-documents', workMode],
     queryFn: documentsApi.list,
     staleTime: 30_000,
+    refetchInterval:
+      workMode === 'prod' && (activeKnowledgeProcessingSection as KnowledgeProcessingSection) === 'registry'
+        ? 10_000
+        : false,
   });
   const gatewayQueueQuery = useQuery({
     queryKey: ['gateway-documents-queue', workMode],
@@ -1722,7 +1726,11 @@ export const KnowledgeProcessing: React.FC = () => {
         metadataOverrides,
       });
       const nextStatus = normalizeDraftStatusFromGateway(response?.status);
-      const shouldRemoveDraft = action === 'reject' || nextStatus === 'approved' || nextStatus === 'discarded' || Boolean(response?.document_id);
+      // Orchestrator returns status: "proceeding" when approve starts async indexing.
+      // The draft should NOT be removed yet — keep it visible with "validation" status
+      // until the backend reports a terminal status ("approved"/"discarded"/"failed").
+      const isProceedingAfterApprove = action === 'approve' && response?.status === 'proceeding';
+      const shouldRemoveDraft = action === 'reject' || nextStatus === 'approved' || nextStatus === 'discarded' || (Boolean(response?.document_id) && !isProceedingAfterApprove);
 
       if (shouldRemoveDraft) {
         setDrafts((current) => current.filter((item) => item.id !== draftId));
@@ -1735,9 +1743,11 @@ export const KnowledgeProcessing: React.FC = () => {
           progress: draftProgressByStatus[nextStatus] ?? draft.progress,
           gatewayMetadataOverrides: metadataOverrides,
           note:
-            action === 'confirm'
-              ? 'Черновик подтверждён. Запущена повторная проверка.'
-              : response?.message ?? draft.note,
+            action === 'approve' && isProceedingAfterApprove
+              ? 'Документ создан, запущена индексация. Черновик исчезнет после завершения.'
+              : action === 'confirm'
+                ? 'Черновик подтверждён. Запущена повторная проверка.'
+                : response?.message ?? draft.note,
         });
       }
 
