@@ -96,9 +96,11 @@ class TestStalePendingTimeout:
             task_id=task.id, step_name="preview_converter",
             step_index=1, service_name="Converter-validator",
         )
-        # Только первый шаг делаем старым.
+        # Только первый шаг делаем старым — старше порога PENDING_STATE_TIMEOUT.
         db_stale = await db_session.get(type(stale_step), stale_step.id)
-        db_stale.created_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        db_stale.created_at = datetime.now(timezone.utc) - timedelta(
+            seconds=settings.pipeline.PENDING_STATE_TIMEOUT + 5
+        )
         await db_session.flush()
 
         orchestrator = PipelineOrchestrator(db_session)

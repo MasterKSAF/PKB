@@ -285,6 +285,85 @@ def run_reprocess_step(self, task_id: int, document_id: str):
         raise self.retry(exc=exc)
 
 
+@celery_app.task(bind=True, max_retries=5, default_retry_delay=30, name="tasks.pipeline.run_activate_document_step")
+def run_activate_document_step(self, document_id: int):
+    """
+    Background task: poll RAG Builder for async completion, then activate document.
+
+    RAG Builder processes chunks asynchronously. This task:
+    1. Calls GET /rag/build/{doc_id}/status (longpoll) until indexed/failed
+    2. On indexed: calls GET /rag/build/{doc_id}/check (integrity check)
+    3. On integrity_ok: PATCH /api/v1/registry/documents/{id}/status → active
+    4. On still indexing/pending: retry (up to 5 times, 30s apart)
+    5. On build/integrity failure: stays in "validating" (terminal for this task)
+    """
+    logger.info(f"Background activation for document {document_id}")
+    from app.services.rag_client import RAGBuilderClient
+    from app.services.registry_client import RegistryServiceClient
+
+    try:
+        rag = RAGBuilderClient()
+
+        # Step 1: Wait for async indexing to complete via longpoll
+        status_result = _run_async(rag.get_build_status(
+            document_id=document_id, longpoll=15,
+        ))
+        final_status = status_result.get("status", "")
+
+        if final_status == "indexed":
+            # Step 2: Integrity check
+            check_result = _run_async(rag.check_index(document_id=document_id))
+            _run_async(rag.close())
+
+            integrity_ok = check_result.get("integrity_ok", False)
+            if integrity_ok:
+                registry = RegistryServiceClient()
+                _run_async(registry.update_document_status(
+                    document_id=document_id,
+                    status="active",
+                ))
+                _run_async(registry.close())
+                logger.info(f"Document {document_id} activated via background task")
+                return {"status": "active", "document_id": document_id}
+            else:
+                logger.warning(
+                    f"Background activation: integrity check failed for doc {document_id}, "
+                    f"staying in validating",
+                    extra={"check_result": check_result},
+                )
+                return {"status": "integrity_failed", "document_id": document_id}
+
+        elif final_status == "failed":
+            _run_async(rag.close())
+            logger.error(
+                f"Background activation: RAG build failed for doc {document_id}, "
+                f"staying in validating",
+                extra={"status_result": status_result},
+            )
+            return {"status": "build_failed", "document_id": document_id}
+
+        else:
+            # Still indexing/pending or timeout — retry
+            _run_async(rag.close())
+            logger.info(
+                f"Background activation: RAG build still in progress "
+                f"(status={final_status}) for doc {document_id}, will retry",
+            )
+            # self.retry() raises celery.exceptions.Retry, not Exception
+            raise self.retry(
+                exc=Exception(f"RAG build not complete: {final_status}"),
+            )
+
+    except Exception as e:
+        # Covers connectivity errors, timeouts, unexpected failures
+        # Don't catch Retry from self.retry() — let it propagate to Celery
+        from celery.exceptions import Retry
+        if isinstance(e, Retry):
+            raise
+        logger.error(f"Background activation failed for doc {document_id}: {e}")
+        raise self.retry(exc=e)
+
+
 async def _notify_step_completed(job_id: str, step_name: str, result: dict):
     async with get_db_context() as db:
         orchestrator = PipelineOrchestrator(db)

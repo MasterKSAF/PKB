@@ -133,6 +133,20 @@ LLM-ответы проверяются на корректность форма
 - `GET /api/v1/drafts` (list) — не добавлен, остаётся в Registry.
 - `GET /api/v1/documents/{id}/tasks` — endpoint в orchestrator для связи документа с задачами пайплайна.
 
+### 2.4. Статусы `validating`/`active` документов — код vs спецификация (30.06, ИСПРАВЛЕНО)
+
+Код после rag_index устанавливал `processing_status="validating"`, но в спецификации (glossary.md,
+registry_service_api.md, db_diagrams.md) этого статуса не было — финальным считался `indexed`.
+
+**Корень:** задумывалась двухфазная активация: после индексации документ в `validating`, затем
+после подтверждения RAG Builder (integrity check) → `active`. Но шаг активации не был реализован.
+
+**Исправлено (30.06):**
+- Добавлен авто-запрос `GET /rag/build/{doc_id}/check` после `validating`
+- При `integrity_ok=true` → `active`
+- При ошибке RAG или `integrity_ok=false` → документ остаётся в `validating`
+- Статусы `validating`/`active` добавлены во всю документацию
+
 ## 3. Технические долги
 
 ### 3.1. Integration tests

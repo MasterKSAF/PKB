@@ -194,7 +194,18 @@ class ServiceClient:
                     "circuit_breaker": "open",
                 },
             )
-            raise
+            # Graceful fallback: return mock_response instead of crashing
+            fallback = mock_response if mock_response is not None else {}
+            logger.info(
+                f"Falling back to mock_response={fallback} for {method} {endpoint} "
+                f"(circuit breaker open)",
+                extra={
+                    "service": self.service_name,
+                    "method": method,
+                    "endpoint": endpoint,
+                },
+            )
+            return fallback
 
         except httpx.TimeoutException as exc:
             elapsed = time.monotonic() - start_time

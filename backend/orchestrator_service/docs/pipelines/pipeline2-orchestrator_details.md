@@ -25,6 +25,12 @@
 
 **Документ-источник статуса:** `registry.documents.processing_status` (см. [glossary.md](../../glossary.md#статусы-документов-registrydocuments)). Оркестратор читает/пишет через `PATCH /registry/documents/{id}/status` (internal Registry endpoint).
 
+**Финальный статус (новое, 30.06):** После завершения индексации (`rag_index`) Оркестратор:
+1. Переводит документ в `validating`
+2. Запрашивает `GET /rag/build/{doc_id}/check` (integrity check) у RAG Builder
+3. При `integrity_ok=true` → `active`. Документ доступен для поиска.
+4. При ошибке RAG или `integrity_ok=false` → остаётся в `validating` (лог, не фатал).
+
 ---
 
 ## 1. Триггер индексации: Scheduler

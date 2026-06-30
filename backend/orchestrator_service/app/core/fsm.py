@@ -75,6 +75,19 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
 
 
+class DocumentStatus(str, Enum):
+    """Status of a document (registry.documents.processing_status)."""
+
+    CREATED = "created"
+    PENDING_INDEX = "pending_index"
+    INDEXING = "indexing"
+    INDEXED = "indexed"
+    VALIDATING = "validating"
+    ACTIVE = "active"
+    PARTIALLY_INDEXED = "partially_indexed"
+    FAILED = "failed"
+
+
 class TaskStage(str, Enum):
     """Stage of a pipeline task lifecycle."""
 

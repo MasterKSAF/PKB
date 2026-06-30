@@ -394,14 +394,16 @@ stateDiagram-v2
 | `created` | 1 → 2 | Документ записан в реестр (registry.documents) |
 | `pending_index` | 2 | Ожидание начала индексации |
 | `indexing` | 2 | Выполняется чанкинг и построение векторного индекса |
-| `indexed` | 2 | Документ проиндексирован, готов к поиску |
+| `indexed` | 2 | Документ проиндексирован (legacy) |
+| `validating` | 2 | Индексация завершена, ожидание подтверждения RAG Builder |
+| `active` | 2 | Документ активирован, готов к поиску |
 | `failed` | 1/2 | Ошибка на одном из этапов |
 
 **Маппинг трёхуровневой статусной модели:**
 
 | Уровень | Таблица / API | Статусы | Назначение |
 |---------|--------------|---------|------------|
-| **DB (FSM)** | `registry.documents.processing_status` | `created`, `pending_index`, `indexing`, `indexed`, `failed` | Фактическое состояние документа в БД. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded`) хранятся в `registry.drafts.status` |
+| **DB (FSM)** | `registry.documents.processing_status` | `created`, `pending_index`, `indexing`, `indexed`, `validating`, `active`, `failed` | Фактическое состояние документа в БД. Статусы черновика (`uploaded`, `previewing`, `ready_for_approve`, `review_required`, `validation`, `approved`, `discarded`) хранятся в `registry.drafts.status` |
 | **Task** | `pipeline.tasks.status` | `active`, `completed`, `failed` | Внутренний статус задачи пайплайна в Оркестраторе. Не путать со статусом документа |
 | **UI (API)** | `GET /documents/{doc_id}/status` response | `processing`, `approval_required`, `completed` | Агрегированный статус для отображения пользователю. Маппинг: `processing` ← (`uploaded`/`previewing`/`validation`), `approval_required` ← (`ready_for_approve`/`review_required`), `completed` ← (весь документ проиндексирован) |
 

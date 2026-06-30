@@ -16,7 +16,7 @@
 import io
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,10 +29,10 @@ from app.core.fsm import TaskStatus, TaskStage
 class TestRagIndexCompletion:
     """_on_full_step_completed при завершении rag_index."""
 
-    async def test_rag_index_completion_marks_pipeline_completed(
+    async def test_rag_index_completion_schedules_activation(
         self, db_session: AsyncSession,
     ):
-        """rag_index step completed → task=completed, stage=registry, progress=100."""
+        """rag_index → task=completed, status=validating, schedules background activation."""
         repo = TaskRepository(db_session)
         task = await repo.create_task(
             draft_id=400, pipeline_type="formation", total_steps=7,
@@ -42,7 +42,6 @@ class TestRagIndexCompletion:
         task.pipeline_stage = "full"
         await db_session.flush()
 
-        # Create the rag_index step
         rag_step = await repo.create_task_step(
             task_id=task.id, step_name="rag_index", step_index=6,
             service_name="RAG Builder",
@@ -55,9 +54,16 @@ class TestRagIndexCompletion:
         )
 
         mock_registry = AsyncMock()
-        with patch(
-            "app.core.pipeline.orchestrator.RegistryServiceClient",
-            return_value=mock_registry,
+        mock_activate_task = MagicMock()
+        with (
+            patch(
+                "app.core.pipeline.orchestrator.RegistryServiceClient",
+                return_value=mock_registry,
+            ),
+            patch(
+                "app.tasks.pipeline_indexation.run_activate_document_step",
+                mock_activate_task,
+            ),
         ):
             orchestrator = PipelineOrchestrator(db_session)
             await orchestrator._on_full_step_completed(
@@ -71,11 +77,14 @@ class TestRagIndexCompletion:
         assert updated.pipeline_stage == TaskStage.REGISTRY.value
         assert updated.progress_percent == 100
 
-        # Registry document status should be updated to validating
-        mock_registry.update_document_status.assert_called_with(
+        # Document set to validating
+        mock_registry.update_document_status.assert_called_once_with(
             document_id=100500,
             status="validating",
         )
+
+        # Background activation scheduled via delay()
+        mock_activate_task.delay.assert_called_once_with(document_id=100500)
 
 
 class TestReprocessReindex:

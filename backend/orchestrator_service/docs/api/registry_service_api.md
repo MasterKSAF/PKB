@@ -2313,7 +2313,7 @@ GET /registry/enums
     "classifier_status": ["active", "deprecated", "archived"],
     "source_type": ["GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "RMRS", "OTHER"],
     "document_type": ["normative", "technical", "drawing", "specification", "archival_scan"],
-    "document_status": ["created", "pending_index", "indexing", "indexed", "failed"],
+    "document_status": ["created", "pending_index", "indexing", "indexed", "validating", "active", "failed"],
     "era": ["USSR", "CIS", "RF", "CURRENT"],
     "validity_status": ["active", "superseded", "cancelled", "historical", "draft"],
     "jurisdiction": ["RU", "EU", "US", "NO", "INTL"],

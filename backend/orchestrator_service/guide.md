@@ -219,6 +219,31 @@ uploaded → previewing → ready_for_approve → approved → [formation comple
 | registry | Сохранение в Registry |
 | indexation | Индексация в RAG |
 
+### Document states (processing_status, 30.06)
+
+```
+created → pending_index → indexing → validating → active → [*]
+                                               → failed
+```
+
+| State | Description |
+|-------|-------------|
+| created | Документ записан в Registry |
+| pending_index | Ожидание индексации (Scheduler) |
+| indexing | Выполняется индексация (RAG Builder) |
+| validating | Индексация завершена, запрос integrity check у RAG Builder |
+| active | Integrity check пройден, документ доступен для поиска |
+| failed | Ошибка пайплайна |
+
+После rag_index Оркестратор:
+1. Переводит документ в `validating`
+2. Диспатчит фоновую Celery-задачу `run_activate_document_step`
+3. Задача поллит `GET /rag/build/{doc_id}/status?longpoll=15` (ждёт асинхронную индексацию)
+4. При `status=indexed` → `GET /rag/build/{doc_id}/check` (integrity check)
+5. При `integrity_ok=true` → `active`
+6. При `status=indexing`/`pending` → retry (5 попыток, 30с)
+7. При `status=failed` или `integrity_ok=false` → остаётся в `validating`
+
 ---
 
 ## Анализ изменений по заданию от 19.06.2026
@@ -262,3 +287,45 @@ uploaded → previewing → ready_for_approve → approved → [formation comple
 ### Не входит в зону оркестратора
 - P2I-5 (CPU/GPU timeouts) — конфигурация RAG Builder
 - P2I-8 (транзакционность чанков) — логика RAG Builder
+
+---
+
+## Инженерные заметки (для агента)
+
+### Расположение .git
+Корень репозитория: `H:/Projects/PKB_neuroassistant_pipelines/.git`
+Рабочая папка оркестратора: `backend/orchestrator_service/`
+При `git`-операциях через инструменты (`repo_path`) указывать корень репозитория.
+
+### Живые vs одноразовые todo-файлы
+- `*.md` в корне с префиксом `todo_` — временные (удаляются после выполнения).
+- Актуальные задачи фиксируются в issue-трекере, не в markdown.
+
+### Project ID для графовых инструментов
+При индексации репозитория через `index_repository` project_id принимает вид:
+`H-Projects-PKB_neuroassistant_pipelines-backend-orchestrator_service`
+(слеш → дефис, остальное как есть).
+Использовать этот ID для `search_graph`, `query_graph`, `trace_path` и др.
+
+### Схема статусов документов (processing_status)
+
+После индексации:
+```
+rag_index → document.status = "validating"
+         → run_activate_document_step.delay(document_id)  [фоновая Celery-задача]
+              ↓
+         GET /rag/build/{doc_id}/status?longpoll=15  (ждёт асинхронную индексацию)
+              ├─ "indexed" → GET /rag/build/{doc_id}/check (integrity)
+              │              ├─ integrity_ok=true  → status = "active"
+              │              └─ integrity_ok=false → stay in "validating"
+              ├─ "failed"   → stay in "validating"
+              └─ "indexing" → retry (×5, 30s interval)
+```
+
+Ключевые моменты:
+- Фоновая задача `run_activate_document_step` — в `app/tasks/pipeline_indexation.py`
+- `DocumentStatus` enum — в `app/core/fsm.py`
+- orchestrator **не вызывает** RAG синхронно — только диспатчит задачу
+
+### Приоритет инструментов — в .rules
+Порядок применения инструментов, контрольный вопрос перед read_file/terminal, запрет подгонки тестов — всё в `.rules`. guide.md только для архитектурных решений.

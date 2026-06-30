@@ -262,10 +262,12 @@ class _RealServiceClient(SimpleTestClient):
 
     def __init__(self, failure_threshold=5, recovery_timeout=60):
         super().__init__(service_url="http://localhost:9999", mock_mode=False)
+        # id(self) гарантирует уникальное имя CB для каждого экземпляра,
+        # т.к. circuitbreaker 2.x хранит CB в глобальном реестре по имени
         self._circuit_breaker = CircuitBreaker(
             failure_threshold=failure_threshold,
             recovery_timeout=recovery_timeout,
-            name=f"cb_test_{self.service_name}",
+            name=f"cb_test_{self.service_name}_{id(self)}",
         )
 
 

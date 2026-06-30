@@ -327,7 +327,7 @@ erDiagram
 | `registry.documents` | `era` | **P2-1**: CHECK IN ('USSR','CIS','RF','CURRENT') |
 | `registry.documents` | `validity_status` | **P2-1**: CHECK IN ('active','superseded','cancelled','historical','draft') |
 | `registry.documents` | `jurisdiction` | **P2-1**: CHECK IN ('RU','EU','US','NO','INTL') |
-| `registry.documents` | `processing_status` | **P2-1**: CHECK IN ('created','pending_index','indexing','indexed','partially_indexed','failed') |
+| `registry.documents` | `processing_status` | **P2-1 (NEW 30.06)**: CHECK IN ('created','pending_index','indexing','indexed','validating','active','partially_indexed','failed') |
 | `registry.document_versions` | `file_hash_sha256` | UNIQUE — CAS-дедупликация: один хэш = одна версия файла в системе |
 | `registry.document_versions` | `file_size_bytes` | **P2-7**: CHECK (file_size_bytes > 0) |
 | `registry.document_versions` | `version_number` | **P2-7**: CHECK (version_number > 0) |

@@ -848,9 +848,9 @@ class PipelineOrchestrator:
 
             # Update document status after successful indexing
             # Valid transition from "uploaded" is "validating"
+            document_id = getattr(task, 'document_id', None) or task.draft_id
             try:
                 registry = RegistryServiceClient()
-                document_id = getattr(task, 'document_id', None) or task.draft_id
                 await registry.update_document_status(
                     document_id=document_id,
                     status="validating",
@@ -858,7 +858,21 @@ class PipelineOrchestrator:
                 await registry.close()
             except Exception as e:
                 logger.warning(
-                    f"Failed to update document status: {e}",
+                    f"Failed to update document status to validating: {e}",
+                    extra={"draft_id": task.draft_id, "document_id": document_id},
+                )
+
+            # Schedule background activation: later check with RAG and activate
+            try:
+                from app.tasks.pipeline_indexation import run_activate_document_step
+                run_activate_document_step.delay(document_id=document_id)
+                logger.info(
+                    f"Scheduled background activation for document {document_id}",
+                    extra={"task_id": task.id, "draft_id": task.draft_id},
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to schedule background activation: {e}",
                     extra={"draft_id": task.draft_id, "document_id": document_id},
                 )
 

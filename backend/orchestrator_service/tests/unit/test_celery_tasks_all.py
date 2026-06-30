@@ -685,6 +685,129 @@ class TestRunReprocessStep:
 
 
 # ============================================================================
+#  Activate Document — run_activate_document_step
+# ============================================================================
+
+
+class TestRunActivateDocumentStep:
+    """Tests for run_activate_document_step Celery task."""
+
+    def test_happy_path_activates(self):
+        """Poll → indexed → check OK → active."""
+        mock_rag = AsyncMock()
+        mock_rag.get_build_status.return_value = {
+            "status": "indexed", "chunks_count": 42,
+        }
+        mock_rag.check_index.return_value = {
+            "integrity_ok": True,
+            "indexed_count": 42, "expected_count": 42,
+        }
+        mock_rag.close = AsyncMock()
+
+        mock_registry = AsyncMock()
+        mock_registry.close = AsyncMock()
+
+        with patch(
+            "app.services.rag_client.RAGBuilderClient",
+            return_value=mock_rag,
+        ), patch(
+            "app.services.registry_client.RegistryServiceClient",
+            return_value=mock_registry,
+        ):
+            from app.tasks.pipeline_indexation import run_activate_document_step
+
+            result = run_activate_document_step.run(document_id=42)
+
+        assert result == {"status": "active", "document_id": 42}
+        mock_rag.get_build_status.assert_awaited_once_with(
+            document_id=42, longpoll=15,
+        )
+        mock_rag.check_index.assert_awaited_once_with(document_id=42)
+        mock_registry.update_document_status.assert_awaited_once_with(
+            document_id=42, status="active",
+        )
+
+    def test_build_failed_stays_validating(self):
+        """Poll returns failed → document stays in validating."""
+        mock_rag = AsyncMock()
+        mock_rag.get_build_status.return_value = {
+            "status": "failed", "errors": ["chunking error"],
+        }
+        mock_rag.close = AsyncMock()
+
+        with patch(
+            "app.services.rag_client.RAGBuilderClient",
+            return_value=mock_rag,
+        ):
+            from app.tasks.pipeline_indexation import run_activate_document_step
+
+            result = run_activate_document_step.run(document_id=42)
+
+        assert result == {"status": "build_failed", "document_id": 42}
+        # No check_index or update_document_status calls
+        mock_rag.check_index.assert_not_called()
+
+    def test_integrity_fail_stays_validating(self):
+        """Integrity check fails → stays in validating."""
+        mock_rag = AsyncMock()
+        mock_rag.get_build_status.return_value = {
+            "status": "indexed", "chunks_count": 10,
+        }
+        mock_rag.check_index.return_value = {
+            "integrity_ok": False,
+            "indexed_count": 0, "expected_count": 42,
+        }
+        mock_rag.close = AsyncMock()
+
+        mock_registry = AsyncMock()
+        mock_registry.close = AsyncMock()
+
+        with patch(
+            "app.services.rag_client.RAGBuilderClient",
+            return_value=mock_rag,
+        ), patch(
+            "app.services.registry_client.RegistryServiceClient",
+            return_value=mock_registry,
+        ):
+            from app.tasks.pipeline_indexation import run_activate_document_step
+
+            result = run_activate_document_step.run(document_id=42)
+
+        assert result == {"status": "integrity_failed", "document_id": 42}
+        mock_rag.check_index.assert_awaited_once_with(document_id=42)
+        # No update to active
+        mock_registry.update_document_status.assert_not_called()
+
+    def test_still_indexing_triggers_retry(self):
+        """Poll returns indexing → retry."""
+        from celery.exceptions import Retry
+
+        mock_rag = AsyncMock()
+        mock_rag.get_build_status.return_value = {
+            "status": "indexing", "progress": 50,
+        }
+        mock_rag.close = AsyncMock()
+
+        with patch(
+            "app.services.rag_client.RAGBuilderClient",
+            return_value=mock_rag,
+        ):
+            from app.tasks.pipeline_indexation import run_activate_document_step
+
+            mock_retry, retry_patcher = _patch_task_retry(
+                run_activate_document_step,
+                exc_to_raise=Retry("RAG build not complete: indexing"),
+            )
+            try:
+                with pytest.raises(Retry, match="RAG build not complete"):
+                    run_activate_document_step.run(document_id=42)
+            finally:
+                retry_patcher.stop()
+
+        mock_retry.assert_called_once()
+
+
+# ============================================================================
 #  Scheduler — cleanup_stale_tasks
 # ============================================================================
 
