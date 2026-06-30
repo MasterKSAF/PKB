@@ -129,7 +129,7 @@ export interface ProcessingQueueItem {
   document: string;
   stage: string;
   progress: number;
-  status: 'в очереди' | 'в работе' | 'ошибка';
+  status: 'в очереди' | 'в работе' | 'требуется подтверждение' | 'ошибка';
   docCode?: string;
   sourceType?: string;
   currentStep?: string;

@@ -511,6 +511,7 @@ const getStatusDotColor = (status: DraftStatus) => {
 
 const getQueueColor = (status: string) => {
   if (status === 'в работе') return 'warning';
+  if (status === 'требуется подтверждение') return 'info';
   if (status === 'в очереди') return 'default';
   if (status === 'ошибка') return 'error';
   return 'success';
@@ -518,6 +519,7 @@ const getQueueColor = (status: string) => {
 
 const getQueueProgressColor = (status: string): 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
   if (status === 'ошибка') return 'error';
+  if (status === 'требуется подтверждение') return 'info';
   if (status === 'в работе') return 'warning';
   return 'primary';
 };
@@ -880,6 +882,7 @@ const getDraftQueueStage = (status: DraftStatus) => {
 
 const getDraftQueueStatus = (status: DraftStatus): ProcessingQueueItem['status'] => {
   if (status === 'failed') return 'ошибка';
+  if (status === 'review_required' || status === 'ready_for_approve') return 'требуется подтверждение';
   if (status === 'uploaded') return 'в очереди';
   return 'в работе';
 };
@@ -894,17 +897,24 @@ const getTaskQueueStatus = (status?: string): ProcessingQueueItem['status'] => {
 const mapDraftToQueueItem = (draft: DraftItem, taskStatus?: GatewayTaskStatusDetail | null): ProcessingQueueItem => {
   const draftProgress = Math.min(100, Math.max(0, Math.round(draft.progress ?? draftProgressByStatus[draft.status] ?? 0)));
   const currentTaskStep = taskStatus ? getCurrentTaskStep(taskStatus.steps) : null;
+  const requiresReview = draft.status === 'review_required' || draft.status === 'ready_for_approve';
 
   return {
     id: `draft-${draft.gatewayDraftId || draft.id}`,
     document: draft.fileName || draft.title,
-    stage: currentTaskStep
-      ? getTaskStageLabel(currentTaskStep.stepName, currentTaskStep.serviceName)
-      : taskStatus?.pipelineStage
-        ? getTaskStageLabel(taskStatus.pipelineStage)
-        : getDraftQueueStage(draft.status),
+    stage: requiresReview
+      ? 'Ожидание решения'
+      : currentTaskStep
+        ? getTaskStageLabel(currentTaskStep.stepName, currentTaskStep.serviceName)
+        : taskStatus?.pipelineStage
+          ? getTaskStageLabel(taskStatus.pipelineStage)
+          : getDraftQueueStage(draft.status),
     progress: taskStatus ? taskStatus.progressPercent : draftProgress,
-    status: taskStatus ? getTaskQueueStatus(taskStatus.status) : getDraftQueueStatus(draft.status),
+    status: requiresReview
+      ? 'требуется подтверждение'
+      : taskStatus
+        ? getTaskQueueStatus(taskStatus.status)
+        : getDraftQueueStatus(draft.status),
     docCode: draft.docCode || undefined,
     sourceType: draft.sourceType || undefined,
     currentStep: currentTaskStep?.stepName || taskStatus?.pipelineStage || draft.status,
