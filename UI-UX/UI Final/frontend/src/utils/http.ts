@@ -584,8 +584,12 @@ function mapGatewaySource(source: any, index = 0): Citation {
     text: source.excerpt ?? source.content ?? source.text ?? '',
     version: source.version ?? 'Актуальная версия',
     confidence: typeof source.score === 'number' ? source.score : undefined,
-    pagePreviewUrl: source.page_preview_url ?? source.preview_url,
-    documentUrl: source.document_url ?? source.file_url,
+    pagePreviewUrl: source.image_key
+      ? `${BASE_URL.replace(/\/+$/, '')}/files/${source.image_key}`
+      : undefined,
+    documentUrl: source.file_key
+      ? `${BASE_URL.replace(/\/+$/, '')}/files/${source.file_key}`
+      : undefined,
     contentType: source.content_type,
   };
 }
@@ -727,8 +731,12 @@ function mapGatewaySearchResponse(payload: any) {
     classifierSystem: item.classifier_system ?? (item.mks_oks_code ? 'MKS' : item.okstu_code ? 'OKSTU' : ''),
     mksOksCode: item.mks_oks_code ?? item.mks_oks ?? item.oks_code ?? '',
     okstuCode: item.okstu_code ?? '',
-    pagePreviewUrl: item.page_preview_url ?? item.preview_url,
-    documentUrl: item.document_url ?? item.file_url,
+    pagePreviewUrl: item.image_key
+      ? `${BASE_URL.replace(/\/+$/, '')}/files/${item.image_key}`
+      : undefined,
+    documentUrl: item.file_key
+      ? `${BASE_URL.replace(/\/+$/, '')}/files/${item.file_key}`
+      : undefined,
   }));
 }
 
@@ -2452,10 +2460,15 @@ export const sourceApi = {
     if (previewKind === 'document') {
       const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/file`));
 
+      const fileKey = response.data?.file_key ?? response.data?.key ?? null;
+      const documentUrl = fileKey
+        ? `${BASE_URL.replace(/\/+$/, '')}/files/${fileKey}`
+        : citation.documentUrl;
+
       return {
         ...citation,
         text: response.data?.text ?? response.data?.content ?? citation.text,
-        documentUrl: response.data?.file_url ?? response.data?.document_url ?? citation.documentUrl,
+        documentUrl,
         contentType: response.data?.content_type ?? citation.contentType,
       };
     }
@@ -2475,8 +2488,12 @@ export const sourceApi = {
     return {
       ...citation,
       text: textData?.full_text ?? textData?.text ?? previewData?.text ?? previewData?.content ?? citation.text,
-      pagePreviewUrl: previewData?.preview_url ?? previewData?.image_url ?? citation.pagePreviewUrl,
-      documentUrl: previewData?.file_url ?? previewData?.document_url ?? citation.documentUrl,
+      pagePreviewUrl: previewData?.image_key
+        ? `${BASE_URL.replace(/\/+$/, '')}/files/${previewData.image_key}`
+        : citation.pagePreviewUrl,
+      documentUrl: previewData?.file_key
+        ? `${BASE_URL.replace(/\/+$/, '')}/files/${previewData.file_key}`
+        : citation.documentUrl,
       contentType: previewData?.content_type ?? textData?.content_type ?? citation.contentType,
     };
   },

@@ -516,8 +516,8 @@ export const KnowledgeBase: React.FC = () => {
       section: item.section ?? item.clause ?? 'Найденный фрагмент',
       page: Number(item.page ?? 1),
       text: resultText ? String(resultText) : createDocumentCitation(document).text,
-      pagePreviewUrl: item.pagePreviewUrl ?? item.page_preview_url,
-      documentUrl: item.documentUrl ?? item.document_url,
+      pagePreviewUrl: item.pagePreviewUrl,
+      documentUrl: item.documentUrl,
     };
 
     void handleOpenPreview(document, resultCitation);

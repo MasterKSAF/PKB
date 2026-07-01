@@ -116,37 +116,6 @@ const normalizeValidUntil = (value: unknown) => {
   return text;
 };
 
-const resolveGatewayAssetUrl = (url: unknown) => {
-  const text = normalizeText(url);
-  if (!text) return '';
-  if (/^https?:\/\//i.test(text)) {
-    try {
-      const parsed = new URL(text);
-      if (['minio', 'registry', 'orchestrator', 'gateway'].includes(parsed.hostname.toLowerCase())) {
-        return '';
-      }
-    } catch {
-      return '';
-    }
-    return text;
-  }
-
-  const apiBase = GATEWAY_API_BASE_URL.replace(/\/+$/, '');
-  const originBase = apiBase.replace(/\/api\/v\d+$/i, '');
-  return `${originBase}${text.startsWith('/') ? text : `/${text}`}`;
-};
-
-const getInternalServiceHost = (url: unknown) => {
-  const text = normalizeText(url);
-  if (!/^https?:\/\//i.test(text)) return '';
-  try {
-    const parsed = new URL(text);
-    return ['minio', 'registry', 'orchestrator', 'gateway'].includes(parsed.hostname.toLowerCase()) ? parsed.hostname : '';
-  } catch {
-    return '';
-  }
-};
-
 const extractServerErrorMessage = async (payload: unknown) => {
   if (!payload) return '';
   try {
@@ -237,7 +206,9 @@ const extractPageEntries = (payload: any): DocumentPreviewPage[] => {
       title: `${title}${number ? ` · стр. ${number}` : ''}`,
       pageNumber: Number.isFinite(pageNumber) ? pageNumber : index + 1,
       lines: body ? body.split(/\r?\n/).filter(Boolean) : [],
-      imageUrl: resolveGatewayAssetUrl(item?.image_url ?? item?.preview_url),
+      imageUrl: item?.image_key
+        ? `${GATEWAY_API_BASE_URL.replace(/\/+$/, '')}/files/${item.image_key}`
+        : '',
     };
   });
 };
@@ -741,10 +712,10 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
       const pageText =
         extractPageText(pageContentQuery.data.text) ||
         extractPageText(pageContentQuery.data.preview);
-      const imageUrl = resolveGatewayAssetUrl(
-        pageContentQuery.data.preview?.image_url ??
-          pageContentQuery.data.preview?.preview_url,
-      );
+      const imageUrl =
+        pageContentQuery.data.preview?.image_key
+          ? `${GATEWAY_API_BASE_URL.replace(/\/+$/, '')}/files/${pageContentQuery.data.preview.image_key}`
+          : '';
 
       return gatewayPages.map((page) =>
         page.pageNumber === selectedGatewayPage.pageNumber
@@ -854,19 +825,13 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
       }
 
       const fileInfo = await documentsApi.file(selectedDocument.id);
-      const rawFileUrl = fileInfo?.file_url ?? fileInfo?.url ?? fileInfo?.download_url;
-      const fileUrl = resolveGatewayAssetUrl(rawFileUrl);
-      const internalHost = getInternalServiceHost(rawFileUrl);
+      const fileKey = fileInfo?.file_key ?? fileInfo?.key ?? null;
 
-      if (!fileUrl) {
-        throw new Error(
-          internalHost
-            ? `Сервер вернул внутреннюю ссылку ${internalHost}, но публичный proxy скачивания файлов не настроен.`
-            : 'Сервер не передал публичную ссылку на файл.',
-        );
+      if (!fileKey) {
+        throw new Error('Сервер не передал ключ файла.');
       }
 
-      const response = await apiClient.get(fileUrl, { responseType: 'blob' });
+      const response = await apiClient.get(`/files/${fileKey}`, { responseType: 'blob' });
       const blob = response.data instanceof Blob ? response.data : new Blob([response.data]);
       openBlobInNewTab(blob);
     } catch (error) {

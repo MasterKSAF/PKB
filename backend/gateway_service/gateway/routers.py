@@ -14,9 +14,11 @@ import logging
 import re
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from gateway.client import proxy_request, resolve_service, is_deprecated_integration_route
+from gateway.minio_proxy import fetch_from_minio
+from gateway.config import config as gw_config
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,43 @@ logger = logging.getLogger(__name__)
 proxy_router = APIRouter()
 
 
-# Паттерн для нечислового draft_id в draft-путях
+# ── MinIO proxy — отдаёт файлы напрямую из S3 ─────────────────────────
+@proxy_router.api_route("/api/v1/files/{file_key:path}", methods=["GET"])
+async def gateway_file_proxy(request: Request, file_key: str) -> Response:
+    """Прокси GET /api/v1/files/{file_key} напрямую из MinIO (без integration service).
+
+    Определяет bucket MinIO по префиксу ключа:
+      - previews/* → images
+      - иначе → documents
+    """
+    bucket = gw_config.minio_image_bucket if file_key.startswith("previews/") else gw_config.minio_bucket
+    try:
+        minio_response = await fetch_from_minio(file_key, bucket=bucket)
+        content_type = minio_response.headers.get("content-type", "application/octet-stream")
+        content_disposition = minio_response.headers.get("content-disposition", "inline")
+
+        return StreamingResponse(
+            content=minio_response.iter_bytes(),
+            status_code=minio_response.status_code,
+            media_type=content_type,
+            headers={
+                "Content-Disposition": content_disposition,
+                "Content-Length": minio_response.headers.get("content-length", ""),
+                "Accept-Ranges": "bytes",
+            },
+        )
+    except Exception as exc:
+        logger.warning(f"MinIO proxy error for {file_key}: {exc}")
+        return JSONResponse(
+            status_code=404,
+            content=_error(
+                "FILE_NOT_FOUND",
+                f"Файл {file_key} не найден в MinIO.",
+            ),
+        )
+
+
+# ── Catch-all reverse-proxy ────────────────────────────────────────────
 _INVALID_DRAFT_PATH_RE = re.compile(
     r"^/api/v1/drafts/(?!\d+)([^/]+)(?:/tasks|/preview(?:/status)?|/decide|/metadata)?$"
 )

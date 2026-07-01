@@ -20,6 +20,7 @@ type Citation = {
   page: number;
   text: string;
   version: string;
+  documentUrl?: string;
 };
 
 interface SourcePreviewDialogProps {
@@ -98,7 +99,19 @@ export const SourcePreviewDialog: React.FC<SourcePreviewDialogProps> = ({ open, 
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Закрыть</Button>
-        <Button variant="contained" endIcon={<ExternalLink size={16} />}>
+        <Button
+          variant="contained"
+          endIcon={<Externa          Открыть документ
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+open(citation.documentUrl, '_blank', 'noopener,noreferrer');
+            }
+          }}
+          disabled={!citation.documentUrl}
+        >
           Открыть документ
         </Button>
       </DialogActions>

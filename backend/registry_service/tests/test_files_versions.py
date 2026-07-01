@@ -190,7 +190,7 @@ def test_get_document_file_endpoint(client, db_session):
     response = client.get(f"/api/v1/registry/documents/{doc.id}/file")
     assert response.status_code == 200
     res_data = response.json()["data"]
-    assert "key_test_file" in res_data["file_url"]
+    assert res_data["file_key"] == "key_test_file"
     assert res_data["file_size"] == 9999
     assert res_data["content_type"] == "application/pdf"
 
@@ -267,4 +267,61 @@ def test_create_document_links_file_and_version(client, db_session):
     assert len(prev_data["blocks"]) == 1
     assert prev_data["blocks"][0]["content"] == "ГОСТ 20868-81"
     assert prev_data["text_layer"] == "ГОСТ 20868-81"
+
+
+def test_get_document_page_preview_endpoint(client, db_session):
+    # 1. Create a Document
+    from api.v1.models import Document, DocumentSection
+    doc = Document(
+        doc_code="DOC-PREVIEW-TEST-1",
+        title="Preview Test",
+        era="RF",
+        status="uploaded"
+    )
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    # 2. Create page blocks (DocumentSection records) for page 1
+    sec1 = DocumentSection(
+        document_id=doc.id,
+        page=1,
+        type_="text",
+        bbox={"x": 10, "y": 10, "w": 100, "h": 20},
+        content={"text": "Block A content"}
+    )
+    sec2 = DocumentSection(
+        document_id=doc.id,
+        page=1,
+        type_="table",
+        bbox={"x": 10, "y": 30, "w": 100, "h": 50},
+        content={"text": "Block B content"}
+    )
+    db_session.add_all([sec1, sec2])
+    db_session.commit()
+
+    # 3. Test successful preview response
+    response = client.get(f"/api/v1/registry/documents/{doc.id}/pages/1/preview")
+    assert response.status_code == 200
+    res_data = response.json()["data"]
+    assert res_data["document_id"] == doc.id
+    assert res_data["page"] == 1
+    assert res_data["image_key"] == f"previews/{doc.id}/p1.png"
+    assert len(res_data["blocks"]) == 2
+    assert res_data["blocks"][0]["content"] == "Block A content"
+    assert res_data["blocks"][1]["content"] == "Block B content"
+    assert "Block A content" in res_data["text_layer"]
+    assert "Block B content" in res_data["text_layer"]
+
+    # 4. Test 404 for non-existent page
+    res_404 = client.get(f"/api/v1/registry/documents/{doc.id}/pages/99/preview")
+    assert res_404.status_code == 404
+    err = res_404.json()["error"]
+    assert err["code"] == "PAGE_NOT_FOUND"
+
+    # 5. Test 404 for non-existent document
+    res_404_doc = client.get("/api/v1/registry/documents/999999/pages/1/preview")
+    assert res_404_doc.status_code == 404
+    err_doc = res_404_doc.json()["error"]
+    assert err_doc["code"] == "DOCUMENT_NOT_FOUND"
 

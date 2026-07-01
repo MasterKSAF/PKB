@@ -321,8 +321,8 @@ export const Search: React.FC = () => {
       classifierSystem: item.classifierSystem ?? item.classifier_system,
       mksOksCode: item.mksOksCode ?? item.mks_oks_code,
       okstuCode: item.okstuCode ?? item.okstu_code,
-      pagePreviewUrl: item.pagePreviewUrl ?? item.page_preview_url,
-      documentUrl: item.documentUrl ?? item.document_url,
+      pagePreviewUrl: item.pagePreviewUrl,
+      documentUrl: item.documentUrl,
     };
 
     setOpenedDocuments((prev) => {

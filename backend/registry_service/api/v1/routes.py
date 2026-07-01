@@ -574,7 +574,7 @@ def get_document_page_preview_endpoint(
             'data': {
                 'document_id': document.id,
                 'page': page_num,
-                'key': f"previews/{document.id}/p{page_num}.png",
+                'image_key': f"previews/{document.id}/p{page_num}.png",
                 'blocks': blocks,
                 'text_layer': text_layer
             }
@@ -2213,11 +2213,10 @@ def get_document_file(
             return RedirectResponse(url=f"/api/v1/files/{file_key}")
         else:
             # format == "json"
-            # Return JSON metadata with pre-signed/direct MinIO download URL
-            file_url = f"http://minio:9000/pkb/documents/{file_key}"
+            # Return file_key — frontend builds the file URL via gateway
             return {
                 "data": {
-                    "file_url": file_url,
+                    "file_key": file_key,
                     "file_size": file_size,
                     "content_type": content_type
                 }

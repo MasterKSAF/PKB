@@ -29,6 +29,26 @@ class GatewayConfig:
     # Хост
     host: str = field(default_factory=lambda: os.getenv("GATEWAY_HOST", "127.0.0.1"))
 
+    # MinIO
+    minio_endpoint: str = field(
+        default_factory=lambda: os.getenv("MINIO_ENDPOINT", "minio:9000")
+    )
+    minio_access_key: str = field(
+        default_factory=lambda: os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+    )
+    minio_secret_key: str = field(
+        default_factory=lambda: os.getenv("MINIO_SECRET_KEY", "minioadmin")
+    )
+    minio_bucket: str = field(
+        default_factory=lambda: os.getenv("MINIO_BUCKET", "documents")
+    )
+    minio_image_bucket: str = field(
+        default_factory=lambda: os.getenv("MINIO_IMAGE_BUCKET", "images")
+    )
+    minio_secure: bool = field(
+        default_factory=lambda: os.getenv("MINIO_SECURE", "false").lower() in ("1", "true", "yes")
+    )
+
     # Адреса внутренних сервисов
     # Формат: "http://host:port"
     service_urls: Dict[str, str] = field(default_factory=lambda: {
