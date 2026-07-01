@@ -23,57 +23,52 @@ class ParserServiceClient(ServiceClient):
     async def _generate_mock(
         self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
+        # Реальный API: все ответы без обёртки data
         if endpoint == "/api/v1/parser/process" and method == "POST":
             request_data = kwargs.get("json", {})
             mode = request_data.get("mode", "full")
             if mode == "preview":
                 return {
-                    "data": {
-                        "task_id": "p-mock-001",
-                        "status": "completed",
-                        "preview_not_supported": False,
-                        "pages_processed": 3,
-                        "metadata": {
-                            "doc_code": "ГОСТ 20868-81",
-                            "title": "Стойки установочные крепежные",
-                            "document_type": "normative",
-                            "source_type": "GOST",
-                            "year": "1981",
-                            "revision": "1",
-                            "era": "USSR",
-                            "jurisdiction": "RU",
-                            "mks_oks_code": "21.060",
-                            "okstu_code": "",
-                            "issuing_body": "Госстандарт",
-                            "udk_code": "621.882",
-                        },
-                        "quality": {
-                            "score": 0.92,
-                            "notifications": [
-                                {
-                                    "code": "low_confidence_pages",
-                                    "message": "1 page with low OCR confidence (<85%)",
-                                    "severity": "warning",
-                                }
-                            ],
-                        },
-                    }
+                    "task_id": "p-mock-001",
+                    "status": "completed",
+                    "preview_not_supported": False,
+                    "pages_processed": 3,
+                    "metadata": {
+                        "doc_code": "ГОСТ 20868-81",
+                        "title": "Стойки установочные крепежные",
+                        "document_type": "normative",
+                        "source_type": "GOST",
+                        "year": "1981",
+                        "revision": "1",
+                        "era": "USSR",
+                        "jurisdiction": "RU",
+                        "mks_oks_code": "21.060",
+                        "okstu_code": "",
+                        "issuing_body": "Госстандарт",
+                        "udk_code": "621.882",
+                    },
+                    "quality": {
+                        "score": 0.92,
+                        "notifications": [
+                            {
+                                "code": "low_confidence_pages",
+                                "message": "1 page with low OCR confidence (<85%)",
+                                "severity": "warning",
+                            }
+                        ],
+                    },
                 }
             return {
-                "data": {
-                    "task_id": "p-mock-002",
-                    "status": "completed",
-                    "pages_processed": 10,
-                    "sections": [{"type": "text", "content": "Parsed section"}],
-                }
+                "task_id": "p-mock-002",
+                "status": "completed",
+                "pages_processed": 10,
+                "sections": [{"type": "text", "content": "Parsed section"}],
             }
         if endpoint.startswith("/api/v1/parser/") and "status" in endpoint and method == "GET":
             return {
-                "data": {
-                    "task_id": endpoint.split("/")[4],
-                    "status": "completed",
-                    "progress": 100,
-                }
+                "task_id": endpoint.split("/")[4],
+                "status": "completed",
+                "progress": 100,
             }
         return default_mock
 

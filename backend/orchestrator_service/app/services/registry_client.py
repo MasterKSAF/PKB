@@ -260,15 +260,16 @@ class RegistryServiceClient(ServiceClient):
             storage["drafts"][draft_id] = draft
 
         status = body.get("status")
+        previous_status = draft.get("status", "uploaded")
         draft["status"] = status
         if "document_id" in body:
             draft["document_id"] = body["document_id"]
         draft["updated_at"] = "2026-06-08T10:00:00Z"
         return {
             "data": {
-                "draft_id": draft_id,
+                "id": draft_id,
                 "status": status,
-                "document_id": body.get("document_id"),
+                "previous_status": previous_status,
                 "updated_at": draft["updated_at"],
             }
         }
@@ -303,7 +304,7 @@ class RegistryServiceClient(ServiceClient):
         draft["updated_at"] = "2026-06-08T10:00:00Z"
         return {
             "data": {
-                "draft_id": draft_id,
+                "id": draft_id,
                 "status": draft.get("status", "uploaded"),
                 "preview_metadata": body.get("preview_metadata", draft.get("metadata_fields", {})),
                 "updated_at": draft["updated_at"],
@@ -326,8 +327,7 @@ class RegistryServiceClient(ServiceClient):
         storage["drafts"].pop(draft_id, None)
         return {
             "data": {
-                "draft_id": draft_id,
-                "deleted": True,
+                "id": draft_id,
                 "deleted_at": "2026-06-08T10:00:00Z",
             }
         }
@@ -338,12 +338,22 @@ class RegistryServiceClient(ServiceClient):
 
     @staticmethod
     def _mock_create_document(storage: dict, body: dict) -> dict:
-        # UPSERT: если документ с таким draft_id уже существует — обновляем секции
+        # UPSERT: ищем существующий документ по document_id (точное совпадение)
+        # или draft_id (для обратной совместимости)
         existing_doc_id = None
-        for did, d in storage["documents"].items():
-            if d.get("draft_id") == body.get("draft_id"):
-                existing_doc_id = did
-                break
+        body_doc_id = body.get("document_id")
+        body_draft_id = body.get("draft_id")
+
+        # Приоритет 1: точное совпадение по document_id
+        if body_doc_id and body_doc_id in storage["documents"]:
+            existing_doc_id = body_doc_id
+
+        # Приоритет 2: поиск по draft_id (если не нашли по document_id)
+        if existing_doc_id is None and body_draft_id:
+            for did, d in storage["documents"].items():
+                if d.get("draft_id") == body_draft_id:
+                    existing_doc_id = did
+                    break
 
         def _assign_section_ids(items: list, base_id: int, doc_id: int) -> list:
             result = []
@@ -354,6 +364,28 @@ class RegistryServiceClient(ServiceClient):
                     item["parent_id"] = None
                 result.append(item)
             return result
+
+        def _build_pipeline_response(doc_id: int, doc: dict, sections: list) -> dict:
+            """Собрать ответ в pipeline-формате (без обёртки data)."""
+            resp_sections = [
+                {"section_id": s["section_id"], "type": s.get("type", "text"),
+                 "clause": s.get("clause", ""), "path": s.get("path", ""),
+                 "page": s.get("page", 1)}
+                for s in (sections or [])
+            ]
+            return {
+                "document_id": doc_id,
+                "version_id": doc.get("version_id", doc_id * 10 + 1),
+                "sections": resp_sections,
+                "registry": {
+                    "document_id": doc_id,
+                    "version_id": doc.get("version_id", doc_id * 10 + 1),
+                    "sections_count": len(resp_sections),
+                    "created_at": doc.get("created_at", "2026-06-08T10:00:00Z"),
+                },
+            }
+
+        is_pipeline = isinstance(body.get("document"), dict) or "document" in body
 
         if existing_doc_id is not None:
             existing_doc = storage["documents"][existing_doc_id]
@@ -369,22 +401,13 @@ class RegistryServiceClient(ServiceClient):
                         list(content_items), existing_doc_id * 100, existing_doc_id
                     )
             storage["documents"][existing_doc_id] = existing_doc
-            resp_sections = [
-                {"section_id": s["section_id"], "type": s.get("type", "text"),
-                 "clause": s.get("clause", ""), "path": s.get("path", ""),
-                 "page": s.get("page", 1)}
-                for s in (existing_doc.get("sections") or [])
-            ]
+            if is_pipeline:
+                return _build_pipeline_response(
+                    existing_doc_id, existing_doc, existing_doc.get("sections", [])
+                )
             return {
                 "data": {
                     **existing_doc,
-                    "sections": resp_sections,
-                    "registry": {
-                        "document_id": existing_doc_id,
-                        "version_id": existing_doc.get("version_id", existing_doc_id * 10 + 1),
-                        "sections_count": len(resp_sections),
-                        "created_at": existing_doc.get("created_at", "2026-06-08T10:00:00Z"),
-                    },
                 }
             }
 
@@ -405,22 +428,11 @@ class RegistryServiceClient(ServiceClient):
                     list(content_items), doc_id * 100, doc_id
                 )
         storage["documents"][doc_id] = doc
-        resp_sections = [
-            {"section_id": s["section_id"], "type": s.get("type", "text"),
-             "clause": s.get("clause", ""), "path": s.get("path", ""),
-             "page": s.get("page", 1)}
-            for s in (doc.get("sections") or [])
-        ]
+        if is_pipeline:
+            return _build_pipeline_response(doc_id, doc, doc.get("sections", []))
         return {
             "data": {
                 **doc,
-                "sections": resp_sections,
-                "registry": {
-                    "document_id": doc_id,
-                    "version_id": doc_id * 10 + 1,
-                    "sections_count": len(resp_sections),
-                    "created_at": "2026-06-08T10:00:00Z",
-                },
             }
         }
 
@@ -503,18 +515,16 @@ class RegistryServiceClient(ServiceClient):
                 }
             ]
         return {
-            "data": {
-                "document": {
-                    "id": doc_id,
-                    "doc_code": doc.get("doc_code", ""),
-                    "title": doc.get("title", ""),
-                    "era": doc.get("era", "CURRENT"),
-                    "validity_status": doc.get("status", "active"),
-                },
-                "sections": sections,
-                "terminology": doc.get("terminology", []),
-                "references": doc.get("references", []),
-            }
+            "document": {
+                "id": doc_id,
+                "doc_code": doc.get("doc_code", ""),
+                "title": doc.get("title", ""),
+                "era": doc.get("era", "CURRENT"),
+                "validity_status": doc.get("status", "active"),
+            },
+            "sections": sections,
+            "terminology": doc.get("terminology", []),
+            "references": doc.get("references", []),
         }
 
     @classmethod
@@ -594,13 +604,22 @@ class RegistryServiceClient(ServiceClient):
     _mock_doc_seq: int = 1000
 
     async def create_document(self, document_data: dict) -> dict:
-        """Create a new document in the registry.
+        """Create or update a document in the registry.
 
-        Returns document_id, version_id, is_new_document.
+        Registry API returns:
+          mock: {"data": {"document_id": ..., ...}}
+          real: {"document_id": ..., "version_id": ..., "sections": [...], "registry": {...}}
+                 (без обёртки ``data``)
+
+        Нормализуем ответ: если ``data`` отсутствует, оборачиваем.
+        Если ``document_id`` передан в payload — это upsert существующего документа,
+        иначе — создание нового.
+
+        Returns document_id, version_id, is_new_document (через data).
         """
         RegistryServiceClient._mock_doc_seq += 1
         doc_id = RegistryServiceClient._mock_doc_seq
-        return await self.call(
+        result = await self.call(
             "POST",
             "/api/v1/registry/documents",
             mock_response={
@@ -613,6 +632,10 @@ class RegistryServiceClient(ServiceClient):
             },
             json=document_data,
         )
+        # Нормализация: реальный Registry возвращает без обёртки 'data'
+        if "data" not in result and "error" not in result and "document_id" in result:
+            result = {"data": result}
+        return result
 
     async def create_version(self, doc_id: int, version_data: dict) -> dict:
         """Create a new version of a document in the registry.
@@ -681,40 +704,42 @@ class RegistryServiceClient(ServiceClient):
         GET /api/v1/registry/documents/{doc_id}/sections
         Returns document metadata + sections[] + terminology + references.
         """
-        return await self.call(
+        result = await self.call(
             "GET",
             f"/api/v1/registry/documents/{document_id}/sections",
             mock_response={
-                "data": {
-                    "document": {
-                        "id": document_id,
-                        "doc_code": "",
-                        "title": f"Document {document_id}",
-                        "era": "CURRENT",
-                        "validity_status": "active",
-                    },
-                    "sections": [
-                        {
-                            "section_id": document_id * 100 + 1,
-                            "document_id": document_id,
-                            "parent_id": None,
-                            "clause": "1",
-                            "title": None,
-                            "level": 1,
-                            "path": "1",
-                            "page": 1,
-                            "type": "text",
-                            "content": {
-                                "text": f"Mock section content for document {document_id}.",
-                                "amendments": [],
-                            },
-                        }
-                    ],
-                    "terminology": [],
-                    "references": [],
-                }
+                "document": {
+                    "id": document_id,
+                    "doc_code": "",
+                    "title": f"Document {document_id}",
+                    "era": "CURRENT",
+                    "validity_status": "active",
+                },
+                "sections": [
+                    {
+                        "section_id": document_id * 100 + 1,
+                        "document_id": document_id,
+                        "parent_id": None,
+                        "clause": "1",
+                        "title": None,
+                        "level": 1,
+                        "path": "1",
+                        "page": 1,
+                        "type": "text",
+                        "content": {
+                            "text": f"Mock section content for document {document_id}.",
+                            "amendments": [],
+                        },
+                    }
+                ],
+                "terminology": [],
+                "references": [],
             },
         )
+        # Нормализация: реальный Registry возвращает без обёртки 'data'
+        if "data" not in result and "error" not in result and "document" in result:
+            result = {"data": result}
+        return result
 
     # --- Drafts ---
 
@@ -808,15 +833,16 @@ class RegistryServiceClient(ServiceClient):
             status=status,
             document_id=document_id,
         )
+        # Реальный ответ: {data: {id, status, previous_status, updated_at}}
         return await self.call(
             "PATCH",
             f"/api/v1/registry/drafts/{draft_id}/status",
             request_model=UpdateDraftStatusRequest,
             mock_response={
                 "data": {
-                    "draft_id": draft_id,
+                    "id": draft_id,
                     "status": status,
-                    "document_id": document_id,
+                    "previous_status": "uploaded",
                     "updated_at": "2026-06-08T10:00:00Z",
                 }
             },
@@ -830,8 +856,7 @@ class RegistryServiceClient(ServiceClient):
             f"/api/v1/registry/drafts/{draft_id}",
             mock_response={
                 "data": {
-                    "draft_id": draft_id,
-                    "deleted": True,
+                    "id": draft_id,
                     "deleted_at": "2026-06-08T10:00:00Z",
                 }
             },
@@ -849,7 +874,7 @@ class RegistryServiceClient(ServiceClient):
             f"/api/v1/registry/drafts/{draft_id}/metadata",
             mock_response={
                 "data": {
-                    "draft_id": draft_id,
+                    "id": draft_id,
                     "status": "uploaded",
                     "preview_metadata": preview_metadata,
                     "updated_at": "2026-06-08T10:00:00Z",

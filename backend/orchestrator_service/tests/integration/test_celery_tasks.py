@@ -414,6 +414,137 @@ class TestRunRegistryStep:
         assert doc_meta.get("task_id") == 106
         assert doc_meta.get("parser") == {"name": "test", "version": "1.0"}
 
+    def test_with_document_data_no_data_wrapper_breaks_doc_id(self):
+        """РЕАЛЬНЫЙ Registry возвращает ответ БЕЗ 'data'-обёртки.
+
+        Воспроизводит баг (Проблема 2a):
+        - Registry API возвращает {"document_id": 42, "version_id": "v1-42", "sections": [...]}
+          без обёртки 'data'.
+        - run_registry_step ожидает doc_result["data"]["document_id"].
+        - Из-за этого 'new_doc_id' = None, current_doc_id НЕ обновляется.
+        - sections читаются для СТАРОГО document_id (не того, что создал Registry).
+        """
+        mock_client = AsyncMock()
+        # Registry возвращает БЕЗ 'data' (как в реальном API)
+        mock_client.create_document = AsyncMock(return_value={
+            "document_id": 99,  # Registry создал doc_id=99 (новый!)
+            "version_id": "v1-99",
+            "sections": [{"section_id": 9901, "type": "text", "clause": "1"}],
+            "registry": {"document_id": 99, "version_id": "v1-99"},
+        })
+        # get_document_sections для старого doc_id (42) возвращает пусто
+        mock_client.get_document_sections = AsyncMock(return_value={
+            "data": {"sections": []},  # для doc_id=42 секций нет
+        })
+        mock_client.update_draft_status = AsyncMock(return_value={
+            "data": {"status": "approved", "document_id": 42}
+        })
+        mock_client.close = AsyncMock()
+
+        notify_completed = AsyncMock()
+
+        document_data = {
+            "content": [
+                {"clause": "1", "type": "text", "path": "1", "page": 1,
+                 "content": {"text": "Section 1"}},
+            ],
+        }
+
+        with patch(
+            "app.tasks.pipeline_formation.RegistryServiceClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_completed",
+            notify_completed,
+        ):
+            from app.tasks.pipeline_formation import run_registry_step
+
+            result = run_registry_step.run(
+                task_id=3, draft_id=DRAFT_ID, document_id=42, version_id=421,
+                document_data=document_data,
+            )
+
+        # create_document БЫЛ вызван
+        mock_client.create_document.assert_awaited_once()
+
+        # get_document_sections вызван с ИСХОДНЫМ document_id=42, а НЕ 99
+        mock_client.get_document_sections.assert_awaited_once_with(42)
+
+        # Но Registry создал документ с id=99, а sections читались для 42
+        # Поэтому sections пустые
+        notify_completed.assert_awaited_once()
+        args, _ = notify_completed.await_args
+        output = args[3]
+        # document_id остался исходным (42), не обновился на 99
+        assert output.get("registry_id") == 42
+        # sections пустые, хотя Registry создал их для doc_id=99
+        sections = output.get("sections", [])
+        assert len(sections) == 0, (
+            f"БАГ: sections пустые, потому что читались для doc_id=42, "
+            f"а не для 99 (который создал Registry)"
+        )
+
+    def test_create_document_upsert_by_draft_id(self):
+        """Registry step должен обновлять существующий документ по draft_id,
+        а НЕ создавать новый (Проблема 1: дублирование).
+
+        Сейчас run_registry_step вызывает client.create_document() без передачи
+        существующего document_id → Registry создаёт второй документ.
+        """
+        mock_client = AsyncMock()
+        # Первый вызов create_document от approve_draft (уже создал doc_id=19, draft_id=110)
+        # Второй вызов от run_registry_step с document_data — создаёт doc_id=20
+        mock_client.create_document = AsyncMock(return_value={
+            "data": {
+                "document_id": 99,  # Registry мог создать новый (в mock - upsert, в real - новый)
+                "version_id": 991,
+                "sections": [{"section_id": 9901}],
+                "registry": {"document_id": 99, "version_id": 991},
+            }
+        })
+        mock_client.get_document_sections = AsyncMock(return_value={
+            "data": {
+                "sections": [{"section_id": 9901, "document_id": 99}],
+            }
+        })
+        mock_client.update_draft_status = AsyncMock(return_value={
+            "data": {"status": "approved", "document_id": 42}
+        })
+        mock_client.close = AsyncMock()
+
+        notify_completed = AsyncMock()
+
+        with patch(
+            "app.tasks.pipeline_formation.RegistryServiceClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_completed",
+            notify_completed,
+        ):
+            from app.tasks.pipeline_formation import run_registry_step
+
+            result = run_registry_step.run(
+                task_id=3, draft_id=DRAFT_ID, document_id=42, version_id=421,
+                document_data={"content": [{"clause": "1"}]},
+            )
+
+        # create_document вызван с payload содержащим draft_id
+        mock_client.create_document.assert_awaited_once()
+        payload = mock_client.create_document.await_args[0][0]
+        assert payload.get("draft_id") == DRAFT_ID
+
+        # Mock: _mock_create_document делает upsert по draft_id
+        #       Но реальный Registry НЕ делает — создаёт новый документ
+        # В реальности: было два POST /documents → doc_id=19 и doc_id=20
+        notify_completed.assert_awaited_once()
+        args, _ = notify_completed.await_args
+        output = args[3]
+        # Проблема: registry_id в output не изменился на 99
+        # (если бы ответ был без 'data', registry_id остался бы 42)
+        # Но даже если бы обновился — Registry всё равно создал второй документ
+        logger_output = output.get("registry_id", None)
+        assert logger_output is not None
+
 
 class TestRunOcrFullStep:
     """Tests for run_ocr_full_step Celery task."""

@@ -233,10 +233,12 @@ def run_ocr_full_step(
 
         result = _run_async(_do_ocr_full())
 
+        # Реальный API возвращает без обёртки data (см. docs/api/ocr_service_api.md)
+        ocr_data = result.get("data", result)
         input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         output_data = {
-            "pages_processed": result.get("data", {}).get("pages_processed", 0),
-            "full_result": result.get("data", result),
+            "pages_processed": ocr_data.get("pages_processed", 0),
+            "full_result": ocr_data,
             "status": "completed",
         }
 
@@ -467,6 +469,7 @@ def run_registry_step(
                         )
                     doc_payload = {
                         "draft_id": draft_id,
+                        "document_id": current_doc_id,  # upsert: обновляем существующий документ, а не создаём новый
                         "document": document_data,
                     }
                     doc_result = await client.create_document(doc_payload)

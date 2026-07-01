@@ -65,7 +65,7 @@ class TestOCREndpoint:
         result = await ocr_client.process(
             task_id=1, file_key="f-mock", draft_id=42, mode="preview"
         )
-        assert "data" in result
+        assert "task_id" in result
 
         # Verify _generate_mock was called with /api/v1/parser/process
         with patch.object(
@@ -83,17 +83,15 @@ class TestOCRProcessPreview:
     """Tests for OCRServiceClient.process(mode=preview)."""
 
     @pytest.mark.asyncio
-    async def test_preview_returns_data(self, ocr_client):
-        """Preview returns a dict with data wrapper."""
+    async def test_preview_returns_task_id(self, ocr_client):
+        """Preview returns task_id and status directly (без data)."""
         result = await ocr_client.process(
             task_id=1, file_key="file-test-001", draft_id=DRAFT_ID, mode="preview"
         )
-        assert "data" in result
-        data = result["data"]
-        assert "task_id" in data
-        assert "status" in data
-        assert "preview_not_supported" in data
-        assert "metadata" in data
+        assert "task_id" in result
+        assert "status" in result
+        assert "preview_not_supported" in result
+        assert "metadata" in result
 
     @pytest.mark.asyncio
     async def test_preview_has_full_metadata(self, ocr_client):
@@ -101,7 +99,7 @@ class TestOCRProcessPreview:
         result = await ocr_client.process(
             task_id=1, file_key="file-test-001", draft_id=DRAFT_ID, mode="preview"
         )
-        metadata = result["data"]["metadata"]
+        metadata = result["metadata"]
         expected_fields = [
             "doc_code", "title", "document_type", "source_type",
             "year", "revision", "era", "jurisdiction",
@@ -116,22 +114,20 @@ class TestOCRProcessPreview:
         result = await ocr_client.process(
             task_id=1, file_key="file-key", draft_id=999, mode="preview"
         )
-        assert result["data"]["task_id"] is not None
+        assert result["task_id"] is not None
 
 
 class TestOCRProcessFull:
     """Tests for OCRServiceClient.process(mode=full)."""
 
     @pytest.mark.asyncio
-    async def test_full_returns_data(self, ocr_client):
-        """Full process returns a dict with data wrapper."""
+    async def test_full_returns_task_id(self, ocr_client):
+        """Full process returns task_id and status directly (без data)."""
         result = await ocr_client.process(
             task_id=1, file_key="file-test-001", draft_id=DRAFT_ID, mode="full"
         )
-        assert "data" in result
-        data = result["data"]
-        assert "task_id" in data
-        assert "status" in data
+        assert "task_id" in result
+        assert "status" in result
 
     @pytest.mark.asyncio
     async def test_full_contains_pages_processed(self, ocr_client):
@@ -139,5 +135,4 @@ class TestOCRProcessFull:
         result = await ocr_client.process(
             task_id=1, file_key="file-full-test", draft_id=DRAFT_ID, mode="full"
         )
-        data = result.get("data", {})
-        assert "pages_processed" in data
+        assert "pages_processed" in result

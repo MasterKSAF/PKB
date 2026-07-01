@@ -28,6 +28,7 @@ class OCRServiceClient(ServiceClient):
         self, method: str, endpoint: str, default_mock: Dict[str, Any], **kwargs
     ) -> Dict[str, Any]:
         """Generate mock OCR responses."""
+        # Реальный API Parser/OCR: все ответы без обёртки data
         if endpoint == "/api/v1/parser/process" and method == "POST":
             request_data = kwargs.get("json", {})
             file_key = request_data.get("file_key", "file-mock")
@@ -35,42 +36,38 @@ class OCRServiceClient(ServiceClient):
 
             if mode == "preview":
                 return {
-                    "data": {
-                        "task_id": "ocr-mock-preview",
-                        "status": "completed",
-                        "preview_not_supported": False,
-                        "pages_processed": 3,
-                        "metadata": {
-                            "doc_code": "ГОСТ 20868-81",
-                            "title": "Стойки установочные крепежные",
-                            "document_type": "normative",
-                            "source_type": "GOST",
-                            "year": "1981",
-                            "revision": "1",
-                            "era": "USSR",
-                            "jurisdiction": "RU",
-                            "mks_oks_code": "21.060",
-                            "okstu_code": "",
-                            "issuing_body": "Госстандарт",
-                            "udk_code": "621.882",
-                        },
-                        "quality": {
-                            "score": 0.94,
-                            "notifications": [],
-                        },
-                    }
+                    "task_id": "ocr-mock-preview",
+                    "status": "completed",
+                    "preview_not_supported": False,
+                    "pages_processed": 3,
+                    "metadata": {
+                        "doc_code": "ГОСТ 20868-81",
+                        "title": "Стойки установочные крепежные",
+                        "document_type": "normative",
+                        "source_type": "GOST",
+                        "year": "1981",
+                        "revision": "1",
+                        "era": "USSR",
+                        "jurisdiction": "RU",
+                        "mks_oks_code": "21.060",
+                        "okstu_code": "",
+                        "issuing_body": "Госстандарт",
+                        "udk_code": "621.882",
+                    },
+                    "quality": {
+                        "score": 0.94,
+                        "notifications": [],
+                    },
                 }
 
             return {
-                "data": {
-                    "task_id": f"ocr-mock-{file_key}",
-                    "status": "completed",
-                    "pages_processed": 10,
-                    "total_pages": 10,
-                    "successful_pages": 10,
-                    "low_confidence_pages": 0,
-                    "failed_pages": 0,
-                }
+                "task_id": f"ocr-mock-{file_key}",
+                "status": "completed",
+                "pages_processed": 10,
+                "total_pages": 10,
+                "successful_pages": 10,
+                "low_confidence_pages": 0,
+                "failed_pages": 0,
             }
 
         return default_mock

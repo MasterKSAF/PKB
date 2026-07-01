@@ -1,26 +1,28 @@
-# Fix: 6-польный бизнес-ключ для детекции дублей
+# Todo — Исправление mock-ответов RegistryServiceClient под реальные API
 
-## B1 — schema + client + mock
-- [x] 1.1 Добавить `title_hash_sha256: Optional[str]` в `CheckUniquenessRequest`
-- [x] 1.2 Обновить `check_uniqueness()` — принимать и передавать `title_hash_sha256`
-- [x] 1.3 Скорректировать mock_response в `check_uniqueness()` — возвращать `title_hash_sha256`
+## Контекст
+Все mock_response в RegistryServiceClient не соответствуют формату реальных ответов Registry API.
+Из 12 endpoint'ов 5 имеют критические расхождения (без `data`, другие имена полей).
 
-## B2 — Исправить _mock_check_uniqueness
-- [x] 2.1 Заменить сравнение `document_key == title` на проверку `title_hash_sha256`
-- [x] 2.2 Вернуть `title_hash_sha256` в ответе мока
+## План
 
-## B3 — create_draft endpoint
-- [x] 3.1 Вычислять 6-польный `title_hash_6field` по формуле
-- [x] 3.2 Вычислять правильный `title_key` (6-польный) — поле `okstu_code` вместо `jurisdiction`
-- [x] 3.3 Передавать `title_hash_6field` в `check_uniqueness()`
-- [x] 3.4 Сохранить `title_hash` (SHA-256(title)) для обратной совместимости в DraftCreateResponse
+### Phase 1: Исправление mock-методов (_mock_*)
+- [x] 1. `_mock_create_document` — без `data` для pipeline-формата (есть `document` в payload)
+- [x] 2. `_mock_get_document_sections` — без `data`
+- [x] 3. `_mock_update_draft_status` — `draft_id`→`id`, +`previous_status`, -`document_id`
+- [x] 4. `_mock_update_draft_metadata` — `draft_id`→`id`
+- [x] 5. `_mock_delete_draft` — `draft_id`→`id`, -`deleted`
 
-## B4 — Тесты
-- [x] 4.1 `test_check_uniqueness` — добавить `title_hash_sha256` в параметры
-- [x] 4.2 `test_check_uniqueness_duplicate` — проверить `is_duplicate=True` при совпадении хеша
-- [x] 4.3 `test_drafts_boundaries.py` — E2E-тест: две загрузки с одинаковыми metadata → `is_duplicate_document=True`
-- [x] 4.4 `test_drafts.py` — обновить тесты title_key под новую формулу
+### Phase 2: Исправление публичных методов (mock_response + нормализация)
+- [x] 6. `create_document` — нормализация уже есть, mock_response оставлен
+- [x] 7. `get_document_sections` — mock_response без `data`, добавлена нормализация
+- [x] 8. `update_draft_status` — mock_response с `id`, `previous_status`
+- [x] 9. `update_draft_metadata` — mock_response с `id`
+- [x] 10. `delete_draft` — mock_response с `id`, без `deleted`
 
-## B5 — Финальные проверки
-- [x] 5.1 Прогнать тесты — 701 passed, 2 skipped, 1 xfailed
-- [x] 5.2 Финальный обзор правок
+### Phase 3: Обновление тестов
+- [x] 11. Исправлены тесты: `test_update_draft_status_with_document_id`, `test_delete_draft`
+- [x] 12. Проверена регрессия: 686 passed, 0 failed
+
+### Phase 4: Документация
+- [x] 13. Зафиксировать изменения в specificity.md (раздел 2.6)

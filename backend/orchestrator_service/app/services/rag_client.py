@@ -142,7 +142,11 @@ class RAGBuilderClient(ServiceClient):
         return await self.call(
             "DELETE",
             f"/api/v1/rag/build/{document_id}",
-            mock_response={"deleted_count": 0, "status": "completed"},
+            mock_response={
+                "document_id": document_id,
+                "deleted_count": 128,
+                "status": "completed",
+            },
         )
 
     async def check_index(self, document_id: str) -> Dict[str, Any]:

@@ -125,7 +125,7 @@ class TestParserClientDraftId:
         )
         await client.close()
         assert result is not None
-        assert "data" in result
+        assert "task_id" in result
 
     async def test_parser_client_request_model_validates(self):
         """Parser client validates request body through Pydantic."""
@@ -159,7 +159,7 @@ class TestOcrClientDraftId:
         )
         await client.close()
         assert result is not None
-        assert "data" in result
+        assert "task_id" in result
 
     async def test_ocr_client_request_model_validates(self):
         """OCR client validates request body through Pydantic."""

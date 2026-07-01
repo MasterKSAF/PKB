@@ -147,6 +147,53 @@ registry_service_api.md, db_diagrams.md) этого статуса не было
 - При ошибке RAG или `integrity_ok=false` → документ остаётся в `validating`
 - Статусы `validating`/`active` добавлены во всю документацию
 
+### 2.5. Формат ответа Registry API vs mock — create_document (01.07, ИСПРАВЛЕНО)
+
+Registry API возвращает `POST /documents` без обёртки `data`:
+```json
+{"document_id": 20, "version_id": "v1-20", "sections": [...], "registry": {...}}
+```
+А mock-генератор возвращает с обёрткой: `{"data": {...}}`.
+
+**Последствия:**
+1. `run_registry_step` не обновлял `current_doc_id` (ждал `data.document_id`)
+2. `create_document` создавал второй документ (вместо upsert существующего)
+3. Sections читались для неверного doc_id → registry_creation_output.sections = None
+4. Даже Priority 3 (76 секций из конвертера) не сохранял их в Registry
+
+**Исправлено (01.07):**
+- `create_document` нормализует ответ: если нет `data` но есть `document_id` → оборачивает
+- `run_registry_step` передаёт `document_id` в payload `create_document` (upsert)
+- `_mock_create_document` поддерживает upsert по `document_id` (в дополнение к `draft_id`)
+- `_on_full_step_completed` (Priority 3) сохраняет sections в Registry через upsert
+
+### 2.6. Все mock-ответы приведены к реальным API (01.07, ИСПРАВЛЕНО)
+
+Проведена сверка моков всех клиентов со спецификациями в `docs/api/`. Исправлены 8 endpoint'ов.
+
+**Registry (5 исправлений):**
+
+| Endpoint | Формат реального API | Было | Стало |
+|----------|---------------------|------|-------|
+| `POST /documents` (pipeline) | `{document_id, version_id, sections, registry}` без `data` | `{data: {document_id, ...}}` | `{document_id,...}` (без `data`)|
+| `GET /documents/{id}/sections` | `{document, sections, terminology, references}` без `data` | `{data: {document, ...}}` | `{document,...}` (без `data`)|
+| `PATCH /drafts/{id}/status` | `{data: {id, status, previous_status, updated_at}}` | `{data: {draft_id, status, document_id}}` | `{data: {id, status, previous_status}}` |
+| `PATCH /drafts/{id}/metadata` | `{data: {id, status, preview_metadata}}` | `{data: {draft_id, ...}}` | `{data: {id, ...}}` |
+| `DELETE /drafts/{id}` | `{data: {id, deleted_at}}` | `{data: {draft_id, deleted}}` | `{data: {id, deleted_at}}` |
+
+**Parser/OCR (2 исправления):**
+- `_generate_mock` возвращал `{"data": {...}}`, а реальный API (`docs/api/parser_service_api.md`) — прямые поля
+- Исправлено: убрана обёртка `data` из `parser_client.py` и `ocr_client.py`
+
+**RAG Builder (1 исправление):**
+- `delete_index` — mock_response не содержал `document_id`, реальный API возвращает
+- Исправлено: добавлен `document_id`
+
+**Добавлена нормализация:**
+- `create_document` — если ответ без `data` но с `document_id`, оборачивает в `data`
+- `get_document_sections` — если ответ без `data` но с `document`, оборачивает в `data`
+- Тесты обновлены под реальные форматы (686 passed)
+
 ## 3. Технические долги
 
 ### 3.1. Integration tests

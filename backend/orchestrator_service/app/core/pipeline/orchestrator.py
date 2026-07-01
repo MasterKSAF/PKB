@@ -899,6 +899,27 @@ class PipelineOrchestrator:
                 for s in sections:
                     s['document_id'] = document_id
 
+                # Сохраняем sections в Registry (upsert по document_id)
+                # Если Registry не поддерживает — логируем предупреждение
+                try:
+                    reg_save = RegistryServiceClient()
+                    await reg_save.create_document({
+                        "document_id": document_id,
+                        "draft_id": task.draft_id,
+                        "document": {"sections": sections},
+                    })
+                    await reg_save.close()
+                    logger.info(
+                        f"Saved {len(sections)} sections to Registry via upsert",
+                        extra={"task_id": task.id, "draft_id": task.draft_id,
+                               "document_id": document_id},
+                    )
+                except Exception as save_err:
+                    logger.warning(
+                        f"Failed to save sections to Registry: {save_err}",
+                        extra={"draft_id": task.draft_id, "document_id": document_id},
+                    )
+
             logger.info(
                 "Enqueuing RAG index step",
                 extra={
