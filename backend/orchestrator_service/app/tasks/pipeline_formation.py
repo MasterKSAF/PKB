@@ -421,8 +421,11 @@ def run_registry_step(
         document_data: Converter output document (with content/sections).
                        If provided, saves full document to Registry via create_document
                        and reads back sections with assigned section_ids.
-        metadata: Document metadata (doc_code, title, era, ...).
-                  Nested inside document payload before sending if document_data is present.
+                       Already contains document metadata (doc_code, title, era, ...)
+                       inside document_data["metadata"].
+        metadata: Converter response metadata (schema, task_id, created_at, parser).
+                  Merged into document_data["metadata"] — document metadata takes priority
+                  for overlapping keys so doc_code/title are never lost.
     """
     if trace_id:
         set_trace_id(trace_id)
@@ -442,8 +445,26 @@ def run_registry_step(
                     )
                     # Build payload in Registry format (section 3.3 API spec)
                     # Nest metadata inside document if provided separately
+                    # Merge: response_metadata (schema/task_id/parser) 
+                    # with document metadata (doc_code/title/era/source_type)
+                    # preserving both — they have different key sets
                     if metadata:
-                        document_data["metadata"] = metadata
+                        existing_doc_meta = document_data.get("metadata", {})
+                        document_data["metadata"] = {**metadata, **existing_doc_meta}
+
+                    # Fallback: если конвертер не извлёк doc_code,
+                    # генерируем из title (как делает approve_draft)
+                    doc_meta = document_data.get("metadata", {})
+                    if not doc_meta.get("doc_code"):
+                        title = doc_meta.get("title", "") or ""
+                        fallback_code = title.strip().upper().replace(" ", "-").replace("/", "-")[:50]
+                        if not fallback_code:
+                            fallback_code = f"DOC-{draft_id}"
+                        doc_meta["doc_code"] = fallback_code
+                        logger.info(
+                            f"Converter returned empty doc_code, generated fallback: {fallback_code}",
+                            extra={"task_id": task_id, "draft_id": draft_id},
+                        )
                     doc_payload = {
                         "draft_id": draft_id,
                         "document": document_data,

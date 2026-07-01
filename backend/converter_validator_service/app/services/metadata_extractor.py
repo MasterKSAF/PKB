@@ -54,6 +54,11 @@ _SNIP_CODE_RE = re.compile(
 _DRAWING_CODE_RE = re.compile(
     r"\b([А-ЯA-Z]{2,6}\.\d{3}\.\d{3})\b",
 )
+# Цифровые номера чертежей вида: 2-020101-004, 2-020101-007-E
+_DRAWING_NUM_CODE_RE = re.compile(
+    r"\b(\d{1,2}-\d{6}-\d{3}(?:-[A-ZА-Я])?)\b",
+    re.IGNORECASE,
+)
 _YEAR_IN_CODE_RE = re.compile(r"-(\d{2,4})\s*$")
 _MKS_OKS_RE = re.compile(
     r"(?:МКС|ОКС|ICS)\s*[:\s]*?(\d{2}(?:\.\d{3}(?:\.\d{2})?)?(?:-\d{2})?)",
@@ -149,6 +154,10 @@ def _find_doc_code(texts: list[str]) -> str | None:
             return match.group(1)
         # Чертежи (формат XXX.XXX.XXX)
         match = _DRAWING_CODE_RE.search(text)
+        if match:
+            return match.group(1)
+        # Чертежи (цифровой формат X-XXXXXX-XXX, X-XXXXXX-XXX-E)
+        match = _DRAWING_NUM_CODE_RE.search(text)
         if match:
             return match.group(1)
     return None

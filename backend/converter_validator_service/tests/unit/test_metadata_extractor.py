@@ -340,3 +340,35 @@ def test_extract_drawing_from_content():
     meta = extract_preview_metadata(raw)
     assert meta["doc_code"] == "ПКБ.123.456"
     assert meta["source_type"] is not None
+
+
+def test_extract_drawing_num_from_content():
+    """Цифровые номера чертежей X-XXXXXX-XXX извлекаются через _DRAWING_NUM_CODE_RE."""
+    raw = _make_raw_json(
+        file_name="doc.pdf",
+        blocks=[{"number": 1, "type": "paragraph", "content": "Чертёж 2-020101-004"}],
+    )
+    meta = extract_preview_metadata(raw)
+    assert meta["doc_code"] == "2-020101-004"
+    assert meta["source_type"] is not None
+
+
+def test_extract_drawing_num_with_edition():
+    """Цифровые номера с суффиксом -E (редакция)."""
+    raw = _make_raw_json(
+        file_name="doc.pdf",
+        blocks=[{"number": 1, "type": "paragraph", "content": "2-020101-007-E"}],
+    )
+    meta = extract_preview_metadata(raw)
+    assert meta["doc_code"] == "2-020101-007-E"
+
+
+def test_extract_drawing_num_from_filename():
+    """Цифровой номер извлекается из имени файла, когда блоков нет."""
+    raw = _make_raw_json(
+        file_name="2-020101-004.pdf",
+        blocks=[],
+    )
+    meta = extract_preview_metadata(raw)
+    assert meta["doc_code"] == "2-020101-004"
+    assert meta["title"] is not None

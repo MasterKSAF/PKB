@@ -347,6 +347,73 @@ class TestRunRegistryStep:
             "task_id": 3,
         }
 
+    def test_with_metadata_merge_preserves_doc_metadata(self):
+        """Registry step merges metadata instead of overwriting:
+        document_data.metadata (doc_code/title) must survive even when
+        'metadata' param (response_metadata) doesn't have doc_code.
+        """
+        mock_client = AsyncMock()
+        mock_client.create_document = AsyncMock(return_value={
+            "data": {"document_id": 42, "version_id": 421, "sections": [],
+                     "registry": {"sections_count": 0}},
+        })
+        mock_client.get_document_sections = AsyncMock(return_value={
+            "data": {"sections": []},
+        })
+        mock_client.update_draft_status = AsyncMock(return_value={
+            "data": {"status": "approved", "document_id": 42}
+        })
+        mock_client.close = AsyncMock()
+
+        notify_completed = AsyncMock()
+
+        # document_data уже содержит metadata с doc_code (из конвертера)
+        document_data = {
+            "source": {"file_name": "f-test.pdf", "page_count": 5},
+            "metadata": {
+                "doc_code": "22786-77",
+                "title": "ГОСТ 22786-77 Трубы",
+                "era": "USSR",
+                "source_type": "GOST",
+            },
+            "content": [],
+        }
+        # metadata = response_metadata (БЕЗ doc_code — только служебные поля)
+        response_metadata = {
+            "schema": "validated_v3",
+            "task_id": 106,
+            "created_at": "2026-07-01T08:16:08Z",
+            "parser": {"name": "test", "version": "1.0"},
+        }
+
+        with patch(
+            "app.tasks.pipeline_formation.RegistryServiceClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_completed",
+            notify_completed,
+        ):
+            from app.tasks.pipeline_formation import run_registry_step
+
+            run_registry_step.run(
+                task_id=3, draft_id=DRAFT_ID, document_id=42, version_id=421,
+                document_data=document_data, metadata=response_metadata,
+            )
+
+        # Verify: create_document получил metadata с doc_code
+        mock_client.create_document.assert_awaited_once()
+        payload = mock_client.create_document.await_args[0][0]
+        doc_meta = payload["document"]["metadata"]
+
+        # doc_code/title не потерялись
+        assert doc_meta.get("doc_code") == "22786-77"
+        assert doc_meta.get("title") == "ГОСТ 22786-77 Трубы"
+        assert doc_meta.get("era") == "USSR"
+        # response_metadata поля тоже сохранились
+        assert doc_meta.get("schema") == "validated_v3"
+        assert doc_meta.get("task_id") == 106
+        assert doc_meta.get("parser") == {"name": "test", "version": "1.0"}
+
 
 class TestRunOcrFullStep:
     """Tests for run_ocr_full_step Celery task."""

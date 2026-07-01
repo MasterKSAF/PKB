@@ -257,27 +257,28 @@ registry_creation completed → enqueue rag_index`
 
 **Важно:** Для PDF с CID-шрифтами/закодированным текстом конвертер не создаёт секции. Тест корректно отражает это — верификация невозможна, т.к. текст не извлекается ни самим конвертером, ни OCR.
 
-### D1. Детекция дублей при загрузке не работает (30.06)
+### D1. Детекция дублей — ИСПРАВЛЕНО (01.07)
+
+Дубли детектятся: HTTP 409 с `DUPLICATE_FILE` на повторную загрузку.
+Подтверждено на `2-020101-004.pdf` и `gost_22786-77.pdf`.
+
+### R6. Pipeline registry_creation — 400 Bad Request (01.07, НОВЫЙ)
 
 **Статус:** НЕ ИСПРАВЛЕНО
 
-**Что не работает:**
-- Повторная загрузка того же файла создаёт новый draft (не HTTP 409)
-- 2/2 PDF протестированы (`2-020101-004.pdf`, `gost_22786-77.pdf`) — оба загружены дважды
+**Симптом:** pipeline застревает — registry_creation в pending, rag_index не стартует.
+Task переходит в failed через 300+ сек.
 
 **Корневая причина (2 уровня):**
 
-1. `CheckUniquenessRequest` в `orchestrator_service/app/schemas/requests.py:52-59` НЕ включает `file_hash_sha256`. Передаются только: `title`, `doc_code`, `era`, `source_type`, `file_size_bytes`.
+1. **Конвертер:** `_find_doc_code()` не находит код для чертежных номеров вида `2-020101-004` (regex `_DRAWING_CODE_RE` ожидает буквенный префикс). `doc_code = ""`.
 
-2. `check_document_uniqueness` в `registry_service/api/v1/crud/document.py:326-385`:
-   - Ищет только по `Document` (не Draft) — файл ещё не проиндексирован, искать негде
-   - `is_duplicate_file` хардкодно `False` (строка 379)
-   - Не использует file_hash — только title_hash (из метаданных)
+2. **Orchestrator `run_registry_step`:** перезаписывает `document_data["metadata"]` (где есть doc_code от конвертера) на `response_metadata` (где только schema/task_id/parser — БЕЗ doc_code). Это вторая причина — даже если конвертер нашёл doc_code, он теряется.
 
 **Где должно быть:**
-- Orchestrator: в `create_draft()` перед `check_uniqueness` передавать `file_hash_sha256`
-- Registry: `check_document_uniqueness` — добавить поиск по Draft.file_hash_sha256
-- Registry: `is_duplicate_file` — вычислять по факту: есть ли Draft/Document с таким file_hash в активном статусе
+- `_DRAWING_CODE_RE` — добавить паттерн для номеров вида `X-XXXXXX-XXX(-E)`
+- `run_registry_step`: не перезатирать metadata целиком, а сливать (merge), приоритет отдавая `document_data["metadata"]`
+- Или: конвертер в response_metadata должен включать doc_code/title
 
 ### R4. Документы застревают в validating после pipeline
 
@@ -285,16 +286,36 @@ Orchestrator намеренно ставит статус `validating`. Пере
 
 ### B4. approve (decide) не доходит до Orchestrator — Gateway mock (30.06)
 
-**Статус:** НЕ ИСПРАВЛЕНО
+**Статус:** НЕ ИСПРАВЛЕНО, но тест 30.06 показал, что pipeline прошёл через Orchestrator (реальные celery-задачи). Возможно проявляется только в GATEWAY_MODE=mock или race condition.
 
-**Симптом:** PATCH /api/v1/drafts/{id}/decide с action=approve возвращает 200 OK, но pipeline не запускается — full_ocr step зависает в `running`.
+**Симптом:** PATCH /api/v1/drafts/{id}/decide с action=approve возвращает 200 OK, но pipeline не запускается.
 
 **Корневая причина:**
-- Gateway (`mocks/handlers/orch_routes.py:580-673`) обрабатывает `decide_draft` локально в памяти, вместо проксирования в Orchestrator
-- Создаёт document в `_documents[new_doc_id]`, но не вызывает `orchestrator.approve_draft()`
-- Celery-задачи (`run_parser_full_step.delay`) никогда не диспатчатся
-- Orchestrator не видит approve, pipeline stage остаётся `decision`, steps в `pending`
+- Gateway (`mocks/handlers/orch_routes.py:580-673`) обрабатывает `decide_draft` локально в памяти
+
+### R5. Секции не сохраняются в Registry (30.06, НОВАЯ)
+
+**Статус:** НЕ ИСПРАВЛЕНО
+
+**Симптом:** Pipeline завершается completed, но `GET /registry/documents/{id}/sections` → 0 sections, bundle document_id=None.
+
+**Корневая причина:**
+1. Upload создаёт документ в Registry (bare, без секций)
+2. Pipeline → `registry_creation` → `POST /api/v1/registry/documents` → **409 Conflict** (документ уже есть)
+3. Код ловит 409 (`Draft {id} already approved, treating registry step as completed (idempotent)`) и **пропускает сохранение секций**
+4. Секции передаются в RAG Builder через `output_data`, но Registry их не видит
 
 **Где должно быть:**
-- Gateway должен проксировать PATCH /api/v1/drafts/{id}/decide в Orchestrator (как делает POST /api/v1/drafts)
-- Или убрать mock-хендлер для real-режима (GATEWAY_MODE=real)
+- При 409 в `registry_creation` нужно не пропускать, а _обновлять_ документ в Registry (PATCH с sections)
+- Или отложить создание документа в Registry до pipeline (не создавать при upload)
+
+### S1. Search 500 — bbox строка вместо списка (30.06, НОВАЯ)
+
+**Статус:** НЕ ИСПРАВЛЕНО
+
+**Симптом:** `POST /api/v1/rag/search` → HTTP 500: `Input should be a valid list [type=list_type, input_value='[0.255, 0.595, 0.786, 0.631]', input_type=str]`
+
+**Корневая причина:** Конвертер/парсер сериализует `bbox` как JSON-строку, Pydantic ожидает list.
+
+**Где должно быть:**
+- Конвертер должен передавать `bbox` как список чисел, а не строку
