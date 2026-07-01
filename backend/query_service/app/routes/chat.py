@@ -9,7 +9,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
 from ..config import get_settings
 from ..db import get_db, get_session_factory
 from ..models import ChatSession, ChatMessage, ChatSource, ChatExport
@@ -71,7 +70,7 @@ def _source_dict(src: ChatSource) -> dict:
     }
 
 
-def _msg_dict(m: ChatMessage) -> dict:
+def _msg_dict(m: ChatMessage, include_sources: bool = True) -> dict:
     base = {
         "message_id": m.message_id,
         "role": m.role,
@@ -80,7 +79,7 @@ def _msg_dict(m: ChatMessage) -> dict:
         "timestamp": m.timestamp.isoformat(),
     }
     if m.role == "assistant":
-        base["sources"] = [_source_dict(src) for src in m.sources]
+        base["sources"] = [_source_dict(src) for src in m.sources] if include_sources else []
         base["processing_time_ms"] = m.processing_time_ms
         base["enrichment_skipped"] = m.enrichment_skipped
         base["warnings"] = m.warnings or []
@@ -271,23 +270,22 @@ async def search_messages(
     if not s:
         raise HTTPException(status_code=404, detail={"error": {"code": "SESSION_NOT_FOUND", "message": "Сессия не найдена", "details": {}}})
 
-    q = (
-        select(ChatMessage)
-        .options(selectinload(ChatMessage.sources))
-        .where(
-            ChatMessage.session_id == session_id,
-            ChatMessage.status.in_(_FINAL_STATUSES),
-            ChatMessage.content.ilike(f"%{body.query}%"),
-        )
-        .order_by(ChatMessage.timestamp.desc())
-    )
+    where_clause = [
+        ChatMessage.session_id == session_id,
+        ChatMessage.status.in_(_FINAL_STATUSES),
+        ChatMessage.content.ilike(f"%{body.query}%"),
+    ]
+    total = (await db.execute(select(func.count()).select_from(ChatMessage).where(*where_clause))).scalar_one()
 
     _t0 = time.monotonic()
-    all_rows = (await db.execute(q)).scalars().all()
+    rows = (await db.execute(
+        select(ChatMessage)
+        .where(*where_clause)
+        .order_by(ChatMessage.timestamp.desc())
+        .limit(body.limit)
+        .offset(body.offset)
+    )).scalars().all()
     _db_ms = int((time.monotonic() - _t0) * 1000)
-
-    total = len(all_rows)
-    page_rows = all_rows[body.offset: body.offset + body.limit]
 
     page = body.offset // body.limit + 1 if body.limit else 1
 
@@ -305,7 +303,7 @@ async def search_messages(
 
     return MessageSearchResponse(
         session_id=session_id,
-        results=[_msg_dict(m) for m in page_rows],
+        results=[_msg_dict(m, include_sources=False) for m in rows],
         meta=MessageSearchMeta(total=total, page=page, page_size=body.limit),
     )
 
