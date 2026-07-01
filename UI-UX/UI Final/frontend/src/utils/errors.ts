@@ -37,7 +37,9 @@ export const getUserFacingApiError = (
 
   let message = serverMessage;
 
-  if (code.includes('DUPLICATE')) {
+  if (code === 'DUPLICATE_IN_PROGRESS') {
+    message = 'Документ уже отправлен на обработку. Дождитесь завершения.';
+  } else if (code.includes('DUPLICATE')) {
     message = 'Такой документ уже загружен или находится в обработке.';
   } else if (status === 401) {
     message = 'Сессия истекла. Войдите в систему повторно.';

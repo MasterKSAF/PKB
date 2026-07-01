@@ -89,47 +89,19 @@ def ensure_services(service_set: str = "all"):
         services = _APP_SERVICES_ALL[:]
 
     svc_str = " ".join(services)
-    print(f"\n  >>> RESTART SERVICES: {svc_str}")
+    print(f"\n  >>> BUILD & UP: {svc_str}")
     sys.stdout.flush()
 
-    # ─── Step 1: Stop old containers ─────────────────────────────────────
+    # ─── Step 1: Rebuild images ──────────────────────────────────────────
     code, out, err = _subp(
-        ["docker", "compose", "-f", compose_file, "rm", "-sf"] + services,
-        project_dir, timeout=60,
+        ["docker", "compose", "-f", compose_file, "build"] + services,
+        project_dir, timeout=300,
     )
 
-    # ─── Step 2: Start fresh containers ──────────────────────────────────
-    code, out, err = _subp(
-        ["docker", "compose", "-f", compose_file, "up", "-d"] + services,
-        project_dir, timeout=120,
-    )
-    if code != 0:
-        print(f"  [WARN] Start failed (code={code}): {err[:200]}")
-        sys.stdout.flush()
-    else:
-        print(f"  [OK] Services restarted")
-        sys.stdout.flush()
-
-    # ─── Step 3: Wait for healthy ────────────────────────────────────────
-    import time
-    for svc in services:
-        for _ in range(30):
-            code, out, _ = _subp(
-                ["docker", "inspect", "-f", "{{.State.Health.Status}}", f"pkb-{svc}"],
-                project_dir, timeout=10,
-            )
-            status = out.strip() if out else ""
-            if status == "healthy":
-                break
-            elif not status or status == "unknown":
-                # Сервис без healthcheck или не запущен — пропускаем
-                break
-            time.sleep(2)
-
-    # ─── Step 4: Clean DB data ───────────────────────────────────────────
+    # ─── Step 2: Clean DB data ───────────────────────────────────────────
     _clean_database()
 
-    # ─── Step 5: Clean Minio data ────────────────────────────────────────
+    # ─── Step 3: Clean Minio data ────────────────────────────────────────
     _clean_minio()
 
     print(f"  [OK] Test environment ready")

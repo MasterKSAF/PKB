@@ -1175,7 +1175,8 @@ export const KnowledgeProcessing: React.FC = () => {
   const { activeKnowledgeProcessingSection, themeMode, workMode, activeTab, setActiveTab } = useUIStore();
   const queryClient = useQueryClient();
   const isLight = themeMode === 'light';
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isSubmittingRef = useRef(false);
   const previewTimersRef = useRef<number[]>([]);
   const activeDraftDetailsRequestRef = useRef('');
 
@@ -1615,6 +1616,8 @@ export const KnowledgeProcessing: React.FC = () => {
   };
 
   const handleCreateDraftFromFiles = async () => {
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     if (!selectedFiles.length) {
       setNotice('Сначала выберите файлы для обработки.');
       return;
@@ -1639,6 +1642,7 @@ export const KnowledgeProcessing: React.FC = () => {
         } catch (error: any) {
           failedCount += 1;
           console.error('[handleCreateDraftFromFiles] upload failed:', error);
+          isSubmittingRef.current = false;
           const errorMessage = getUserFacingApiError(error, 'Не удалось отправить файл на сервер.');
           updateDraft(id, {
             status: 'failed',
@@ -1661,6 +1665,7 @@ export const KnowledgeProcessing: React.FC = () => {
           : 'Черновик создан и отправлен на проверку.'
         : `Черновики созданы: ${filesToUpload.length - failedCount} из ${filesToUpload.length}.`,
     );
+    isSubmittingRef.current = false;
   };
 
   const handleCreateDraft = async () => {
@@ -2419,7 +2424,7 @@ export const KnowledgeProcessing: React.FC = () => {
                 variant="outlined"
                 startIcon={<PlayCircle size={16} />}
                 onClick={() => void handleCreateDraft()}
-                disabled={!selectedFiles.length || hasMetadataValidationErrors}
+                disabled={!selectedFiles.length || hasMetadataValidationErrors || isSubmittingRef.current}
               >
                 {selectedFiles.length > 1 ? 'Создать черновики' : 'Создать черновик'}
               </Button>

@@ -1947,16 +1947,21 @@ def create_draft(
     """POST /registry/drafts - Создать запись черновика"""
     log_event('INFO', '/registry/drafts', None, payload.model_dump())
     try:
-        # Проверка дубликата: draft с таким document_key уже существует
+        # Проверка дубликата: активный draft с таким document_key уже существует
         if payload.document_key:
+            active_statuses = ('uploaded', 'previewing', 'ready_for_approve', 'validation')
             existing = db.query(Draft).filter(
                 Draft.document_key == payload.document_key,
-                Draft.status.notin_(['deleted']),
+                Draft.status.in_(active_statuses),
             ).first()
             if existing:
                 raise HTTPException(
                     status_code=409,
-                    detail={'error': {'code': 'DUPLICATE_DRAFT', 'message': 'Draft with this document_key already exists'}},
+                    detail={'error': {
+                        'code': 'DUPLICATE_IN_PROGRESS',
+                        'message': 'Активный черновик с таким document_key уже существует',
+                        'details': {'existing_draft_id': existing.draft_id},
+                    }},
                 )
 
         draft = draft_crud.create_draft(

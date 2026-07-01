@@ -571,9 +571,13 @@ class RegistryServiceClient(ServiceClient):
         file_hash = body.get("file_hash_sha256")
         is_duplicate = False
         is_duplicate_file = False
+        is_duplicate_document = False
+        existing_draft_id = None
+        existing_document_id = None
         candidates = []
 
         all_entries = cls._all_drafts(storage) + cls._all_documents(storage)
+        active_statuses = ('uploaded', 'previewing', 'ready_for_approve', 'validation')
 
         for d in all_entries:
             # Title-based duplicate по 6-польному бизнес-ключу
@@ -581,9 +585,17 @@ class RegistryServiceClient(ServiceClient):
                 is_duplicate = True
                 candidates.append(d)
 
-            # File-hash based duplicate
+            # File-hash based duplicate — активный черновик
             if file_hash and d.get("file_hash_sha256") == file_hash:
-                is_duplicate_file = True
+                status = d.get("status", "")
+                if status in active_statuses:
+                    is_duplicate_file = True
+                    existing_draft_id = d.get("draft_id") or d.get("id")
+                elif status in ('approved', 'discarded', 'failed'):
+                    doc_id = d.get("registry_document_id") or d.get("document_id")
+                    if doc_id:
+                        is_duplicate_document = True
+                        existing_document_id = doc_id
                 if d not in candidates:
                     candidates.append(d)
 
@@ -591,6 +603,9 @@ class RegistryServiceClient(ServiceClient):
             "data": {
                 "is_duplicate": is_duplicate,
                 "is_duplicate_file": is_duplicate_file,
+                "is_duplicate_document": is_duplicate_document,
+                "existing_draft_id": existing_draft_id,
+                "existing_document_id": existing_document_id,
                 "candidates": candidates,
                 "title_hash_sha256": title_hash,
             }

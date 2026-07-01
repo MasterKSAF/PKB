@@ -357,12 +357,36 @@ def check_document_uniqueness(
         ).all()
 
     # Проверяем Drafts с таким же document_key (file_hash)
-    draft_duplicate = None
+    # Активные черновики (в обработке) — блокируем 409
+    draft_in_progress = None
+    existing_draft_id = None
+    existing_document_id = None
     if file_hash_sha256:
-        draft_duplicate = db.query(Draft).filter(
+        active_statuses = ('uploaded', 'previewing', 'ready_for_approve', 'validation')
+        draft_in_progress = db.query(Draft).filter(
             Draft.document_key == file_hash_sha256,
-            Draft.status.notin_(['deleted']),
+            Draft.status.in_(active_statuses),
         ).first()
+        if draft_in_progress:
+            existing_draft_id = draft_in_progress.draft_id
+
+        # Проверяем терминальные черновики (уже принят/discarded)
+        # и Documents с таким же file_hash_sha256
+        if not draft_in_progress:
+            existing_doc_by_hash = db.query(Document).filter(
+                Document.file_hash_sha256 == file_hash_sha256,
+            ).first()
+            if existing_doc_by_hash:
+                existing_document_id = existing_doc_by_hash.id
+            else:
+                # Fallback: проверяем черновики с терминальным статусом
+                terminal_draft = db.query(Draft).filter(
+                    Draft.document_key == file_hash_sha256,
+                    Draft.status.in_(('approved', 'discarded', 'failed')),
+                    Draft.registry_document_id.isnot(None),
+                ).first()
+                if terminal_draft:
+                    existing_document_id = terminal_draft.registry_document_id
 
     seen_ids = set()
     candidates: List[Dict[str, Any]] = []
@@ -383,11 +407,15 @@ def check_document_uniqueness(
         })
 
     is_duplicate = any(c.get('status') in duplicate_statuses for c in candidates)
-    is_duplicate_file = draft_duplicate is not None
+    is_duplicate_file = draft_in_progress is not None
+    is_duplicate_document = existing_document_id is not None
 
     return {
         'is_duplicate': is_duplicate,
         'is_duplicate_file': is_duplicate_file,
+        'is_duplicate_document': is_duplicate_document,
+        'existing_draft_id': existing_draft_id,
+        'existing_document_id': existing_document_id,
         'candidates': candidates,
         'file_hash_sha256': file_hash_sha256,
         'title_hash_sha256': title_hash,
