@@ -15,12 +15,21 @@ class ProjectResponse(BaseModel):
     updated_at: datetime
 
 
+class ProjectSessionItem(BaseModel):
+    session_id: int
+    title: str | None
+    last_message_preview: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class ProjectListItem(BaseModel):
     project_id: int
     code: str | None
     name: str
     status: str
     created_at: datetime
+    sessions: list[ProjectSessionItem] = Field(default_factory=list)
 
 
 class ProjectListMeta(BaseModel):

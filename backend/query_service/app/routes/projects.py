@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,7 +9,7 @@ from ..db import get_db
 from ..models import ChatProject
 from ..schemas import (
     CreateProjectRequest, UpdateProjectRequest,
-    ProjectResponse, ProjectListItem, ProjectListMeta, ProjectListResponse,
+    ProjectResponse, ProjectListItem, ProjectSessionItem, ProjectListMeta, ProjectListResponse,
     DeleteProjectResponse,
 )
 from ..services.auth import get_current_user
@@ -71,11 +72,34 @@ async def list_projects(
 
     total = (await db.execute(select(func.count()).select_from(q.subquery()))).scalar_one()
     rows = (await db.execute(
-        q.order_by(ChatProject.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+        q.options(selectinload(ChatProject.sessions))
+        .order_by(ChatProject.created_at.desc())
+        .offset((page - 1) * page_size).limit(page_size)
     )).scalars().all()
 
+    items = []
+    for p in rows:
+        active_sessions = [s for s in p.sessions if s.deleted_at is None]
+        items.append(ProjectListItem(
+            project_id=p.project_id,
+            code=p.code,
+            name=p.name,
+            status=p.status,
+            created_at=p.created_at,
+            sessions=[
+                ProjectSessionItem(
+                    session_id=s.session_id,
+                    title=s.title,
+                    last_message_preview=None,
+                    created_at=s.created_at,
+                    updated_at=s.updated_at,
+                )
+                for s in active_sessions
+            ],
+        ))
+
     return ProjectListResponse(
-        items=[ProjectListItem(project_id=p.project_id, code=p.code, name=p.name, status=p.status, created_at=p.created_at) for p in rows],
+        items=items,
         meta=ProjectListMeta(total=total, page=page, page_size=page_size),
     )
 
