@@ -35,8 +35,9 @@ async def test_pipeline_create_full():
     )
     step_names = [s.__class__.__name__ for s in pipeline.steps]
     expected = [
-        "DownloadStep", "ValidateStep", "PagesTotalStep", "ParseStep",
-        "UploadImagesStep", "TransformStep", "SaveJsonToFileStep", "StoreResultStep"
+        "DownloadStep", "ValidateStep", "QualityCheckStep", "PagesTotalStep",
+        "ParseStep", "UpdateProgressStep", "UploadImagesStep", "TransformStep",
+        "SaveJsonToFileStep", "StoreResultStep"
     ]
     assert step_names == expected
 
@@ -53,8 +54,8 @@ async def test_pipeline_create_preview():
     )
     step_names = [s.__class__.__name__ for s in pipeline.steps]
     expected = [
-        "DownloadStep", "ValidateStep", "PagesTotalStep", "TruncatePdfStep",
-        "ParseStep", "TransformStep", "StoreResultStep"
+        "DownloadStep", "ValidateStep", "QualityCheckStep", "PagesTotalStep",
+        "TruncatePdfStep", "ParseStep", "TransformStep", "StoreResultStep"
     ]
     assert step_names == expected
 
@@ -71,7 +72,6 @@ async def test_pipeline_run_success():
     new_ctx = await pipeline.run(ctx)
 
     assert new_ctx.counter == 2
-    # Проверяем, что update_task вызывался для каждого шага + финальный (минимум 3)
     assert mock_task_store.update_task.call_count >= 3
 
 
@@ -86,9 +86,6 @@ async def test_pipeline_run_error():
 
     with pytest.raises(ValueError):
         await pipeline.run(ctx)
-
-    # Статус FAILED обновляется в PipelineService, а не в Pipeline,
-    # поэтому проверку на update_task не делаем.
 
 
 @pytest.mark.asyncio
@@ -106,6 +103,3 @@ async def test_pipeline_cancelled_by_shutdown():
 
     with pytest.raises(asyncio.CancelledError):
         await pipeline.run(ctx)
-
-    # Статус FAILED обновляется в PipelineService, а не в Pipeline,
-    # поэтому проверку на update_task не делаем.

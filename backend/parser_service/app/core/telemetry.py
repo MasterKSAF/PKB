@@ -62,7 +62,7 @@ def setup_observability(service_name: str, otlp_endpoint: str = None):
     # Tracing
     tracer_provider = TracerProvider(resource=resource)
     tracer_provider.add_span_processor(
-        BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True, timeout=5))
+        BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True,  timeout=5))
     )
     trace.set_tracer_provider(tracer_provider)
 

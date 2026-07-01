@@ -1,11 +1,14 @@
 aiobotocore==2.16.0
-fastapi==0.115.12
+fastapi==0.136.1
 pydantic==2.10.4
 pydantic-settings==2.7.0
-uvicorn==0.34.0
+uvicorn==0.46.0
 python-magic==0.4.27
+#python-magic-bin==0.4.14
 opendataloader-pdf==2.4.7
+opendataloader-pdf[hybrid]
 pypdf==6.12.2
+pymupdf==1.28.0
 python-dotenv==1.2.2
 # зависимости aiohttp и botocore будут подтянуты автоматически
 yara-python
@@ -24,3 +27,4 @@ opentelemetry-instrumentation-httpx==0.48b0
 opentelemetry-propagator-b3==1.27.0
 python-json-logger==2.0.4
 setuptools<70
+

@@ -215,12 +215,12 @@ class MinIOClient:
                     Body=io.BytesIO(image_data),
                     ContentType="image/png",
                 )
-            logger.info(
-                "Image uploaded to %s/%s, size=%d bytes",
-                self.image_bucket,
-                key,
-                len(image_data),
-            )
+            # logger.info(
+            #     "Image uploaded to %s/%s, size=%d bytes",
+            #     self.image_bucket,
+            #     key,
+            #     len(image_data),
+            # )
             return key
         except Exception as e:
             logger.error(

@@ -7,6 +7,10 @@ import asyncio
 from contextlib import asynccontextmanager
 
 # === НАСТРОЙКА OBSERVABILITY В ПЕРВУЮ ОЧЕРЕДЬ ===
+from app.core.telemetry import setup_observability, instrument_fastapi
+from app.config import settings
+
+# Настраиваем OpenTelemetry
 try:
     from app.core.telemetry import setup_observability, instrument_fastapi as _instrument_fastapi
     from app.config import settings
@@ -43,22 +47,41 @@ from app.core.exception_handlers import (
 from app.core.exceptions import ParserServiceError
 from app.core.task_store import task_store
 from app.core.minio_client import minio_client
+from app.core.hybrid_server import HybridServer  # <--- ВАЖНЫЙ ИМПОРТ
 from app.dependencies import init_services, get_pipeline_service
-
 # Событие для graceful shutdown
 shutdown_event = asyncio.Event()
+hybrid_server = None  # глобальная ссылка для остановки
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Управляет жизненным циклом приложения:
+    - запуск гибридного сервера
     - создание бакетов MinIO
     - запуск фоновой очистки задач
     - запуск воркера очереди
     - graceful shutdown
     """
+    global hybrid_server
     logger.info("Starting application lifespan")
+
+    # Запуск гибридного сервера
+    hybrid_server = HybridServer(
+        host=settings.hybrid_host,
+        port=settings.hybrid_port,
+        startup_timeout=settings.hybrid_startup_timeout,
+    )
+    if settings.hybrid_auto_start:
+        if not hybrid_server.start():
+            logger.error("Failed to start hybrid server, disabling hybrid mode")
+            # Отключаем гибридный режим, чтобы парсер работал без --hybrid
+            settings.parser_use_hybrid = False
+        else:
+            logger.info("Hybrid server started")
+    else:
+        logger.info("Hybrid server auto-start disabled")
 
     # Инициализируем сервисы (DI) с shutdown_event
     init_services(shutdown_event)
@@ -76,8 +99,6 @@ async def lifespan(app: FastAPI):
     # Запуск фоновой очистки устаревших задач
     cleanup_task = asyncio.create_task(task_store.start_cleanup())
     logger.debug("Background cleanup task started")
-
-    # Воркер очереди уже запущен в PipelineService при инициализации
 
     yield
 
@@ -98,6 +119,11 @@ async def lifespan(app: FastAPI):
         pass
     logger.debug("Cleanup task cancelled")
 
+    # Остановка гибридного сервера
+    if hybrid_server:
+        hybrid_server.stop()
+        logger.info("Hybrid server stopped")
+
     await asyncio.sleep(2)
     logger.info("Shutdown complete")
 
@@ -112,7 +138,6 @@ app = FastAPI(
 # Инструментирование FastAPI для сбора трейсов
 if _otel_enabled:
     _instrument_fastapi(app, _tracer_provider)
-
 # Подключение роутера API
 app.include_router(v1_router, prefix=settings.api_prefix)
 
@@ -135,7 +160,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.get("/api/v1/health")
 async def health_check():
     """Health check endpoint."""
-    # Логируем только в DEBUG (без логов в INFO)
     logger.debug("Health check requested")
     return {"status": "ok"}
 

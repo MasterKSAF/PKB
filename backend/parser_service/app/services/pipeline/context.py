@@ -28,6 +28,7 @@ class ProcessingContext:
         temp_dir: Временная директория парсера (для очистки)
         shutdown_event: Событие для graceful shutdown
         api_version: Версия API (1 или 2), влияет на формат результата
+        quality_code: Код качества PDF (из анализатора)
     """
     task_id: int
     draft_id: int
@@ -45,4 +46,5 @@ class ProcessingContext:
     total_pages: Optional[int] = None
     temp_dir: Optional[str] = None
     shutdown_event: Optional[object] = None
-    api_version: int = 2  # по умолчанию v2, для v1 передавать 1
+    api_version: int = 2
+    quality_code: Optional[str] = None  # <-- поле для кода качества
