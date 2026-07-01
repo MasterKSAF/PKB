@@ -1,0 +1,63 @@
+{
+  "log": {
+    "version": "1.2",
+    "entries": [
+      {
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:8082/health",
+          "headers": []
+        },
+        "response": {
+          "status": 200,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\"status\":\"ok\",\"service\":\"auth_service\",\"version\":\"1.0.0\"}"
+          }
+        }
+      },
+      {
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:8084/health",
+          "headers": []
+        },
+        "response": {
+          "status": 404,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\"error\":{\"code\":\"NOT_FOUND\",\"message\":\"Ресурс не найден\",\"details\":{\"request_id\":\"b06b7620-a317-49da-84a4-06494e647063\"}}}"
+          }
+        }
+      },
+      {
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:8082/api/v1/auth/users?skip=0&limit=5",
+          "headers": []
+        },
+        "response": {
+          "status": 404,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\"detail\":\"Not Found\"}"
+          }
+        }
+      },
+      {
+        "request": {
+          "method": "GET",
+          "url": "http://127.0.0.1:8084/api/v1/registry/classifiers",
+          "headers": []
+        },
+        "response": {
+          "status": 200,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\"data\":[{\"classifier_system\":\"OKSTU\",\"code\":\"OKSTU_ROOT\",\"full_name\":\"🏛 ОБЩЕСОЮЗНЫЙ КЛАССИФИКАТОР (ОКСТУ)\",\"status\":\"active\"},{\"classifier_system\":\"UDC\",\"code\":\"UDC_ROOT\",\"full_name\":\"📚 УНИВЕРСАЛЬНАЯ ДЕСЯТИЧНАЯ КЛАССИФИКАЦИЯ\",\"status\":\"active\"},{\"classifier_system\":\"EXTERNAL\",\"code\":\"EXT_ROOT\",\"full_name\":\"🌍 ВНЕШНИЕ СИСТЕМЫ (DNV, ASTM, ОСТ, ТУ)\",\"status\":\"active\"},{\"classifier_system\":\"MKS\",\"code\":\"01\",\"full_name\":\"ОБЩИЕ ПОЛОЖЕНИЯ. ТЕРМИНОЛОГИЯ. СТАНДАРТИЗАЦИЯ. ДОКУМЕНТАЦИЯ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"03\",\"full_name\":\"УСЛУГИ. ОРГАНИЗАЦИЯ ФИРМ И УПРАВЛЕНИЕ ИМИ. АДМИНИСТРАЦИЯ. ТРАНСПОРТ. СОЦИОЛОГИЯ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"07\",\"full_name\":\"ЕСТЕСТВЕННЫЕ И ПРИКЛАДНЫЕ НАУКИ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"11\",\"full_name\":\"ТЕХНОЛОГИЯ ЗДРАВООХРАНЕНИЯ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"13\",\"full_name\":\"ОКРУЖАЮЩАЯ СРЕДА. ЗАЩИТА ЧЕЛОВЕКА ОТ ВОЗДЕЙСТВИЯ ОКРУЖАЮЩЕЙ СРЕДЫ. БЕЗОПАСНОСТЬ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"17\",\"full_name\":\"МЕТРОЛОГИЯ И ИЗМЕРЕНИЯ. ФИЗИЧЕСКИЕ ЯВЛЕНИЯ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"19\",\"full_name\":\"ИСПЫТАНИЯ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"21\",\"full_name\":\"МЕХАНИЧЕСКИЕ СИСТЕМЫ И УСТРОЙСТВА ОБЩЕГО НАЗНАЧЕНИЯ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"23\",\"full_name\":\"ГИДРАВЛИЧЕСКИЕ И ПНЕВМАТИЧЕСКИЕ СИСТЕМЫ И КОМПОНЕНТЫ ОБЩЕГО НАЗНАЧЕНИЯ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"25\",\"full_name\":\"МАШИНОСТРОЕНИЕ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"27\",\"full_name\":\"ЭНЕРГЕТИКА И ТЕПЛОТЕХНИКА\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"29\",\"full_name\":\"ЭЛЕКТРОТЕХНИКА\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"31\",\"full_name\":\"ЭЛЕКТРОНИКА\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"33\",\"full_name\":\"ТЕЛЕКОММУНИКАЦИИ. АУДИО- И ВИДЕОТЕХНИКА\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"35\",\"full_name\":\"ИНФОРМАЦИОННЫЕ ТЕХНОЛОГИИ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"37\",\"full_name\":\"ТЕХНОЛОГИЯ ПОЛУЧЕНИЯ ИЗОБРАЖЕНИЙ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"39\",\"full_name\":\"ТОЧНАЯ МЕХАНИКА. ЮВЕЛИРНОЕ ДЕЛО\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"43\",\"full_name\":\"ДОРОЖНО-ТРАНСПОРТНАЯ ТЕХНИКА\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"45\",\"full_name\":\"ЖЕЛЕЗНОДОРОЖНАЯ ТЕХНИКА\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"47\",\"full_name\":\"СУДОСТРОЕНИЕ И МОРСКИЕ СООРУЖЕНИЯ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"49\",\"full_name\":\"АВИАЦИОННАЯ И КОСМИЧЕСКАЯ ТЕХНИКА\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"53\",\"full_name\":\"ПОДЪЕМНО-ТРАНСПОРТНОЕ ОБОРУДОВАНИЕ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"55\",\"full_name\":\"УПАКОВКА И РАЗМЕЩЕНИЕ ГРУЗОВ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"59\",\"full_name\":\"ТЕКСТИЛЬНОЕ И КОЖЕВЕННОЕ ПРОИЗВОДСТВО\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"61\",\"full_name\":\"ШВЕЙНАЯ ПРОМЫШЛЕННОСТЬ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"65\",\"full_name\":\"СЕЛЬСКОЕ ХОЗЯЙСТВО\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"67\",\"full_name\":\"ПРОИЗВОДСТВО ПИЩЕВЫХ ПРОДУКТОВ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"71\",\"full_name\":\"ХИМИЧЕСКАЯ ПРОМЫШЛЕННОСТЬ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"73\",\"full_name\":\"ГОРНОЕ ДЕЛО И ПОЛЕЗНЫЕ ИСКОПАЕМЫЕ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"75\",\"full_name\":\"ДОБЫЧА И ПЕРЕРАБОТКА НЕФТИ, ГАЗА И СМЕЖНЫЕ ПРОИЗВОДСТВА\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"77\",\"full_name\":\"МЕТАЛЛУРГИЯ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"79\",\"full_name\":\"ТЕХНОЛОГИЯ ПЕРЕРАБОТКИ ДРЕВЕСИНЫ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"81\",\"full_name\":\"СТЕКОЛЬНАЯ И КЕРАМИЧЕСКАЯ ПРОМЫШЛЕННОСТЬ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"83\",\"full_name\":\"РЕЗИНОВАЯ И ПЛАСТМАССОВАЯ ПРОМЫШЛЕННОСТЬ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"85\",\"full_name\":\"ТЕХНОЛОГИЯ ПРОИЗВОДСТВА БУМАГИ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"87\",\"full_name\":\"ЛАКОКРАСОЧНАЯ ПРОМЫШЛЕННОСТЬ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"91\",\"full_name\":\"СТРОИТЕЛЬНЫЕ МАТЕРИАЛЫ И СТРОИТЕЛЬСТВО\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"93\",\"full_name\":\"ГРАЖДАНСКОЕ СТРОИТЕЛЬСТВО\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"95\",\"full_name\":\"ВОЕННОЕ ДЕЛО. ВОЕННО-ИНЖЕНЕРНОЕ ДЕЛО. ВООРУЖЕНИЕ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"97\",\"full_name\":\"БЫТОВАЯ ТЕХНИКА И ТОРГОВОЕ ОБОРУДОВАНИЕ. ОТДЫХ. СПОРТ\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"99\",\"full_name\":\"(РЕЗЕРВ)\",\"status\":\"active\",\"parent_code\":\"MKS_ROOT\"},{\"classifier_system\":\"MKS\",\"code\":\"01.020\",\"full_name\":\"Терминология (принципы и координация)\",\"status\":\"active\",\"parent_code\":\"01\"},{\"classifier_system\":\"MKS\",\"code\":\"01.040\",\"full_name\":\"Словари\",\"status\":\"active\",\"parent_code\":\"01\"},{\"classifier_system\":\"MKS\",\"code\":\"01.060\",\"full_name\":\"Величины и единицы измерения\",\"status\":\"active\",\"parent_code\":\"01\"},{\"classifier_system\":\"MKS\",\"code\":\"01.070\",\"full_name\":\"Цветовое кодирование\",\"status\":\"active\",\"parent_code\":\"01\"},{\"classifier_system\":\"MKS\",\"code\":\"01.075\",\"full_name\":\"Знаковые обозначения\",\"status\":\"active\",\"parent_code\":\"01\"},{\"classifier_system\":\"MKS\",\"code\":\"MKS_ROOT\",\"full_name\":\"🌐 МЕЖГОСУДАРСТВЕННЫЙ КЛАССИФИКАТОР (МКС)\",\"status\":\"active\"}],\"meta\":{\"total\":1387,\"page\":1,\"page_size\":50}}"
+          }
+        }
+      }
+    ]
+  }
+}

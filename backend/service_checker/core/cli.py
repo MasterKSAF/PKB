@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import time
@@ -50,6 +51,7 @@ from service_checker.core.observability_check import (
     format_observability_report,
     ObservabilityCheckResult,
 )
+from service_checker.core.har_validator import HarValidator, format_har_report
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -229,6 +231,33 @@ def parse_args() -> argparse.Namespace:
         "--source-dir",
         default=None,
         help="Директория с исходным кодом для статического анализа OTEL",
+    )
+
+    # validate-har — проверка HAR-файла против OpenAPI
+    p_validate_har = subparsers.add_parser(
+        "validate-har",
+        help="Проверить HAR-файл (HTTP Archive) против OpenAPI схемы сервиса",
+    )
+    p_validate_har.add_argument(
+        "har",
+        help="Путь к HAR-файлу",
+    )
+    p_validate_har.add_argument(
+        "--openapi-url",
+        default=None,
+        help="URL OpenAPI схемы (например http://127.0.0.1:18080/openapi.json). "
+             "Если не указан, берётся из --service",
+    )
+    p_validate_har.add_argument(
+        "--service",
+        default=None,
+        help="Ключ сервиса из SERVICE_KEYS (например gateway, registry). "
+             "Используется для получения порта из MODE_PORTS."
+    )
+    p_validate_har.add_argument(
+        "--output", "-o",
+        default=None,
+        help="Путь для сохранения отчёта (.md)",
     )
 
     # report (из сохранённых данных)
@@ -881,6 +910,64 @@ async def cmd_check(
     return 0
 
 
+async def cmd_validate_har(args: argparse.Namespace) -> None:
+    """Проверить HAR-файл против OpenAPI схемы."""
+    har_path = args.har
+    openapi_url = args.openapi_url
+    service_key = args.service
+    output = args.output
+
+    # Определяем OpenAPI URL
+    if not openapi_url:
+        if service_key:
+            if service_key not in MODE_PORTS:
+                log_err(f"Неизвестный сервис: {service_key}. Допустимые: {', '.join(sorted(MODE_PORTS.keys()))}")
+                return
+            port = MODE_PORTS[service_key]
+            openapi_url = f"http://127.0.0.1:{port}/openapi.json"
+        else:
+            log_err("Укажите --openapi-url или --service")
+            return
+
+    log_info(f"Загрузка OpenAPI схемы: {openapi_url}")
+    validator = HarValidator(openapi_url)
+    success = await validator.load_openapi()
+
+    if not success:
+        log_err("Ошибка загрузки OpenAPI схемы:")
+        for err in validator._load_errors:
+            log_err(f"  - {err}")
+        return
+
+    log_info(f"Загрузка HAR: {har_path}")
+    if not os.path.exists(har_path):
+        log_err(f"Файл не найден: {har_path}")
+        return
+
+    report = validator.validate_har(har_path)
+
+    # Вывод отчёта
+    report_text = format_har_report(report)
+    print(report_text)
+
+    # Сохранение
+    if output:
+        output_path = Path(output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(report_text, encoding="utf-8")
+        log_ok(f"Отчёт сохранён: {output_path}")
+
+    # Итоговая статистика
+    if report.errors:
+        log_err(f"Общих ошибок: {len(report.errors)}")
+    if report.failed > 0:
+        log_err(f"Провалено: {report.failed} / {report.total_entries}")
+    elif report.skipped == report.total_entries:
+        log_warn(f"Все записи пропущены (нет соответствия в OpenAPI)")
+    else:
+        log_ok(f"Все {report.passed} записей успешно прошли валидацию")
+
+
 async def main():
     # ── Windows cp1251 → UTF-8 для Unicode box-drawing символов ──
     if sys.platform == "win32":
@@ -960,6 +1047,10 @@ async def main():
             db_only=args.db_only,
             spd=args.spd,
         )
+        return
+
+    if args.command == "validate-har":
+        await cmd_validate_har(args)
         return
 
     if args.command == "report":

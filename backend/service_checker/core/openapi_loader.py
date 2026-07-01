@@ -78,10 +78,16 @@ class OpenApiLoader:
             return result
         return self._resolve_refs_internal(obj, root)
 
-    def _resolve_refs_internal(self, obj: Any, root: Dict) -> Any:
-        """Внутренняя рекурсия разрешения $ref."""
+    def _resolve_refs_internal(self, obj: Any, root: Dict, _depth: int = 0) -> Any:
+        """Внутренняя рекурсия разрешения $ref.
+
+        _depth — текущая глубина разрешения $ref (защита от циклических ссылок).
+        """
         if obj is None:
             return None
+        if _depth > 10:
+            # Слишком глубокое разрешение — циклическая ссылка
+            return {"title": "(circular)", "type": "object"}
         if isinstance(obj, dict):
             if "$ref" in obj:
                 ref_path = obj["$ref"]
@@ -94,12 +100,12 @@ class OpenApiLoader:
                             resolved = resolved[part]
                         else:
                             return obj  # fallback
-                    # Рекурсивно разрешаем внутри resolved
-                    return self._resolve_refs_internal(resolved, root)
+                    # Рекурсивно разрешаем внутри resolved, увеличиваем depth
+                    return self._resolve_refs_internal(resolved, root, _depth + 1)
                 return obj
-            return {k: self._resolve_refs_internal(v, root) for k, v in obj.items()}
+            return {k: self._resolve_refs_internal(v, root, _depth) for k, v in obj.items()}
         if isinstance(obj, list):
-            return [self._resolve_refs_internal(item, root) for item in obj]
+            return [self._resolve_refs_internal(item, root, _depth) for item in obj]
         return obj
 
     def _extract_endpoints(self) -> None:

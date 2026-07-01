@@ -368,6 +368,34 @@ python -m service_checker docker --action full-report  # full-report включ�
 pytest tests/test_service_contracts.py -v
 ```
 
+## HAR vs OpenAPI Validation
+
+Проверка фактических HTTP-запросов/ответов (HAR) против OpenAPI-спецификаций сервисов.
+
+**Как работает:**
+1. Загружает OpenAPI-схему с сервиса (`/openapi.json`), генерируется автоматически FastAPI
+2. Загружает HAR-файл (HTTP Archive format) — может быть сгенерирован браузером, `pytest-har` или вручную
+3. Для каждой записи: сопоставляет `method + path` с OpenAPI endpoint, валидирует status code, query params, request body, response body через JSON Schema (`jsonschema`)
+4. Формирует отчёт: сколько записей прошло/упало/пропущено
+
+**Использование через CLI:**
+```bash
+# По URL OpenAPI схемы
+python -m service_checker validate-har traffic.har --openapi-url http://127.0.0.1:18080/openapi.json
+
+# По ключу сервиса (порт берётся из MODE_PORTS)
+python -m service_checker validate-har traffic.har --service gateway
+
+# С сохранением отчёта
+python -m service_checker validate-har traffic.har --service registry -o har_report.md
+```
+
+**Модуль:** `core/har_validator.py`
+**Unit-тесты:** `tests/test_har_validator.py` (18 тестов, без Docker)
+**Зависимость:** `jsonschema>=4.20.0`
+
+---
+
 ## Ключевые решения
 
 - **2xx/3xx** — success

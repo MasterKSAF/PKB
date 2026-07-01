@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, Header, Body
+from pydantic import BaseModel
 from starlette.responses import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -13,6 +14,13 @@ from api.v1.models.registry_service_enums import RegistryServiceEnums
 from api.v1.schemas import DocumentSchema, ClassifierSchema, TerminologySchema, ClassifierValidateRequest
 from api.v1.schemas.response import SingleResponse, ListResponse, PaginationMeta, ErrorResponse
 from services.logger import log_event, log_payload
+
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+    version: str
+
 
 routes = APIRouter()
 
@@ -1044,7 +1052,7 @@ def create_classifier(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
-@routes.get('/registry/classifiers')
+@routes.get('/registry/classifiers', response_model=ListResponse[ClassifierSchema])
 def list_classifiers(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -1073,14 +1081,10 @@ def list_classifiers(
 
         data = [ClassifierSchema.model_validate(item).model_dump(mode='json', by_alias=True, exclude_none=True) for item in classifiers]
 
-        return {
-            'data': data,
-            'meta': {
-                'total': total,
-                'page': page,
-                'page_size': page_size,
-            },
-        }
+        return ListResponse(
+            data=data,
+            meta=PaginationMeta(total=total, page=page, page_size=page_size),
+        )
     except Exception as e:
         log_event('ERROR', '/registry/classifiers/', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
@@ -1900,7 +1904,7 @@ def get_stats(db: Session = Depends(get_db)):
     }
 
 
-@routes.get('/health')
+@routes.get('/health', response_model=HealthResponse)
 def health_check(db: Session = Depends(get_db)):
     """Health check endpoint.
 
@@ -1909,26 +1913,16 @@ def health_check(db: Session = Depends(get_db)):
     from settings import SERVICE_NAME, SERVICE_VERSION
     from sqlalchemy import text
     
-    status = 'ok'
     try:
         db.execute(text('SELECT 1'))
     except Exception as e:
         log_event('ERROR', '/health', None, None, f'Health check database connection failed: {str(e)}')
-        status = 'error'
-        return JSONResponse(
+        raise HTTPException(
             status_code=500,
-            content={
-                'status': status,
-                'service': SERVICE_NAME,
-                'version': SERVICE_VERSION
-            }
+            detail=HealthResponse(status='error', service=SERVICE_NAME, version=SERVICE_VERSION).model_dump(),
         )
 
-    return {
-        'status': status,
-        'service': SERVICE_NAME,
-        'version': SERVICE_VERSION
-    }
+    return HealthResponse(status='ok', service=SERVICE_NAME, version=SERVICE_VERSION)
 
 
 
