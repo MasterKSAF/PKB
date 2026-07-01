@@ -158,3 +158,4 @@ backend/gateway_service/
 | **Rate limiting + IDOR** | InMemory, 14 групп, 80% threshold, IDOR 30/мин |
 | **Idempotency-Key** | Кеширование POST-ответов (TTL: 1 час) |
 | **CORS** | Настраивается через `CORS_ALLOWED_ORIGINS` |
+| **MaxBodySize** | Защита от DoS: `/chat/*` ~66 KB, остальное 100 MB |

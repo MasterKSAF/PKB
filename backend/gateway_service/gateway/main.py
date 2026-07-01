@@ -93,7 +93,61 @@ logger = logging.getLogger("gateway")
 GATEWAY_START_TIME = time.time()
 GATEWAY_VERSION = "1.3.0"
 
+# Лимиты тела запроса — защита от DoS (GW-13).
+# Разные пути — разные лимиты:
+#   /chat/*, /text/* (чат, query service) — 64 KB на content + JSON-обёртка
+#   остальные (документы, файлы) — 100 MB
+MAX_BODY_SIZE = 104_857_600       # 100 MB — общий лимит
+MAX_BODY_SIZE_QUERY = 66_000       # ~66 KB — для query-путей
+# Пути, для которых применяется строгий лимит
+_QUERY_PATH_PREFIXES = ("/api/v1/chat/", "/api/v1/text/")
+
 logger.info("Gateway starting — mode=%s, port=%s", config.mode, config.port)
+
+
+# ---------------------------------------------------------------------------
+# MaxBodySizeMiddleware — проверяет размер тела запроса
+# ---------------------------------------------------------------------------
+
+
+class MaxBodySizeMiddleware(BaseHTTPMiddleware):
+    """Проверяет Content-Length до обработки запроса.
+
+    Для query-путей (/chat/, /text/) — строгий лимит MAX_BODY_SIZE_QUERY (~66 KB).
+    Для остальных — MAX_BODY_SIZE (100 MB).
+    Превышение → 413 Payload Too Large.
+    Самая внешняя middleware — срабатывает до любого другого кода.
+    """
+
+    @staticmethod
+    def _get_limit(path: str) -> int:
+        for prefix in _QUERY_PATH_PREFIXES:
+            if path.startswith(prefix):
+                return MAX_BODY_SIZE_QUERY
+        return MAX_BODY_SIZE
+
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                size = int(content_length)
+            except (ValueError, TypeError):
+                size = 0
+            if size > 0:
+                limit = self._get_limit(request.url.path)
+                if size > limit:
+                    logger.warning(
+                        "Request body too large: %d bytes (limit %d) — %s %s",
+                        size, limit, request.method, request.url.path,
+                    )
+                    return JSONResponse(
+                        status_code=413,
+                        content=_error_response(
+                            "PAYLOAD_TOO_LARGE",
+                            f"Request body too large (max {limit} bytes)",
+                        ),
+                    )
+        return await call_next(request)
 
 
 # ---------------------------------------------------------------------------
@@ -907,9 +961,10 @@ async def pydantic_validation_handler(request: Request, exc: ValidationError):
 # ---------------------------------------------------------------------------
 
 # Порядок middleware (внешний → внутренний):
-# CORS → PIIQueryValidator → RateLimit → RequestTracing → CorrelationHeaders → RBAC →
-# Idempotency → ProcessTime → StripTrailingSlash → Router
+# MaxBodySize → CORS → PIIQueryValidator → RateLimit → RequestTracing →
+# CorrelationHeaders → RBAC → Idempotency → ProcessTime → StripTrailingSlash → Router
 #
+# MaxBodySize — самым внешним, чтобы отсечь большие тела до любой обработки
 # StripTrailingSlash — ПЕРВЫМ (самый глубокий), чтобы роутер и resolve_service
 # видели нормализованный путь без trailing slash (без 307).
 app.add_middleware(StripTrailingSlashMiddleware)
@@ -931,6 +986,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# MaxBodySize — абсолютно внешняя: проверяет размер ДО CORS и всего остального
+app.add_middleware(MaxBodySizeMiddleware)  # GW-13
 
 
 # ---------------------------------------------------------------------------

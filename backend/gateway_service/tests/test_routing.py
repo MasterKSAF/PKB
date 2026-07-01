@@ -71,12 +71,16 @@ class TestDraftDetailToOrchestrator:
         assert target == path
 
 
-class TestDraftPreviewGetNotFound:
-    """GET /api/v1/drafts/{id}/preview не имеет маршрута — только POST."""
+class TestDraftPreviewGetRoute:
+    """GET /api/v1/drafts/{id}/preview маршрутизируется в Orchestrator."""
 
-    def test_preview_get_not_found(self):
-        """#4 GET /api/v1/drafts/5/preview → None (404)."""
-        assert _resolve("GET", "/api/v1/drafts/5/preview") is None
+    def test_preview_get_routes_to_orchestrator(self):
+        """#4 GET /api/v1/drafts/5/preview → orchestrator."""
+        result = _resolve("GET", "/api/v1/drafts/5/preview")
+        assert result is not None
+        svc, target = result
+        assert svc == "orchestrator"
+        assert target == "/api/v1/drafts/5/preview"
 
 
 class TestDraftManageToOrchestrator:
