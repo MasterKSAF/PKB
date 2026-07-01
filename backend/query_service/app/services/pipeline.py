@@ -31,6 +31,17 @@ _FINAL_ASSISTANT_STATUSES = ("answered", "not_found")
 _SOURCE_REF_RE = re.compile(r"\[source:(\d+)\]")
 _OLD_MARKER_RE = re.compile(r"\s*%\[[^\]]*\]%")
 
+_ROUTER_PROMPT = (
+    "Ты определяешь нужен ли поиск по инженерным документам для ответа на вопрос пользователя. "
+    "Ответь одним словом: RAG — если нужен поиск по документам, CHAT — если можно ответить на основе истории диалога. "
+    "Только одно слово, без объяснений."
+)
+
+_CHAT_SYSTEM_PROMPT = (
+    "Ты — ассистент по инженерным нормативно-техническим документам ПКБ. "
+    "Отвечай на вопрос на основе истории диалога. Будь краток и по делу."
+)
+
 
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
@@ -197,6 +208,33 @@ def _build_llm_mock(query: str, chunks: list[rag_client.Chunk]) -> str:
     return " ".join(parts)
 
 
+async def _needs_rag(user_query: str, history: list[dict], settings) -> bool:
+    if settings.MOCK_LLM_ENABLED:
+        return True
+    messages = [
+        {"role": "system", "content": _ROUTER_PROMPT},
+        *history[-4:],
+        {"role": "user", "content": user_query},
+    ]
+    try:
+        result = await asyncio.wait_for(
+            llm_client.complete(messages, max_tokens=5),
+            timeout=10.0,
+        )
+        return "CHAT" not in result.content.upper()
+    except Exception:
+        return True
+
+
+async def _answer_from_chat(user_query: str, history: list[dict], summary: str | None, settings) -> llm_client.LLMResult:
+    messages = [{"role": "system", "content": _CHAT_SYSTEM_PROMPT}]
+    if summary:
+        messages.append({"role": "system", "content": f"Резюме предыдущего диалога:\n{summary}"})
+    messages.extend(history)
+    messages.append({"role": "user", "content": user_query})
+    return await llm_client.complete(messages)
+
+
 async def run_pipeline(
     session_factory: async_sessionmaker,
     message_id: str,
@@ -222,6 +260,42 @@ async def run_pipeline(
             enrichment_skipped = True
             warnings.append("Обогащение терминов недоступно. Поиск выполнен без нормализации.")
             logger.warning("query enrichment skipped", extra={"message_id": message_id}, exc_info=True)
+
+        await _set_status(session_factory, message_id, "generating")
+        summary, history = await _prepare_context(
+            session_factory, session_id, message_id, settings
+        )
+
+        use_rag = await _needs_rag(user_query, history, settings)
+        logger.info("router decision use_rag=%s", use_rag, extra={"message_id": message_id})
+
+        if not use_rag:
+            try:
+                llm_result = await asyncio.wait_for(
+                    _answer_from_chat(user_query, history, summary, settings),
+                    timeout=120.0,
+                )
+                processing_time_ms = int((_utcnow() - t_start).total_seconds() * 1000)
+                async with session_factory() as db:
+                    async with db.begin():
+                        await db.execute(
+                            update(ChatMessage)
+                            .where(ChatMessage.message_id == message_id)
+                            .values(
+                                content=llm_result.content,
+                                status="answered",
+                                processing_time_ms=processing_time_ms,
+                                prompt_tokens=llm_result.prompt_tokens or None,
+                                completion_tokens=llm_result.completion_tokens or None,
+                                model_used=settings.LLM_MODEL,
+                                enrichment_skipped=enrichment_skipped,
+                                warnings=warnings or None,
+                            )
+                        )
+                logger.info("pipeline finished via chat", extra={"message_id": message_id})
+                return
+            except Exception:
+                logger.warning("chat answer failed, falling back to RAG", extra={"message_id": message_id}, exc_info=True)
 
         await _set_status(session_factory, message_id, "searching")
         try:
@@ -261,10 +335,6 @@ async def run_pipeline(
                     )
             return
 
-        await _set_status(session_factory, message_id, "generating")
-        summary, history = await _prepare_context(
-            session_factory, session_id, message_id, settings
-        )
         llm_text: str | None = None
         for attempt in range(3):
             try:
