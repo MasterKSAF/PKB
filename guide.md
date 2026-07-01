@@ -28,6 +28,49 @@
 
 5. **Цепочка отказа:** начинать с downstream — если сервис Б не отвечает, смотреть его зависимости (сервис А, от которого он зависит). OOM одного сервиса валит всю цепочку.
 
+## Правила работы с инструментами
+
+### И1. Приоритет графовых инструментов
+
+Порядок применения (от высокого к низкому):
+`trace_path` → `get_code_snippet` → `search_graph` → `query_graph` → `search_code` → `read_file` → `terminal`
+
+- `trace_path` — перед анализом цепочек вызовов длиннее 2 шагов
+- `get_code_snippet` — когда известно имя функции (из `search_graph` или `trace_path`)
+- `search_graph` — для поиска символов по имени или смыслу
+- `query_graph` — для сложных Cypher-запросов через несколько хопов
+- `search_code` — только когда граф не нашёл (кириллица, динамические маршруты)
+- `read_file` — только если нет ни одного графового инструмента
+- `terminal` — только для внешних команд (docker, git, билды), НЕ для чтения кода
+
+### И2. Чеклист «before deploy» после изменения сервиса
+
+После изменения кода в сервисе:
+1. Собрать образ: `docker compose build {service}`
+2. Перезапустить контейнер: `docker compose rm -sf {service} && docker compose up -d {service}`
+3. **Проверить зависимые сервисы** — если менял registry/converter → пересобрать orchestrator (+ celery-worker)
+4. Дождаться health: `docker compose ps --services --filter "status=running"`
+5. Запустить тесты сервиса, если есть: `docker compose exec -T {service} python -m pytest tests/ -x -q`
+
+### И3. Диагностика данных — сначала БД, потом API
+
+При проблеме «данные не отображаются через API»:
+1. **SQL напрямую:** `docker exec pkb-postgres psql -U pkb -d pkb_neuro -c "SELECT ..."`
+2. **Прямой запрос к API сервиса** (через curl/внутри контейнера)
+3. **Gateway** — проверка трансформации пути
+
+Если в БД данные есть, а API не отдаёт — проблема в формате ответа или в gateway.
+Если в БД данных нет — проблема в том, кто должен был их записать.
+
+### И4. Двойная проверка edit_file
+
+После `edit_file` с заменой больших блоков:
+1. Проверить синтаксис: `python -m py_compile {file}` (для Python)
+2. Запустить модульные тесты: `docker compose exec -T {service} python -m pytest tests/{module}.py -x -q`
+3. Только потом запускать интеграционный/e2e тест
+
+Это ловит ошибки вставки (пропущенные скобки, отступы) за 5 секунд вместо 5 минут прогона e2e.
+
 ## Правила поведения при диагностике
 
 ### П1. Не гадать — читать код
@@ -73,6 +116,38 @@ Gateway проксирует `/api/v1/rag/...` на rag_search. Но если tr
 - Docker CLI не было в образе → установил, diagnostics получил docker логи
 
 Недостаток данных diagnostics — это не тупик, а задача.
+
+### П8. При изменении сервиса — пересобрать всех зависимых
+
+Изменение кода одного сервиса может потребовать пересборки других, которые его вызывают.
+
+| Меняешь | Нужно пересобрать | Причина |
+|---------|-------------------|---------|
+| `registry_service` | **orchestrator** (+ celery-worker) | Оркестратор ходит в Registry API через HTTP. Если формат ответа изменился — клиент в `registry_client.py` должен быть синхронизирован |
+| `converter_validator_service` | **orchestrator** (+ celery-worker) | Аналогично — `converter_client.py` ожидает определённый формат |
+| `orchestrator_service` | — | orchestrator — единственный потребитель своего API (через gateway). celery-worker использует тот же образ |
+
+**Типичная ошибка:** правишь `registry_service/api/v1/routes.py` или `crud/document.py`, делаешь `docker compose build registry && docker compose up -d registry`, но pipeline продолжает падать. Причина — celery-worker использует старый код `registry_client.py`. Решение: `docker compose build orchestrator && docker compose rm -sf orchestrator celery-worker && docker compose up -d orchestrator celery-worker`.
+
+### П9. Диагностика pipeline — последовательность шагов
+
+При проблеме «pipeline завершился, но данных нет»:
+
+1. **Docker logs celery-worker** — первичный источник: grep по `converter|registry|document|content|section|step|400|409|422|500`
+2. **Логи registry`** — grep по IP celery-worker (обычно 172.18.0.11): `docker logs pkb-registry 2>&1 | grep 172.18.0.11` — видно какие запросы пришли и с каким статусом
+3. **SQL в PostgreSQL** — проверить наличие данных напрямую, минуя API:
+   ```
+   docker exec pkb-postgres psql -U pkb -d pkb_neuro -c "SELECT id, title, doc_code, status FROM registry.documents WHERE id = <id>;"
+   docker exec pkb-postgres psql -U pkb -d pkb_neuro -c "SELECT COUNT(*) FROM registry.document_sections WHERE document_id = <id>;"
+   ```
+4. **Прямой запрос к сервису** — обойти gateway, стучаться напрямую к сервису:
+   ```
+   curl http://localhost:8084/api/v1/registry/documents/{id}/sections
+   ```
+   (порт 8084 registry, 8083 query, 8091 rag-search, 8090 rag-builder)
+5. **Проверка формата ответа API** — если API вернул 200, но данные пустые — сравнить реальный JSON с тем, что ожидает клиент. Особенно наличие/отсутствие обёртки `data`
+
+**Почему в таком порядке:** логи говорят что вызвано, код — что должно быть, SQL — что есть на самом деле, прямой запрос — что отдаёт API. Разрыв между ними указывает на конкретную проблему.
 
 ## Тестирование через data/tests/
 

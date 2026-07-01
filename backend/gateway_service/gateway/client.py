@@ -414,6 +414,10 @@ async def proxy_request(request: Request, service_name: str, target_path: Option
     for key in list(response_headers.keys()):
         if key.lower() in hop_by_hop or key.lower() == "content-length":
             del response_headers[key]
+    # Date и Server удаляем — они будут корректно добавлены Uvicorn Gateway
+    # (иначе копируются от внутреннего сервиса + Uvicorn добавляет свои = дубликат)
+    response_headers.pop("date", None)
+    response_headers.pop("server", None)
 
     # Если внутренний сервис вернул редирект (3xx) с Location на внутренний
     # Docker-хост — переписываем на Gateway, чтобы браузер не ловил

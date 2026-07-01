@@ -1,5 +1,6 @@
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.security import hash_password
@@ -37,7 +38,7 @@ async def init_db(db: AsyncSession) -> None:
         await connection.run_sync(Base.metadata.create_all)
 
     for name, permissions in DEFAULT_ROLES.items():
-        result = await db.execute(select(Role).where(Role.name == name))
+        result = await db.execute(select(Role).where(Role.name == name).options(selectinload(Role.permissions)))
         role = result.scalar_one_or_none()
         if not role:
             role = Role(name=name)
