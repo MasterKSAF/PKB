@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import time
 from datetime import datetime, timedelta, timezone
 
 import json
@@ -27,6 +29,8 @@ from ..services.auth import get_current_user
 from ..services.pipeline import run_pipeline
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+logger = logging.getLogger("query_service")
 
 _FINAL_STATUSES = {"answered", "failed", "not_found", "out_of_scope", "needs_clarification", "source_conflict"}
 
@@ -277,11 +281,28 @@ async def search_messages(
         )
         .order_by(ChatMessage.timestamp.desc())
     )
+
+    _t0 = time.monotonic()
     all_rows = (await db.execute(q)).scalars().all()
+    _db_ms = int((time.monotonic() - _t0) * 1000)
+
     total = len(all_rows)
     page_rows = all_rows[body.offset: body.offset + body.limit]
 
     page = body.offset // body.limit + 1 if body.limit else 1
+
+    logger.info(json.dumps({
+        "event": "search_messages",
+        "session_id": session_id,
+        "user_id": user_id,
+        "query": body.query,
+        "limit": body.limit,
+        "offset": body.offset,
+        "total": total,
+        "db_duration_ms": _db_ms,
+        "warning": "slow" if _db_ms > 1000 else None,
+    }))
+
     return MessageSearchResponse(
         session_id=session_id,
         results=[_msg_dict(m) for m in page_rows],
@@ -297,6 +318,7 @@ async def send_message(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
+    _t0 = time.monotonic()
     async with db.begin():
         s = await session_repo.get_session(db, session_id, user_id)
         if not s:
@@ -319,6 +341,16 @@ async def send_message(
 
     session_factory = get_session_factory()
     background_tasks.add_task(run_pipeline, session_factory, message_id, session_id, body.content)
+
+    _elapsed = int((time.monotonic() - _t0) * 1000)
+    logger.info(json.dumps({
+        "event": "send_message",
+        "session_id": session_id,
+        "user_id": user_id,
+        "message_id": message_id,
+        "content_preview": body.content[:100] if body.content else None,
+        "duration_ms": _elapsed,
+    }))
 
     return PendingMessageResponse(
         message_id=message_id,
@@ -481,10 +513,17 @@ async def chat(
     user_id: str = Depends(get_current_user),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    _t0 = time.monotonic()
+
     if idempotency_key:
         cache_key = f"{user_id}:{idempotency_key}"
         if cache_key in _idempotency_cache:
             cached_session_id, cached_answer_id = _idempotency_cache[cache_key]
+            logger.info(json.dumps({
+                "event": "chat_idempotent_hit",
+                "user_id": user_id,
+                "session_id": cached_session_id,
+            }))
             return ChatResponse(
                 answer_id=cached_answer_id,
                 session_id=cached_session_id,
@@ -528,6 +567,17 @@ async def chat(
 
     session_factory = get_session_factory()
     background_tasks.add_task(run_pipeline, session_factory, message_id, session_id_snapshot, body.question)
+
+    _elapsed = int((time.monotonic() - _t0) * 1000)
+    logger.info(json.dumps({
+        "event": "chat_request",
+        "session_id": session_id_snapshot,
+        "user_id": user_id,
+        "message_id": message_id,
+        "question_preview": body.question[:100] if body.question else None,
+        "has_context": body.context is not None,
+        "duration_ms": _elapsed,
+    }))
 
     return ChatResponse(
         answer_id=message_id,
