@@ -22,6 +22,43 @@ body * {
   scrollbar-color: var(--pkb-scrollbar-thumb) var(--pkb-scrollbar-track);
 }
 
+body {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Server-provided text can contain long IDs, hashes, URLs, or unbroken user input. */
+.MuiTypography-root,
+.MuiAlert-message,
+.MuiTableCell-root,
+.MuiListItemText-root,
+.MuiListItemText-primary,
+.MuiListItemText-secondary,
+.MuiDialogContentText-root,
+.MuiTooltip-tooltip,
+.MuiFormHelperText-root {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.MuiChip-root {
+  max-width: 100%;
+}
+
+.MuiChip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+pre,
+code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 body::-webkit-scrollbar,
 body *::-webkit-scrollbar {
   width: 10px;
