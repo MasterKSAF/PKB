@@ -330,6 +330,166 @@ def test_create_pipeline_document(client):
     assert dup_response.status_code == 409
 
 
+def test_create_pipeline_document_upsert_existing(client):
+    """UPSERT: create_pipeline_document с document_id обновляет существующий документ."""
+    # Сначала создаём обычный документ (как это делает approve_draft)
+    create_resp = client.post("/api/v1/registry/documents", json={
+        "title": "Base Doc",
+        "doc_code": "BASE-001",
+        "era": "RF",
+        "source_type": "GOST",
+        "status": "uploaded",
+    })
+    assert create_resp.status_code == 201
+    base_doc = create_resp.json()
+    existing_doc_id = base_doc["data"]["id"]
+
+    # Теперь upsert: передаём document_id + document с content
+    upsert_payload = {
+        "draft_id": 1,
+        "document_id": existing_doc_id,
+        "document": {
+            "metadata": {
+                "title": "Base Doc",
+                "doc_code": "BASE-001",
+                "era": "RF",
+                "source_type": "GOST",
+                "status": "validating",
+            },
+            "content": [
+                {
+                    "clause": "1",
+                    "type": "text",
+                    "path": "1",
+                    "page": 1,
+                    "content": {"text": "Section 1 after pipeline"}
+                },
+                {
+                    "clause": "2",
+                    "type": "text",
+                    "path": "2",
+                    "page": 2,
+                    "content": {"text": "Section 2 after pipeline"}
+                }
+            ]
+        }
+    }
+    
+    upsert_resp = client.post("/api/v1/registry/documents", json=upsert_payload)
+    assert upsert_resp.status_code == 201
+    upsert_data = upsert_resp.json()
+    
+    # Должен вернуть ТОТ ЖЕ document_id (не создавать новый)
+    assert upsert_data["document_id"] == existing_doc_id, (
+        f"UPSERT должен вернуть существующий document_id={existing_doc_id}, "
+        f"получен {upsert_data['document_id']}"
+    )
+    # Должны быть sections
+    assert upsert_data["registry"]["sections_count"] == 2
+    assert len(upsert_data["sections"]) == 2
+    
+    # Проверяем что sections реально сохранились через GET /sections
+    sections_resp = client.get(f"/api/v1/registry/documents/{existing_doc_id}/sections")
+    assert sections_resp.status_code == 200
+    sections_data = sections_resp.json()
+    assert len(sections_data["sections"]) == 2
+    assert sections_data["sections"][0]["content"]["text"] == "Section 1 after pipeline"
+
+
+def test_create_pipeline_document_upsert_with_sections_key(client):
+    """UPSERT: create_pipeline_document с ключом 'sections' вместо 'content'."""
+    create_resp = client.post("/api/v1/registry/documents", json={
+        "title": "Sections Key Doc",
+        "doc_code": "SECKEY-001",
+        "era": "RF",
+        "source_type": "GOST",
+    })
+    assert create_resp.status_code == 201
+    doc_id = create_resp.json()["data"]["id"]
+
+    # Передаём document.sections (не document.content)
+    upsert_payload = {
+        "document_id": doc_id,
+        "draft_id": 1,
+        "document": {
+            "sections": [
+                {
+                    "clause": "1.1",
+                    "type": "text",
+                    "path": "1",
+                    "page": 1,
+                    "content": {"text": "From sections key"}
+                }
+            ]
+        }
+    }
+    upsert_resp = client.post("/api/v1/registry/documents", json=upsert_payload)
+    assert upsert_resp.status_code == 201
+    data = upsert_resp.json()
+    assert data["document_id"] == doc_id
+    assert data["registry"]["sections_count"] == 1
+
+    # Проверка через GET
+    sections_resp = client.get(f"/api/v1/registry/documents/{doc_id}/sections")
+    assert sections_resp.status_code == 200
+    assert len(sections_resp.json()["sections"]) == 1
+    assert sections_resp.json()["sections"][0]["content"]["text"] == "From sections key"
+
+
+def test_create_pipeline_document_upsert_without_metadata(client):
+    """UPSERT: create_pipeline_document без title/docCode не падает (только sections)."""
+    create_resp = client.post("/api/v1/registry/documents", json={
+        "title": "No Meta Doc",
+        "doc_code": "NOMETA-001",
+        "era": "RF",
+    })
+    assert create_resp.status_code == 201
+    doc_id = create_resp.json()["data"]["id"]
+
+    # Без metadata — только document.sections
+    upsert_payload = {
+        "document_id": doc_id,
+        "draft_id": 1,
+        "document": {
+            "sections": [
+                {"clause": "X", "type": "text", "path": "1", "page": 1,
+                 "content": {"text": "No metadata sections"}}
+            ]
+        }
+    }
+    upsert_resp = client.post("/api/v1/registry/documents", json=upsert_payload)
+    assert upsert_resp.status_code == 201
+    data = upsert_resp.json()
+    assert data["document_id"] == doc_id
+    assert data["registry"]["sections_count"] == 1
+
+
+def test_create_pipeline_document_upsert_nonexistent_id(client):
+    """UPSERT: c несуществующим document_id → создаёт новый документ."""
+    upsert_payload = {
+        "document_id": 99999,
+        "draft_id": 1,
+        "document": {
+            "metadata": {
+                "title": "New Doc From Upsert",
+                "doc_code": "NEW-UPSERT-001",
+                "era": "RF",
+            },
+            "content": [
+                {"clause": "1", "type": "text", "path": "1", "page": 1,
+                 "content": {"text": "New doc content"}}
+            ]
+        }
+    }
+    resp = client.post("/api/v1/registry/documents", json=upsert_payload)
+    assert resp.status_code == 201
+    data = resp.json()
+    # Должен быть новый document_id (не 99999)
+    assert data["document_id"] != 99999
+    assert data["registry"]["sections_count"] == 1
+    assert data["registry"]["references_count"] == 0
+
+
 def test_get_documents_with_additional_filters(client):
     # Create doc
     client.post("/api/v1/registry/documents", json={

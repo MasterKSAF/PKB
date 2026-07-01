@@ -569,69 +569,120 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
     
     title = metadata.get('title')
     doc_code = metadata.get('doc_code')
-    if not title or not doc_code:
-        raise ValueError("title and doc_code are required in document metadata")
-        
-    title_hash = metadata.get('title_hash_sha256')
-    if not title_hash:
-        title_hash = compute_title_hash_sha256(
-            metadata.get('era'),
-            metadata.get('source_type'),
-            metadata.get('mks_oks_code'),
-            metadata.get('okstu_code'),
-            doc_code,
-            metadata.get('normalized_title') or (title or '').strip().lower()
-        )
-        
-    # Check if duplicate document already exists
-    existing = db.query(Document).filter(Document.title_hash_sha256 == title_hash).first()
-    if existing:
-        raise ValueError("DUPLICATE_DOCUMENT")
-        
-    # Create the Document
-    doc_kwargs = {
-        'normalized_title': metadata.get('normalized_title'),
-        'source_type': metadata.get('source_type'),
-        'group_': metadata.get('group'),
-        'mks_oks_code': metadata.get('mks_oks_code'),
-        'draft_id': payload.get('draft_id') or payload.get('source_draft_id') or metadata.get('draft_id') or doc_data.get('draft_id'),
-        'okstu_code': metadata.get('okstu_code'),
-        'udk_code': metadata.get('udc'),
-        'era': metadata.get('era'),
-        'validity_status': metadata.get('validity_status'),
-        'status': metadata.get('status', 'uploaded'),
-        'jurisdiction': metadata.get('jurisdiction'),
-        'issuing_body': metadata.get('issuing_body'),
-        'file_hash_sha256': doc_data.get('source', {}).get('file_hash_sha256') if doc_data.get('source') else None,
-        'title_hash_sha256': title_hash,
-        'created_at': datetime.now(timezone.utc),
-        'updated_at': datetime.now(timezone.utc)
-    }
     
-    doc = create_document(db, doc_code=doc_code, title=title, **doc_kwargs)
-    
-    # Save physical version
-    source_data = doc_data.get('source', {})
-    if source_data:
-        from api.v1.models import DocumentVersion
-        existing_ver = db.query(DocumentVersion).filter(
-            DocumentVersion.document_id == doc.id,
-            DocumentVersion.version_number == 1
-        ).first()
-        if not existing_ver:
-            db_ver = DocumentVersion(
-                document_id=doc.id,
-                version_number=1,
-                file_hash_sha256=source_data.get('file_hash_sha256'),
-                file_size_bytes=source_data.get('page_count') or 0,
-                file_key=source_data.get('file_name'),
-                created_at=datetime.now(timezone.utc)
-            )
-            db.add(db_ver)
+    content_list = doc_data.get('content') or doc_data.get('sections') or []
+    references_list = doc_data.get('references', [])
+
+    # ─── UPSERT: если передан document_id — обновляем существующий документ ───
+    existing_doc_id = payload.get('document_id')
+    if existing_doc_id:
+        doc = db.query(Document).filter(Document.id == existing_doc_id).first()
+        if doc:
+            # Обновляем поля документа (только если переданы)
+            if title:
+                doc.title = title
+            if doc_code:
+                doc.doc_code = doc_code
+            if metadata.get('normalized_title'):
+                doc.normalized_title = metadata['normalized_title']
+            if metadata.get('source_type'):
+                doc.source_type = metadata['source_type']
+            if metadata.get('era'):
+                doc.era = metadata['era']
+            if metadata.get('jurisdiction'):
+                doc.jurisdiction = metadata['jurisdiction']
+            if metadata.get('issuing_body'):
+                doc.issuing_body = metadata['issuing_body']
+            if metadata.get('validity_status'):
+                doc.validity_status = metadata['validity_status']
+            if metadata.get('status'):
+                doc.status = metadata['status']
+            doc.updated_at = datetime.now(timezone.utc)
             db.flush()
-    
-    # Save content sections
-    content_list = doc_data.get('content', [])
+
+            # Удаляем старые sections только если есть новые на замену
+            if content_list:
+                db.query(DocumentSection).filter(
+                    DocumentSection.document_id == doc.id
+                ).delete()
+                db.flush()
+
+            # Удаляем старые references только если есть новые
+            if references_list:
+                db.query(DocumentReference).filter(
+                    DocumentReference.source_document_id == doc.id
+                ).delete()
+                db.flush()
+
+            new_document_created = False
+        else:
+            new_document_created = True
+    else:
+        new_document_created = True
+
+    # ─── CREATE: если upsert не сработал, создаём новый документ ───
+    if new_document_created:
+        if not title or not doc_code:
+            raise ValueError("title and doc_code are required in document metadata")
+            
+        title_hash = metadata.get('title_hash_sha256')
+        if not title_hash:
+            title_hash = compute_title_hash_sha256(
+                metadata.get('era'),
+                metadata.get('source_type'),
+                metadata.get('mks_oks_code'),
+                metadata.get('okstu_code'),
+                doc_code,
+                metadata.get('normalized_title') or (title or '').strip().lower()
+            )
+            
+        # Check if duplicate document already exists
+        existing = db.query(Document).filter(Document.title_hash_sha256 == title_hash).first()
+        if existing:
+            raise ValueError("DUPLICATE_DOCUMENT")
+            
+        doc_kwargs = {
+            'normalized_title': metadata.get('normalized_title'),
+            'source_type': metadata.get('source_type'),
+            'group_': metadata.get('group'),
+            'mks_oks_code': metadata.get('mks_oks_code'),
+            'draft_id': payload.get('draft_id') or payload.get('source_draft_id') or metadata.get('draft_id') or doc_data.get('draft_id'),
+            'okstu_code': metadata.get('okstu_code'),
+            'udk_code': metadata.get('udc'),
+            'era': metadata.get('era'),
+            'validity_status': metadata.get('validity_status'),
+            'status': metadata.get('status', 'uploaded'),
+            'jurisdiction': metadata.get('jurisdiction'),
+            'issuing_body': metadata.get('issuing_body'),
+            'file_hash_sha256': doc_data.get('source', {}).get('file_hash_sha256') if doc_data.get('source') else None,
+            'title_hash_sha256': title_hash,
+            'created_at': datetime.now(timezone.utc),
+            'updated_at': datetime.now(timezone.utc)
+        }
+        
+        doc = create_document(db, doc_code=doc_code, title=title, **doc_kwargs)
+        
+        # Save physical version
+        source_data = doc_data.get('source', {})
+        if source_data:
+            from api.v1.models import DocumentVersion
+            existing_ver = db.query(DocumentVersion).filter(
+                DocumentVersion.document_id == doc.id,
+                DocumentVersion.version_number == 1
+            ).first()
+            if not existing_ver:
+                db_ver = DocumentVersion(
+                    document_id=doc.id,
+                    version_number=1,
+                    file_hash_sha256=source_data.get('file_hash_sha256'),
+                    file_size_bytes=source_data.get('page_count') or 0,
+                    file_key=source_data.get('file_name'),
+                    created_at=datetime.now(timezone.utc)
+                )
+                db.add(db_ver)
+                db.flush()
+
+    # ─── Save content sections (общие для upsert и create) ───
     sections_response = []
     
     for idx, sec in enumerate(content_list):
@@ -685,7 +736,6 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
                     db.flush()
                 
     # Save references
-    references_list = doc_data.get('references', [])
     for ref in references_list:
         db_ref = DocumentReference(
             source_document_id=doc.id,

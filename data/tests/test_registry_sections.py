@@ -177,7 +177,7 @@ for doc in docs:
     r = requests.get(f"{GW}/registry/documents/{did}/sections", headers=headers, timeout=10)
     sec_count = 0
     if r.status_code == 200:
-        sec_data = r.json().get("data", {})
+        sec_data = r.json()
         sec_count = len(sec_data.get("sections", []))
     print(f"  doc_id={did} title={str(doc.get('title',''))[:40]} "
           f"doc_code={str(doc.get('doc_code',''))[:25]} "
@@ -193,7 +193,7 @@ for doc in docs:
     did = doc["id"]
     r = requests.get(f"{GW}/registry/documents/{did}/sections", headers=headers, timeout=10)
     if r.status_code == 200:
-        sec_data = r.json().get("data", {})
+        sec_data = r.json()
         sections = sec_data.get("sections", [])
         if len(sections) > best_count:
             best_count = len(sections)
