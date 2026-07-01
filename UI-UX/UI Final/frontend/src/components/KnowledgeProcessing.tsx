@@ -50,6 +50,7 @@ import {
   type GatewayTaskStepStatus,
 } from '../utils/http';
 import { downloadPreviewFile } from '../utils/downloadPreview';
+import { getUserFacingApiError } from '../utils/errors';
 import {
   MOCK_DOCUMENTS,
   MOCK_PROCESSING_LOGS,
@@ -1638,13 +1639,14 @@ export const KnowledgeProcessing: React.FC = () => {
         } catch (error: any) {
           failedCount += 1;
           console.error('[handleCreateDraftFromFiles] upload failed:', error);
+          const errorMessage = getUserFacingApiError(error, 'Не удалось отправить файл на сервер.');
           updateDraft(id, {
             status: 'failed',
             progress: 100,
             note: 'Сервер не принял файл. Черновик помечен как failed.',
-            gatewayErrorMessage: error?.message ?? String(error) ?? 'Не удалось отправить файл на сервер.',
+            gatewayErrorMessage: errorMessage,
           });
-          setNotice(`Черновик «${title}» не удалось отправить на сервер.`);
+          setNotice(`Черновик «${title}» не удалось отправить на сервер. ${errorMessage}`);
         }
       } else {
         handleRunDraftChecks(id, draft);
@@ -1701,17 +1703,12 @@ export const KnowledgeProcessing: React.FC = () => {
         await queryClient.invalidateQueries({ queryKey: ['gateway-drafts', workMode] });
         setNotice(`Метаданные для «${selectedDraft.title}» сохранены на сервере.`);
       } catch (error: any) {
+        const errorMessage = getUserFacingApiError(error, 'Не удалось сохранить метаданные.');
         updateDraft(selectedDraft.id, {
           note: 'Сервер пока не подтвердил сохранение метаданных.',
-          gatewayErrorMessage:
-            error?.message ??
-            'PATCH /drafts/{id}/metadata не выполнен. Контракт описан в документации, но текущий backend мог еще не реализовать endpoint.',
+          gatewayErrorMessage: errorMessage,
         });
-        setNotice(
-          `Метаданные не сохранены на сервере: ${
-            error?.message ?? 'endpoint сохранения метаданных пока недоступен в текущем backend.'
-          }`,
-        );
+        setNotice(`Метаданные не сохранены на сервере. ${errorMessage}`);
       }
       return;
     }
@@ -1879,8 +1876,7 @@ export const KnowledgeProcessing: React.FC = () => {
           setNotice(`Проверка черновика «${draftAfterPreview.title}» завершена.`);
         }
       } catch (error: any) {
-        const backendMsg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message;
-        const errorMsg = backendMsg ?? 'Не удалось получить статус проверки черновика.';
+        const errorMsg = getUserFacingApiError(error, 'Не удалось получить статус проверки черновика.');
         updateDraft(draftId, {
           status: 'failed',
           progress: 100,
@@ -1996,18 +1992,15 @@ export const KnowledgeProcessing: React.FC = () => {
       await queryClient.invalidateQueries({ queryKey: ['gateway-documents-queue', workMode] });
       await queryClient.invalidateQueries({ queryKey: ['gateway-knowledge-sections', workMode] });
     } catch (error: any) {
+      const errorMessage = getUserFacingApiError(error, 'Не удалось отправить решение на сервер.');
       updateDraft(draftId, {
         note:
           action === 'confirm'
             ? 'Сервер пока не принял подтверждение по черновику.'
             : 'Сервер не принял решение по черновику.',
-        gatewayErrorMessage:
-          error?.message ??
-          (action === 'confirm'
-            ? 'PATCH /drafts/{id}/decide action=confirm описан в документации, но текущий backend мог еще не реализовать этот сценарий.'
-            : 'Не удалось отправить решение на сервер.'),
+        gatewayErrorMessage: errorMessage,
       });
-      setNotice(`Не удалось отправить решение по «${draft.title}» на сервер: ${error?.message ?? 'контракт пока не реализован в коде backend.'}`);
+      setNotice(`Не удалось отправить решение по «${draft.title}». ${errorMessage}`);
     }
   };
 
@@ -2063,13 +2056,14 @@ export const KnowledgeProcessing: React.FC = () => {
         setNotice(`Черновик «${draft.title}» удалён на сервере.`);
       })
       .catch((error: any) => {
+        const errorMessage = getUserFacingApiError(error, 'Не удалось удалить черновик на сервере.');
         updateDraft(draftId, {
           status: 'failed',
           progress: 100,
           note: 'Сервер не удалил черновик.',
-          gatewayErrorMessage: error?.message ?? 'Не удалось удалить черновик на сервере.',
+          gatewayErrorMessage: errorMessage,
         });
-        setNotice(`Черновик «${draft.title}» не удалось удалить на сервере.`);
+        setNotice(`Черновик «${draft.title}» не удалось удалить на сервере. ${errorMessage}`);
       });
   };
 
