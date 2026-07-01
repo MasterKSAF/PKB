@@ -33,11 +33,18 @@
 - PII-фильтрация (password, access_token, refresh_token → ***).
 - X-Request-ID / X-User-ID проброс во все downstream.
 
-### 6. CORS (GW-3)
+### 6. MaxBodySize — защита от DoS (GW-13)
+- Самая внешняя middleware — проверяет Content-Length до любой обработки.
+- Два уровня:
+  - `/chat/*`, `/text/*` — ~66 KB (строгий лимит для сообщений)
+  - остальные пути — 100 MB (для передачи документов)
+- Превышение → 413 Payload Too Large.
+
+### 7. CORS (GW-3)
 - В development — разрешены все origins (`*`).
 - В production — строго заданные домены, `*` запрещён.
 
-### 7. Тестирование Gateway
+### 8. Тестирование Gateway
 - Unit-тесты в `tests/` (168 тестов) — не требуют Docker, импортируют модули gateway напрямую.
 - Docker-интеграционные тесты в `tests/` (65 тестов) — требуют запущенного Gateway в Docker (порт 18080).
 - Помечены `@pytest.mark.docker`, автоматически скипаются без Docker.
