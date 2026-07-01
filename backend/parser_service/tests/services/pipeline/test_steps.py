@@ -174,12 +174,19 @@ async def test_upload_images_step_full_mode():
 
 @pytest.mark.asyncio
 async def test_upload_images_step_preview_mode():
-    ctx = ProcessingContext(task_id=1, draft_id=1, file_key="test.pdf", track_progress=False)
-    ctx.temp_dir = "/tmp"
+    ctx = ProcessingContext(
+        task_id=1,
+        draft_id=1,
+        file_key="test.pdf",
+        track_progress=False,
+        temp_dir="/tmp/some_dir"
+    )
     step = UploadImagesStep(AsyncMock())
-    with patch("shutil.rmtree") as mock_rmtree:
-        new_ctx = await step.execute(ctx)
-    mock_rmtree.assert_not_called()
+    with patch("os.path.exists", return_value=True):
+        with patch("shutil.rmtree") as mock_rmtree:
+            await step.execute(ctx)
+            mock_rmtree.assert_called_once_with("/tmp/some_dir", ignore_errors=True)
+            assert ctx.temp_dir is None
 
 
 # ===================== TruncatePdfStep =====================

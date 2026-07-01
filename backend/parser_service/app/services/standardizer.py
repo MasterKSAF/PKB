@@ -25,6 +25,32 @@ class BaseStandardizer(ABC):
 class JsonStandardizer(BaseStandardizer):
     """Стандартизатор для схемы raw_ocr_v4 (текущая реализация)."""
 
+    @staticmethod
+    def _normalize_bbox(bbox: List[float]) -> List[float]:
+        """
+        Нормализует bounding box: приводит отрицательные координаты к 0,
+        убеждается, что x2 > x1 и y2 > y1.
+        """
+        if not bbox or len(bbox) != 4:
+            return [0, 0, 0, 0]
+
+        x1, y1, x2, y2 = bbox
+
+        # Приводим отрицательные к 0
+        x1 = max(0.0, x1)
+        y1 = max(0.0, y1)
+        x2 = max(0.0, x2)
+        y2 = max(0.0, y2)
+
+        # Если x2 <= x1, меняем местами или устанавливаем минимальную ширину
+        if x2 <= x1:
+            x2 = x1 + 1.0  # минимальная ширина 1 пиксель
+
+        if y2 <= y1:
+            y2 = y1 + 1.0
+
+        return [float(x1), float(y1), float(x2), float(y2)]
+
     def transform(self, data: Dict[str, Any], file_name: str = "") -> Dict[str, Any]:
         """
         Преобразует входной JSON в стандартизированную структуру.
@@ -106,6 +132,9 @@ class JsonStandardizer(BaseStandardizer):
             bbox = el.get("bounding box")
             if not isinstance(bbox, list) or len(bbox) != 4:
                 bbox = [0, 0, 0, 0]
+            else:
+                # Нормализуем координаты
+                bbox = self._normalize_bbox(bbox)
 
             block_item = {
                 "number": idx,
@@ -155,7 +184,7 @@ class JsonStandardizer(BaseStandardizer):
                         {
                             "type": "paragraph",
                             "page": it.get("page number", block_item["page"]),
-                            "bbox": it.get("bounding box", [0, 0, 0, 0]),
+                            "bbox": self._normalize_bbox(it.get("bounding box", [0, 0, 0, 0])),
                             "content": it.get("content", ""),
                             "font": item_font if item_font else block_item.get("font", {}),
                         }
@@ -205,7 +234,7 @@ class JsonStandardizer(BaseStandardizer):
                     block_item["caption"] = {
                         "type": "caption",
                         "page": cap.get("page number", block_item["page"]),
-                        "bbox": cap.get("bounding box", [0, 0, 0, 0]),
+                        "bbox": self._normalize_bbox(cap.get("bounding box", [0, 0, 0, 0])),
                         "linked_number": cap.get("linked number", idx),
                         "content": cap.get("content", ""),
                         "font": {},
@@ -244,7 +273,7 @@ class JsonStandardizer(BaseStandardizer):
                                 "row_span": cell.get("row span", 1),
                                 "column_span": cell.get("column span", 1),
                                 "page": cell.get("page number", 1),
-                                "bbox": cell.get("bounding box", [0, 0, 0, 0]),
+                                "bbox": self._normalize_bbox(cell.get("bounding box", [0, 0, 0, 0])),
                                 "block": cell_content,
                             }
                         )
@@ -263,7 +292,7 @@ class JsonStandardizer(BaseStandardizer):
                             fn_font["underline"] = False
                         block_item["footnotes"].append(
                             {
-                                "bbox": fn.get("bounding box", [0, 0, 0, 0]),
+                                "bbox": self._normalize_bbox(fn.get("bounding box", [0, 0, 0, 0])),
                                 "content": fn.get("content", ""),
                                 "font": fn_font if fn_font else {},
                             }

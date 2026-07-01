@@ -8,6 +8,7 @@ import shutil
 import hashlib
 import logging
 import asyncio
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
@@ -21,6 +22,9 @@ from app.services.normalizer import Normalizer
 from app.core.task_models import TaskStatus
 from app.services.result_builder import build_result
 from app.config import settings
+
+# Импорт модуля проверки качества PDF
+from app.services.shared.pdf_text_quality_module import analyze_pdf_file
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +79,35 @@ class ValidateStep(PipelineStep):
         return ctx
 
 
+class QualityCheckStep(PipelineStep):
+    """Проверяет качество PDF-файла и сохраняет код качества в контекст."""
+
+    async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
+        if not ctx.file_bytes:
+            return ctx
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(ctx.file_bytes)
+            tmp_path = tmp.name
+
+        try:
+            result = analyze_pdf_file(tmp_path, pages_limit=5)
+            quality_dict = result.to_dict()
+            ctx.quality_code = quality_dict.get("code_name", "UNKNOWN")
+            logger.debug(f"Quality check for task {ctx.task_id}: {ctx.quality_code}")
+        except Exception as e:
+            logger.warning(f"Quality check failed for task {ctx.task_id}: {e}")
+            ctx.quality_code = "ERROR"
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+        return ctx
+
+
 class PagesTotalStep(PipelineStep):
     def __init__(self, task_store):
         self.task_store = task_store
@@ -105,6 +138,9 @@ class ParseStep(PipelineStep):
         parser = ParserFactory.get_parser(ctx.mime_type)
         if parser is None:
             raise ValueError(f"No parser for MIME {ctx.mime_type}")
+        
+        ctx.options["original_file_name"] = ctx.original_file_name
+        
         ctx.parse_result = await parser.parse(
             ctx.file_bytes,
             ctx.options,
@@ -122,20 +158,62 @@ class ParseStep(PipelineStep):
             if not ctx.track_progress and ctx.parse_result.total_pages > ctx.max_pages:
                 ctx.preview_not_supported = True
             logger.debug("Truncated to %d pages", ctx.max_pages)
+
+        # Если preview (track_progress=False), удаляем временную папку сразу
+        if not ctx.track_progress and ctx.temp_dir and os.path.exists(ctx.temp_dir):
+            shutil.rmtree(ctx.temp_dir, ignore_errors=True)
+            logger.debug("Removed temp dir for preview task %d", ctx.task_id)
+            ctx.temp_dir = None
+
+        return ctx
+
+
+class UpdateProgressStep(PipelineStep):
+    """Обновляет прогресс задачи после завершения парсинга."""
+    
+    def __init__(self, task_store):
+        self.task_store = task_store
+
+    async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
+        if not ctx.track_progress:
+            return ctx
+
+        if ctx.parse_result is None:
+            logger.warning(f"UpdateProgressStep: parse_result is None for task {ctx.task_id}")
+            return ctx
+
+        total_pages = ctx.total_pages or 0
+        full_json = ctx.parse_result.full_json
+        avg_confidence = 0.0
+
+        if full_json and isinstance(full_json, dict):
+            quality = full_json.get("quality")
+            if quality and isinstance(quality, dict):
+                avg_confidence = quality.get("confidence", 0.0)
+
+        await self.task_store.update_task(
+            ctx.task_id,
+            pages_processed=total_pages,
+            avg_confidence=avg_confidence,
+        )
+
+        logger.info(
+            f"Updated progress for task {ctx.task_id}: pages_processed={total_pages}, avg_confidence={avg_confidence}"
+        )
         return ctx
 
 
 class UploadImagesStep(PipelineStep):
-    """
-    Шаг загрузки изображений в MinIO.
-    Логирует только итоговый результат: количество успешно загруженных изображений и ошибок.
-    """
     def __init__(self, minio_client):
         self.minio_client = minio_client
 
     async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
         if not ctx.track_progress:
-            logger.debug("Preview mode: keeping temp dir %s (cleanup delegated to OS)", ctx.temp_dir)
+            # Preview: удаляем temp_dir, если он ещё существует
+            if ctx.temp_dir and os.path.exists(ctx.temp_dir):
+                shutil.rmtree(ctx.temp_dir, ignore_errors=True)
+                logger.debug("Removed temp dir for preview task %d", ctx.task_id)
+                ctx.temp_dir = None
             return ctx
 
         if not ctx.parse_result or not ctx.parse_result.images:
@@ -169,31 +247,36 @@ class UploadImagesStep(PipelineStep):
             )
             path_to_key[file_path] = None
 
-        if upload_tasks:
-            keys = await asyncio.gather(*upload_tasks, return_exceptions=True)
-            success_count = 0
-            error_count = 0
-            for file_path, key_or_exc in zip(path_to_key.keys(), keys):
-                if isinstance(key_or_exc, Exception):
-                    logger.error("Failed to upload image %s: %s", file_path, key_or_exc)
-                    error_count += 1
-                    continue
-                path_to_key[file_path] = key_or_exc
-                success_count += 1
-                try:
-                    os.unlink(file_path)
-                except Exception as e:
-                    logger.warning("Failed to unlink %s: %s", file_path, e)
+        # Ограничение параллельности загрузки
+        max_concurrent = settings.max_concurrent_image_uploads
+        success_count = 0
+        error_count = 0
+        keys = []
+        for i in range(0, len(upload_tasks), max_concurrent):
+            chunk = upload_tasks[i:i+max_concurrent]
+            chunk_results = await asyncio.gather(*chunk, return_exceptions=True)
+            keys.extend(chunk_results)
 
-            logger.info(
-                "Uploaded %d/%d images for task %d (errors: %d)",
-                success_count,
-                total_images,
-                ctx.task_id,
-                error_count,
-            )
+        for file_path, key_or_exc in zip(path_to_key.keys(), keys):
+            if isinstance(key_or_exc, Exception):
+                logger.error("Failed to upload image %s: %s", file_path, key_or_exc)
+                error_count += 1
+                continue
+            path_to_key[file_path] = key_or_exc
+            success_count += 1
+            try:
+                os.unlink(file_path)
+            except Exception as e:
+                logger.warning("Failed to unlink %s: %s", file_path, e)
 
-        # Заменяем пути в JSON
+        logger.info(
+            "Uploaded %d/%d images for task %d (errors: %d)",
+            success_count,
+            total_images,
+            ctx.task_id,
+            error_count,
+        )
+
         _replace_image_paths(ctx.parse_result.full_json, path_to_key)
         logger.debug("Replaced image paths in JSON for %d images", len(path_to_key))
 
@@ -204,23 +287,31 @@ class UploadImagesStep(PipelineStep):
 
 
 class TransformStep(PipelineStep):
-    """
-    Шаг, объединяющий нормализацию и стандартизацию.
-    """
     def __init__(self, normalizer: Normalizer):
         self.normalizer = normalizer
         self.standardizer = StandardizerFactory.get_standardizer(settings.parsing_schema)
 
     async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
-        logger.debug("Normalizing JSON for task %d", ctx.task_id)
-        ctx.final_json = await self.normalizer.normalize(ctx.parse_result, ctx.task_id)
+        logger.debug("TransformStep for task %d", ctx.task_id)
+        if ctx.parse_result is None:
+            raise ValueError("No parse result to transform")
 
-        if ctx.final_json is None:
-            raise ValueError("No final JSON to standardize")
+        full_json = ctx.parse_result.full_json
+
+        if "document" in full_json and "quality" in full_json:
+            logger.debug("JSON already standardized, skipping transformation")
+            ctx.final_json = full_json
+            return ctx
+
+        logger.debug("Normalizing JSON for task %d", ctx.task_id)
+        normalized = await self.normalizer.normalize(ctx.parse_result, ctx.task_id)
+        if normalized is None:
+            raise ValueError("Normalization returned None")
+
         logger.debug("Standardizing JSON with schema %s", settings.parsing_schema)
         standardized = await asyncio.to_thread(
             self.standardizer.transform,
-            ctx.final_json,
+            normalized,
             ctx.original_file_name,
         )
         ctx.final_json = standardized
@@ -232,21 +323,24 @@ class SaveJsonToFileStep(PipelineStep):
         if not settings.save_json_to_dir:
             return ctx
 
-        # Формируем полный результат (обёртку), идентичный тому, что сохраняется в task_store
-        result_payload = build_result(
-            task_id=ctx.task_id,
-            draft_id=ctx.draft_id,
-            final_json=ctx.final_json,
-            mode="full",  # этот шаг выполняется только в full режиме
-            preview_not_supported=False,
-        )
+        try:
+            output_dir = settings.json_output_dir
+            os.makedirs(output_dir, exist_ok=True)
+            file_path = os.path.join(output_dir, f"task_{ctx.task_id}.json")
+            result_payload = build_result(
+                task_id=ctx.task_id,
+                draft_id=ctx.draft_id,
+                final_json=ctx.final_json,
+                mode="full",
+                preview_not_supported=False,
+            )
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(result_payload, f, indent=2, ensure_ascii=False)
+            logger.info("Saved JSON to %s", file_path)
+        except Exception as e:
+            logger.warning("Failed to save JSON to %s: %s", settings.json_output_dir, e)
+            # Не прерываем выполнение пайплайна
 
-        output_dir = settings.json_output_dir
-        os.makedirs(output_dir, exist_ok=True)
-        file_path = os.path.join(output_dir, f"task_{ctx.task_id}.json")
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(result_payload, f, indent=2, ensure_ascii=False)
-        logger.info("Saved JSON to %s", file_path)
         return ctx
 
 
@@ -256,9 +350,7 @@ class StoreResultStep(PipelineStep):
         self.max_result_size_bytes = max_result_size_bytes
 
     async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
-        if not ctx.track_progress:
-            return ctx
-
+        # Формируем уведомление о качестве (для всех режимов)
         task_info = await self.task_store.get(ctx.task_id)
         pages_total = task_info.pages_total if task_info else (
             ctx.parse_result.total_pages if ctx.parse_result else 0
@@ -272,7 +364,41 @@ class StoreResultStep(PipelineStep):
             preview_not_supported=ctx.preview_not_supported,
         )
 
-        # Проверяем размер результата
+        # ---- Объединяем уведомления о качестве и проблемных страницах ----
+        notifications = result_payload["quality"].get("notifications", [])
+        problematic_pages_str = None
+        new_notifications = []
+
+        for note in notifications:
+            if note.get("category") == "quality":
+                continue
+            if "message" in note and note["message"].startswith("problematic_pages:"):
+                match = re.search(r'\[(.*?)\]', note["message"])
+                if match:
+                    problematic_pages_str = match.group(1)
+                continue
+            new_notifications.append(note)
+
+        # Добавляем уведомление с категорией quality (всегда)
+        if ctx.quality_code:
+            category = f"quality: {ctx.quality_code}"
+            if problematic_pages_str is not None:
+                message = f"problematic_pages: [{problematic_pages_str}]"
+            else:
+                message = ""
+            new_notifications.append({
+                "category": category,
+                "message": message
+            })
+
+        result_payload["quality"]["notifications"] = new_notifications
+
+        # Если preview — просто возвращаем результат (не сохраняем в task_store)
+        if not ctx.track_progress:
+            ctx.final_json = result_payload  # обновляем контекст с уведомлением
+            return ctx
+
+        # ---- Для full-режима: проверка размера и сохранение ----
         serialized = json.dumps(result_payload)
         size_bytes = len(serialized.encode("utf-8"))
         if size_bytes > self.max_result_size_bytes:

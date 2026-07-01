@@ -8,8 +8,10 @@ import asyncio
 from app.services.pipeline.steps import (
     DownloadStep,
     ValidateStep,
+    QualityCheckStep,
     PagesTotalStep,
     ParseStep,
+    UpdateProgressStep,
     UploadImagesStep,
     TransformStep,
     SaveJsonToFileStep,
@@ -45,8 +47,10 @@ class Pipeline:
             steps = [
                 DownloadStep(minio_client),
                 ValidateStep(),
+                QualityCheckStep(),
                 PagesTotalStep(task_store),
                 ParseStep(),
+                UpdateProgressStep(task_store),
                 UploadImagesStep(minio_client),
                 TransformStep(normalizer),
                 SaveJsonToFileStep(),
@@ -56,6 +60,7 @@ class Pipeline:
             steps = [
                 DownloadStep(minio_client),
                 ValidateStep(),
+                QualityCheckStep(),
                 PagesTotalStep(task_store),
                 TruncatePdfStep(),
                 ParseStep(),

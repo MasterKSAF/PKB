@@ -73,6 +73,33 @@ class Settings(BaseSettings):
     max_concurrent_preview_tasks: int = Field(30, alias="MAX_CONCURRENT_PREVIEW_TASKS")
     max_full_queue_size: int = Field(100, alias="MAX_FULL_QUEUE_SIZE")
     queue_submit_timeout: float = Field(1.0, alias="QUEUE_SUBMIT_TIMEOUT")
+    max_concurrent_image_uploads: int = Field(10, alias="MAX_CONCURRENT_IMAGE_UPLOADS")
+
+    # ---------- ПАРАМЕТРЫ ПАРСЕРА (единый блок) ----------
+    parser_use_hybrid: bool = Field(True, alias="PARSER_USE_HYBRID")
+    parser_image_format: str = Field("png", alias="PARSER_IMAGE_FORMAT")
+    parser_threads: int = Field(0, alias="PARSER_THREADS")  # 0 = авто
+    parser_max_pages_for_standard: int = Field(500, alias="PARSER_MAX_PAGES_FOR_STANDARD")
+    parser_max_size_mb_for_standard: int = Field(1024, alias="PARSER_MAX_SIZE_MB_FOR_STANDARD")
+    parser_parallel_workers: int = Field(0, alias="PARSER_PARALLEL_WORKERS")
+    parser_retry_attempts: int = Field(1, alias="PARSER_RETRY_ATTEMPTS")
+    parser_java_opts: str = Field("-Xmx4g -XX:+UseG1GC", alias="PARSER_JAVA_OPTS")
+    parser_hybrid_mode: str = Field("docling-fast", alias="PARSER_HYBRID_MODE")
+    parser_cli_timeout_standard_sec: int = Field(7200, alias="PARSER_CLI_TIMEOUT_STANDARD_SEC")
+    parser_cli_timeout_page_sec: int = Field(1200, alias="PARSER_CLI_TIMEOUT_PAGE_SEC")
+    parser_enable_page_by_page: bool = Field(False, alias="PARSER_ENABLE_PAGE_BY_PAGE")
+    parser_save_quality_report: bool = Field(True, alias="PARSER_SAVE_QUALITY_REPORT")
+    parser_chunk_size: int = Field(100, alias="PARSER_CHUNK_SIZE")
+    parser_detect_header_footer: bool = Field(True, alias="PARSER_DETECT_HEADER_FOOTER")
+    parser_enable_ocr: bool = Field(False, alias="PARSER_ENABLE_OCR")
+    parser_ocr_lang: str = Field("rus", alias="PARSER_OCR_LANG")
+
+    # Гибридный сервер
+    hybrid_host: str = Field("localhost", alias="HYBRID_HOST")
+    hybrid_port: int = Field(5002, alias="HYBRID_PORT")
+    hybrid_startup_timeout: int = Field(30, alias="HYBRID_STARTUP_TIMEOUT")
+    hybrid_auto_start: bool = Field(True, alias="HYBRID_AUTO_START")
+
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
