@@ -19,9 +19,16 @@ class DraftCreateResponse(BaseModel):
     status: str = Field("uploaded", description="Статус черновика")
     file_hash_sha256: str = Field(..., description="SHA-256 хэш файла")
     file_size_bytes: int = Field(..., description="Размер файла в байтах")
-    is_duplicate_file: bool = Field(False, description="Файл является дубликатом")
+    is_duplicate_file: bool = Field(False, description="Файл является дубликатом активного черновика")
+    is_duplicate: bool = Field(False, description="Документ с таким бизнес-ключом уже существует")
     is_duplicate_document: bool = Field(
-        False, description="Документ с таким бизнес-ключом уже существует"
+        False, description="Файл с таким хешем уже существует как принятый документ"
+    )
+    existing_draft_id: Optional[int] = Field(
+        None, description="ID существующего активного черновика (если is_duplicate_file)"
+    )
+    existing_document_id: Optional[int] = Field(
+        None, description="ID существующего документа (если is_duplicate_document)"
     )
     title_hash_sha256: Optional[str] = Field(
         None, description="SHA-256 хэш названия (бизнес-ключ)"

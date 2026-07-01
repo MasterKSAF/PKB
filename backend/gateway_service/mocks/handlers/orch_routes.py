@@ -403,21 +403,33 @@ async def create_draft(request: Request):
             draft["metadata"] = {}
 
     # Проверка дублей: _drafts (активные черновики) + _documents (утверждённые документы)
+    # Активные — блокируем 409 DUPLICATE_IN_PROGRESS (синхронизация с реальным backend)
     for existing in _drafts.values():
         if existing.get("file_hash_sha256") == file_hash and existing.get("status") in (
             "uploaded", "previewing", "ready_for_approve"
         ):
-            draft["is_duplicate_file"] = True
-            draft["status"] = "uploaded"
+            raise HTTPException(
+                status_code=409,
+                detail=error_response(
+                    "DUPLICATE_IN_PROGRESS",
+                    "Файл с таким hash уже в активной обработке",
+                    details={
+                        "file_hash_sha256": file_hash,
+                        "existing_draft_id": existing.get("draft_id"),
+                    },
+                ),
+            )
+
+    # Документ уже принят — не блокируем, но выставляем флаги
+    existing_document_id = None
+    for doc in _documents.values():
+        if doc.get("file_hash_sha256") == file_hash:
+            existing_document_id = doc.get("document_id")
             break
 
-    if not draft["is_duplicate_file"]:
-        for doc in _documents.values():
-            if doc.get("file_hash_sha256") == file_hash:
-                draft["is_duplicate_file"] = True
-                draft["is_duplicate_document"] = True
-                draft["approved_document_id"] = doc.get("document_id")
-                break
+    if existing_document_id:
+        draft["is_duplicate_document"] = True
+        draft["existing_document_id"] = existing_document_id
 
     _drafts[draft_id] = draft
     _tasks[task_id] = {
@@ -440,6 +452,7 @@ async def create_draft(request: Request):
         "file_size_bytes": draft["file_size_bytes"],
         "is_duplicate_file": draft["is_duplicate_file"],
         "is_duplicate_document": draft["is_duplicate_document"],
+        "existing_document_id": draft.get("existing_document_id"),
         "title_hash_sha256": title_hash,
         "created_at": now,
     }

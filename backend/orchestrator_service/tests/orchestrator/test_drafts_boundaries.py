@@ -192,11 +192,11 @@ class TestDuplicateDetection:
             data={"document_key": "doc-dup-e2e-b", "source_type": "GOST"},
         )
         assert r2.status_code == 409, (
-            f"Ожидался 409 DUPLICATE_FILE при повторной загрузке того же файла, "
+            f"Ожидался 409 DUPLICATE_IN_PROGRESS при повторной загрузке того же файла, "
             f"получен {r2.status_code}"
         )
         detail = r2.json()
-        assert detail.get("detail", {}).get("error", {}).get("code") == "DUPLICATE_FILE"
+        assert detail.get("detail", {}).get("error", {}).get("code") == "DUPLICATE_IN_PROGRESS"
 
     def test_response_title_hash_null_when_no_title(
         self, client: TestClient, auth_header: dict
@@ -261,6 +261,9 @@ class TestDuplicateDetection:
         assert d2["is_duplicate_file"] is False, (
             "Разные файлы не должны детектиться как дубликаты по хешу"
         )
-        assert d2["is_duplicate_document"] is True, (
-            "Одинаковые metadata → is_duplicate_document=True"
+        assert d2["is_duplicate"] is True, (
+            "Одинаковые metadata → is_duplicate=True"
+        )
+        assert d2["is_duplicate_document"] is False, (
+            "Разные файлы, бизнес-ключ дубль → is_duplicate_document=False"
         )

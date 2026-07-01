@@ -646,6 +646,11 @@ class TestEdgeCases:
         assert "sources" not in data
 
 
+def _unique_payload(tag: str) -> bytes:
+    """Generate unique PDF payload for each test (avoids 409 DUPLICATE_IN_PROGRESS)."""
+    return tag.encode() + b"%PDF-1.4\n" + b"%PAD-" * 300 + b"\n%%EOF\n"
+
+
 # ===========================================================================
 # UC-08: DRAFTS (ЧЕРНОВИКИ) — обязательная точка входа при загрузке.
 # Спецификация: docs/orchestrator_service_api.md, группа "drafts".
@@ -654,13 +659,13 @@ class TestDrafts:
     def setup_method(self):
         reset_rate_limiter()
 
-    _PAYLOAD = b"%PDF-1.4\n" + b"%PAD-" * 300 + b"\n%%EOF\n"
+    _unique_payload = staticmethod(_unique_payload)
 
     def test_upload_creates_draft(self):
         """POST /drafts создаёт черновик и возвращает draft_id + task_id (bigint)."""
         resp = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("spec.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("spec.pdf", self._unique_payload("upload-creates"), "application/pdf")},
             data={"source_type": "GOST", "title": "Спецификация"},
         )
         assert_ok(resp, 202)
@@ -693,9 +698,10 @@ class TestDrafts:
 
     def test_get_draft_returns_full_record(self):
         """GET /drafts/{id} возвращает raw_data и метаданные."""
+        unique_content = b"GET_DRAFT_FULL_" + b"q" * 2000 + b"\n%%EOF\n"
         create = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("full.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("full.pdf", unique_content, "application/pdf")},
         )
         assert_ok(create, 202)
         draft_id = create.json()["draft_id"]
@@ -723,7 +729,7 @@ class TestDrafts:
         """GET /drafts?document_key=... возвращает paginated items + meta."""
         create = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("list.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("list.pdf", self._unique_payload("list-drafts"), "application/pdf")},
         )
         assert_ok(create, 202)
         document_key = create.json().get("file_hash_sha256", "")[:16]
@@ -742,7 +748,7 @@ class TestDrafts:
         """Полный путь: upload → preview → status → decide(approve) → документ создан."""
         create = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("lifecycle.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("lifecycle.pdf", self._unique_payload("lifecycle-approve"), "application/pdf")},
             data={"source_type": "GOST", "title": "Lifecycle"},
         )
         assert_ok(create, 202)
@@ -778,7 +784,7 @@ class TestDrafts:
     def test_draft_decide_reject(self):
         create = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("reject.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("reject.pdf", self._unique_payload("decide-reject"), "application/pdf")},
         )
         assert_ok(create, 202)
         draft_id = create.json()["draft_id"]
@@ -798,7 +804,7 @@ class TestDrafts:
     def test_draft_decide_twice_returns_409(self):
         create = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("twice.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("twice.pdf", self._unique_payload("decide-twice"), "application/pdf")},
         )
         assert_ok(create, 202)
         draft_id = create.json()["draft_id"]
@@ -818,7 +824,7 @@ class TestDrafts:
     def test_draft_decide_invalid_action(self):
         create = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("invalid.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("invalid.pdf", self._unique_payload("decide-invalid"), "application/pdf")},
         )
         assert_ok(create, 202)
         draft_id = create.json()["draft_id"]
@@ -833,7 +839,7 @@ class TestDrafts:
     def test_draft_delete_soft(self):
         create = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("del.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("del.pdf", self._unique_payload("delete-soft"), "application/pdf")},
         )
         assert_ok(create, 202)
         draft_id = create.json()["draft_id"]
@@ -852,7 +858,6 @@ class TestDrafts:
 # ===========================================================================
 class TestD1_DuplicateDetection:
     """Тесты детекции дублей в черновиках, документах и версиях."""
-    _PAYLOAD = b"%PDF-1.4\n" + b"%PAD-" * 300 + b"\n%%EOF\n"
 
     def test_upload_duplicate_file_detected_among_drafts(self):
         """Дважды загружаем один и тот же файл — второй раз is_duplicate_file=True.
@@ -871,9 +876,13 @@ class TestD1_DuplicateDetection:
             files={"file": ("dup.pdf", unique_content, "application/pdf")},
             data={"title": "Дубликат"},
         )
-        assert_ok(r2, 202)
-        assert r2.json()["is_duplicate_file"] is True, (
-            "Ожидается is_duplicate_file=True при повторной загрузке того же файла"
+        # Активный черновик уже существует — блокируем 409
+        assert r2.status_code == 409, (
+            f"Ожидается 409 при повторной загрузке того же файла, получен {r2.status_code}"
+        )
+        body = r2.json()
+        assert body.get("error", {}).get("code") == "DUPLICATE_IN_PROGRESS", (
+            f"Ожидается DUPLICATE_IN_PROGRESS, получен {body}"
         )
 
     def test_upload_creates_different_file_hash_per_content(self):
@@ -920,7 +929,7 @@ class TestD1_DuplicateDetection:
         """После approve ответ содержит pipeline_steps."""
         create = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("pipeline_test.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("pipeline_test.pdf", _unique_payload("approve-pipeline"), "application/pdf")},
             data={"source_type": "GOST", "title": "Pipeline"},
         )
         assert_ok(create, 202)
@@ -980,10 +989,15 @@ class TestD1_DuplicateDetection:
             data={"source_type": "GOST", "title": "Original"},
         )
         assert_ok(r2, 202)
-        assert r2.json()["is_duplicate_file"] is True, (
-            "После approve того же файла повторная загрузка должна дать is_duplicate_file=True"
+        assert r2.json()["is_duplicate_file"] is False, (
+            "После approve активного черновика нет — is_duplicate_file=False"
         )
-        assert r2.json()["is_duplicate_document"] is True
+        assert r2.json()["is_duplicate_document"] is True, (
+            "После approve того же файла повторная загрузка должна дать is_duplicate_document=True"
+        )
+        assert r2.json().get("existing_document_id") == approved_doc_id, (
+            "Должен вернуть existing_document_id существующего документа"
+        )
 
 
 # ===========================================================================
@@ -1110,7 +1124,7 @@ class TestTasks:
     def test_task_status_reflects_decide(self):
         create = orch_client.post(
             f"{BASE}/drafts",
-            files={"file": ("dec_task.pdf", self._PAYLOAD, "application/pdf")},
+            files={"file": ("dec_task.pdf", _unique_payload("task-status"), "application/pdf")},
         )
         assert_ok(create, 202)
         draft_id = create.json()["draft_id"]

@@ -393,7 +393,10 @@ async def create_draft(
     # --- Check duplicates via Registry ---
     registry = RegistryServiceClient()
     is_duplicate_file = False
+    is_duplicate = False
     is_duplicate_document = False
+    existing_draft_id = None
+    existing_document_id = None
     try:
         uniqueness = await registry.check_uniqueness(
             title=title or document_key,
@@ -406,25 +409,27 @@ async def create_draft(
         )
         data = uniqueness.get("data", {})
         is_duplicate_file = data.get("is_duplicate_file", False)
-        is_duplicate_document = data.get("is_duplicate", False)
+        is_duplicate = data.get("is_duplicate", False)
+        is_duplicate_document = data.get("is_duplicate_document", False)
+        existing_draft_id = data.get("existing_draft_id")
+        existing_document_id = data.get("existing_document_id")
     except Exception as exc:
         logger.warning(f"Uniqueness check failed: {exc}")
     finally:
         await registry.close()
 
-    # --- DUPLICATE_FILE: блокировка, если файл уже в активной обработке ---
-    # MinIO-объект не удаляется (CAS TTL 30 дней) — см. спецификацию.
+    # --- DUPLICATE_IN_PROGRESS: блокировка, если файл уже в активной обработке ---
     if is_duplicate_file:
-        # Файл с таким hash уже существует и активен — отклоняем.
-        # Фактическая проверка статуса существующего черновика выполняется
-        # Registry'ом в check_uniqueness.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "error": {
-                    "code": "DUPLICATE_FILE",
+                    "code": "DUPLICATE_IN_PROGRESS",
                     "message": "Файл с таким hash уже в активной обработке",
-                    "details": {"file_hash_sha256": file_hash},
+                    "details": {
+                        "file_hash_sha256": file_hash,
+                        "existing_draft_id": existing_draft_id,
+                    },
                 }
             },
         )
@@ -443,27 +448,46 @@ async def create_draft(
             metadata_fields=metadata_fields if metadata_fields else None,
         )
         draft_id = draft_result.get("data", {}).get("id", 0)
-    except Exception as exc:
-        exc_str = str(exc)
-        # Пробрасываем 409 Conflict (дубликат) как есть, не заворачивая в 500
-        if "409" in exc_str or "Conflict" in exc_str:
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        try:
+            body = exc.response.json()
+            detail = body.get("detail", {})
+            error_code = detail.get("error", {}).get("code", "REGISTRY_ERROR")
+            error_message = detail.get("error", {}).get("message", str(exc))
+        except Exception:
+            error_code = "REGISTRY_ERROR"
+            error_message = str(exc)
+
+        if status_code == 409:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "error": {
-                        "code": "DUPLICATE_DRAFT",
-                        "message": "Черновик с таким файлом уже существует",
+                        "code": error_code,
+                        "message": error_message,
                         "details": {"file_hash_sha256": file_hash},
                     }
                 },
             )
+        raise HTTPException(
+            status_code=status_code if status_code >= 400 else status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": error_code,
+                    "message": error_message,
+                }
+            },
+        )
+    except Exception as exc:
+        logger.error(f"Unexpected error creating draft in Registry: {exc}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={
                 "error": {
                     "code": "DRAFT_CREATION_FAILED",
                     "message": "Ошибка при создании черновика в Registry",
-                    "details": {"original_error": exc_str},
+                    "details": {"original_error": str(exc)[:500]},
                 }
             },
         )
@@ -546,7 +570,10 @@ async def create_draft(
         file_hash_sha256=file_hash,
         file_size_bytes=file_size,
         is_duplicate_file=is_duplicate_file,
+        is_duplicate=is_duplicate,
         is_duplicate_document=is_duplicate_document,
+        existing_draft_id=existing_draft_id,
+        existing_document_id=existing_document_id,
         title_hash_sha256=title_hash_6field,
         title_key=title_key,
         original_filename=original_filename,
