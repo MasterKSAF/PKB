@@ -1,0 +1,81 @@
+{
+  "log": {
+    "version": "1.2",
+    "entries": [
+      {
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:18082/health",
+          "headers": []
+        },
+        "response": {
+          "status": 200,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\"status\": \"ok\"}"
+          }
+        }
+      },
+      {
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:18084/api/v1/registry/classifiers",
+          "headers": [{"name": "Content-Type", "value": "application/json"}],
+          "postData": {
+            "mimeType": "application/json",
+            "text": "{\"name\": \"test-classifier\", \"description\": \"test\"}"
+          }
+        },
+        "response": {
+          "status": 200,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\"id\": 1, \"name\": \"test-classifier\", \"description\": \"test\"}"
+          }
+        }
+      },
+      {
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:18084/api/v1/registry/classifiers/1",
+          "headers": []
+        },
+        "response": {
+          "status": 200,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\"id\": 1, \"name\": \"test-classifier\"}"
+          }
+        }
+      },
+      {
+        "request": {
+          "method": "DELETE",
+          "url": "http://localhost:18084/api/v1/registry/classifiers/999",
+          "headers": []
+        },
+        "response": {
+          "status": 404,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\"detail\": \"Not found\"}"
+          }
+        }
+      },
+      {
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:18082/api/v1/auth/users?skip=0&limit=10",
+          "headers": []
+        },
+        "response": {
+          "status": 200,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\"users\": [], \"total\": 0}"
+          }
+        }
+      }
+    ]
+  }
+}

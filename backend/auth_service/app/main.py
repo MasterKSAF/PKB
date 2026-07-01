@@ -75,7 +75,16 @@ app.include_router(audit.router, prefix="/api/v1")
 app.include_router(internal.router, prefix="/api/v1")
 
 
-@app.get("/health")
-@app.get("/api/v1/health")
-def health():
-    return {"status": "ok", "service": "auth_service", "version": "1.0.0"}
+from pydantic import BaseModel
+
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+    version: str
+
+
+@app.get("/health", response_model=HealthResponse)
+@app.get("/api/v1/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    return HealthResponse(status="ok", service="auth_service", version="1.0.0")
