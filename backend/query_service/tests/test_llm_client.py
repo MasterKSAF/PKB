@@ -60,7 +60,7 @@ async def test_complete_sends_cache_key_and_params(monkeypatch):
         import json
         captured["payload"] = json.loads(request.content)
         captured["auth"] = request.headers.get("Authorization")
-        return httpx.Response(200, json={"choices": [{"message": {"content": "ответ"}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ответ"}}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
 
     transport = httpx.MockTransport(handler)
     orig = httpx.AsyncClient
@@ -79,7 +79,9 @@ async def test_complete_sends_cache_key_and_params(monkeypatch):
     msgs = [{"role": "user", "content": "вопрос"}]
     result = await llm_client.complete(msgs, cache_key="42", max_tokens=512)
 
-    assert result == "ответ"
+    assert result.content == "ответ"
+    assert result.prompt_tokens == 10
+    assert result.completion_tokens == 5
     assert captured["payload"]["user"] == "42"
     assert captured["payload"]["model"] == "deepseek-chat"
     assert captured["payload"]["messages"] == msgs

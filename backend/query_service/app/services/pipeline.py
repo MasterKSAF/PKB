@@ -207,7 +207,10 @@ async def run_pipeline(
     logger.info("pipeline started", extra={"message_id": message_id, "session_id": session_id})
 
     try:
+        t_start = _utcnow()
         warnings: list[str] = []
+        prompt_tokens: int = 0
+        completion_tokens: int = 0
         await _set_status(session_factory, message_id, "enriching")
         enrichment_skipped = False
         try:
@@ -270,7 +273,10 @@ async def run_pipeline(
                     llm_text = _build_llm_mock(enriched_query, chunks)
                     break
                 messages = _build_messages(summary, history, chunks, enriched_query)
-                llm_text = await llm_client.complete(messages, cache_key=str(session_id))
+                result = await llm_client.complete(messages, cache_key=str(session_id))
+                llm_text = result.content
+                prompt_tokens = result.prompt_tokens
+                completion_tokens = result.completion_tokens
                 break
             except Exception:
                 if attempt < 2:
@@ -298,13 +304,17 @@ async def run_pipeline(
 
         async with session_factory() as db:
             async with db.begin():
+                processing_time_ms = int((_utcnow() - t_start).total_seconds() * 1000)
                 result = await db.execute(
                     update(ChatMessage)
                     .where(ChatMessage.message_id == message_id)
                     .values(
                         content=final_text,
                         status="answered",
-                        processing_time_ms=0,
+                        processing_time_ms=processing_time_ms,
+                        prompt_tokens=prompt_tokens or None,
+                        completion_tokens=completion_tokens or None,
+                        model_used=settings.LLM_MODEL,
                         enrichment_skipped=enrichment_skipped,
                         warnings=warnings or None,
                     )

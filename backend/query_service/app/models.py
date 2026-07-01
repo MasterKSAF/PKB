@@ -60,6 +60,8 @@ class ChatMessage(Base):
     answer_items: Mapped[list | None] = mapped_column(JSON)
     model_used: Mapped[str | None] = mapped_column(String(64))
     processing_time_ms: Mapped[int | None] = mapped_column(Integer)
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer)
     enrichment_skipped: Mapped[bool] = mapped_column(Boolean, default=False)
     warnings: Mapped[list | None] = mapped_column(JSON)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
