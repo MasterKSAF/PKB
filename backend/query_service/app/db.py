@@ -27,6 +27,29 @@ _PG_MIGRATIONS = (
     "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS summarized_until_message_id BIGINT",
     "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS warnings JSON",
     "ALTER TABLE chat_sources ADD COLUMN IF NOT EXISTS citation_index INTEGER",
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm",
+    "CREATE INDEX IF NOT EXISTS ix_chat_messages_content_trgm ON chat_messages USING gin (content gin_trgm_ops)",
+    "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS content_tsv tsvector",
+    "CREATE INDEX IF NOT EXISTS ix_chat_messages_content_tsv ON chat_messages USING gin (content_tsv)",
+    """
+    CREATE OR REPLACE FUNCTION chat_messages_tsv_update() RETURNS trigger LANGUAGE plpgsql AS $$
+    BEGIN
+        NEW.content_tsv := to_tsvector('russian', coalesce(NEW.content, ''));
+        RETURN NEW;
+    END;
+    $$
+    """,
+    """
+    DO $$ BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_trigger WHERE tgname = 'trg_chat_messages_tsv'
+        ) THEN
+            CREATE TRIGGER trg_chat_messages_tsv
+            BEFORE INSERT OR UPDATE OF content ON chat_messages
+            FOR EACH ROW EXECUTE FUNCTION chat_messages_tsv_update();
+        END IF;
+    END $$
+    """,
 )
 
 
