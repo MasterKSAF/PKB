@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 
 from fastapi import APIRouter, status
@@ -54,6 +55,7 @@ async def search_chunks(request: SearchRequest):
     try:
         async with get_connection() as conn:
             # 1. Поиск (dense + rerank)
+            _t_search = time.monotonic()
             search_results, total_found = await hybrid_search(
                 conn=conn,
                 query=request.query,
@@ -61,9 +63,19 @@ async def search_chunks(request: SearchRequest):
                 search_type=settings.search_strategy,
                 rerank=True,
             )
+            _search_ms = int((time.monotonic() - _t_search) * 1000)
 
             if not search_results:
                 elapsed_ms = int((time.monotonic() - start) * 1000)
+                logger.info(json.dumps({
+                    "event": "rag_search",
+                    "query": request.query[:100],
+                    "strategy": settings.search_strategy,
+                    "total_found": total_found,
+                    "results": 0,
+                    "search_duration_ms": _search_ms,
+                    "total_duration_ms": elapsed_ms,
+                }))
                 return SearchResponse(
                     query=request.query,
                     results=[],
@@ -194,12 +206,15 @@ async def search_chunks(request: SearchRequest):
                 ))
 
             elapsed_ms = int((time.monotonic() - start) * 1000)
-            logger.info(
-                "Search completed: %d results, %d ms, strategy=%s",
-                len(results),
-                elapsed_ms,
-                settings.search_strategy,
-            )
+            logger.info(json.dumps({
+                "event": "rag_search",
+                "query": request.query[:100],
+                "strategy": settings.search_strategy,
+                "total_found": total_found,
+                "results": len(results),
+                "search_duration_ms": _search_ms,
+                "total_duration_ms": elapsed_ms,
+            }))
 
             return SearchResponse(
                 query=request.query,
