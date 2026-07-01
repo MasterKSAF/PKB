@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Установка системных зависимостей:
 # - openjdk-11-jre-headless: для работы opendataloader-pdf
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    default-jre \
+    default-jre-headless \
     libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 

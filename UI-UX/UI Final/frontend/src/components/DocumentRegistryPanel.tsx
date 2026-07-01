@@ -73,6 +73,42 @@ const displayValue = (value: unknown) => {
   return text || 'не передано';
 };
 
+const REGISTRY_STATUS_LABELS: Record<string, string> = {
+  active: 'действует',
+  pending: 'ожидает',
+  expired: 'истек срок',
+  uploaded: 'загружен',
+  created: 'создан',
+  completed: 'завершен',
+  failed: 'ошибка',
+  processing: 'в обработке',
+  published: 'опубликован',
+  validating: 'проверяется',
+  pending_index: 'ожидает индексации',
+  indexing: 'индексируется',
+  indexed: 'индексирован',
+  approved: 'подтвержден',
+  discarded: 'отклонен',
+  current: 'текущая',
+  archive: 'архив',
+};
+
+const REGISTRY_STATUS_FILTER_OPTIONS = [
+  { value: 'active', label: 'Действует' },
+  { value: 'pending', label: 'Ожидает' },
+  { value: 'expired', label: 'Истек срок' },
+  { value: 'uploaded', label: 'Загружен' },
+  { value: 'created', label: 'Создан' },
+  { value: 'completed', label: 'Завершен' },
+  { value: 'failed', label: 'Ошибка' },
+] as const;
+
+const formatRegistryStatus = (value: unknown) => {
+  const text = normalizeText(value);
+  if (!text) return 'не передано';
+  return REGISTRY_STATUS_LABELS[text.toLowerCase()] ?? text;
+};
+
 const normalizeValidUntil = (value: unknown) => {
   const text = normalizeText(value);
   if (!text) return '';
@@ -98,6 +134,47 @@ const resolveGatewayAssetUrl = (url: unknown) => {
   const apiBase = GATEWAY_API_BASE_URL.replace(/\/+$/, '');
   const originBase = apiBase.replace(/\/api\/v\d+$/i, '');
   return `${originBase}${text.startsWith('/') ? text : `/${text}`}`;
+};
+
+const getInternalServiceHost = (url: unknown) => {
+  const text = normalizeText(url);
+  if (!/^https?:\/\//i.test(text)) return '';
+  try {
+    const parsed = new URL(text);
+    return ['minio', 'registry', 'orchestrator', 'gateway'].includes(parsed.hostname.toLowerCase()) ? parsed.hostname : '';
+  } catch {
+    return '';
+  }
+};
+
+const extractServerErrorMessage = async (payload: unknown) => {
+  if (!payload) return '';
+  try {
+    if (payload instanceof Blob) {
+      const text = await payload.text();
+      if (!text) return '';
+      try {
+        const parsed = JSON.parse(text);
+        return normalizeText(parsed?.error?.message ?? parsed?.detail?.error?.message ?? parsed?.detail ?? text);
+      } catch {
+        return text;
+      }
+    }
+    if (typeof payload === 'string') return payload;
+    if (typeof payload === 'object') {
+      const data = payload as Record<string, any>;
+      return normalizeText(data.error?.message ?? data.detail?.error?.message ?? data.detail ?? data.message);
+    }
+  } catch {
+    return '';
+  }
+  return '';
+};
+
+const openBlobInNewTab = (blob: Blob) => {
+  const objectUrl = URL.createObjectURL(blob);
+  window.open(objectUrl, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 };
 
 const getLatestVersionId = (detail: any, versions: DocumentVersionSummary[]) => {
@@ -134,7 +211,7 @@ const normalizeDocumentVersion = (item: any, index: number): DocumentVersionSumm
     createdAt: createdAt || 'не указано',
     author: author || 'не указан',
     size: size || 'н/д',
-    status: status || 'не указан',
+    status: status ? formatRegistryStatus(status) : 'не указан',
     note: note || 'без комментария',
     raw,
   };
@@ -341,7 +418,7 @@ const buildPreviewText = (
     detail?.valid_from ? `Действует с: ${detail.valid_from}` : '',
     detail?.valid_until ? `Действует до: ${normalizeValidUntil(detail.valid_until)}` : '',
     detail?.jurisdiction ? `Юрисдикция: ${detail.jurisdiction}` : '',
-    detail?.validity_status ? `Статус действия: ${detail.validity_status}` : '',
+    detail?.validity_status ? `Статус действия: ${formatRegistryStatus(detail.validity_status)}` : '',
     detail?.issuing_body ? `Издатель: ${detail.issuing_body}` : '',
     detail?.latest_version?.version ? `Последняя версия: ${detail.latest_version.version}` : '',
     versions.length ? `Версии: ${versions.map((item) => item.label).join(', ')}` : '',
@@ -448,6 +525,52 @@ const formatCompactDateTime = (value?: string) => {
   }).format(date);
 };
 
+const HISTORY_ACTION_LABELS: Record<string, string> = {
+  created: 'Создание',
+  create: 'Создание',
+  uploaded: 'Загрузка',
+  upload: 'Загрузка',
+  updated: 'Обновление',
+  update: 'Обновление',
+  metadata_updated: 'Обновление метаданных',
+  status_changed: 'Смена статуса',
+  approved: 'Подтверждение',
+  discarded: 'Отклонение',
+  deleted: 'Удаление',
+  failed: 'Ошибка',
+};
+
+const formatHistoryAction = (value: unknown) => {
+  const text = normalizeText(value);
+  if (!text) return '';
+  return HISTORY_ACTION_LABELS[text.toLowerCase()] ?? text;
+};
+
+const normalizeHistoryRows = (items: any[]) => {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null;
+
+      const at = normalizeText(item.at ?? item.created_at ?? item.updated_at ?? item.timestamp ?? item.event_at);
+      const action = formatHistoryAction(item.action ?? item.event ?? item.event_type ?? item.type ?? item.status);
+      const details = item.details && typeof item.details === 'object' ? JSON.stringify(item.details) : item.details;
+      const note = normalizeText(item.note ?? item.message ?? item.description ?? item.comment ?? item.reason ?? details);
+      const user = normalizeText(item.user ?? item.user_id ?? item.created_by ?? item.updated_by ?? item.actor);
+
+      if (!at && !action && !note && !user) return null;
+
+      return {
+        id: normalizeText(item.id ?? item.event_id ?? item.history_id) || `history-${index}`,
+        at,
+        action: action || 'Событие',
+        note: note || (user ? `Пользователь: ${user}` : 'Дополнительные сведения не переданы.'),
+      };
+    })
+    .filter((item): item is { id: string; at: string; action: string; note: string } => Boolean(item));
+};
+
 export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ documents }) => {
   const { themeMode, workMode } = useUIStore();
   const queryClient = useQueryClient();
@@ -462,6 +585,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const [previewPageIndex, setPreviewPageIndex] = useState(0);
   const [previewSearch, setPreviewSearch] = useState('');
   const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>([]);
+  const [versionSelectionTouched, setVersionSelectionTouched] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [validFromDraft, setValidFromDraft] = useState('');
   const [validUntilDraft, setValidUntilDraft] = useState('');
@@ -504,11 +628,18 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
           document.sectionId,
           document.group,
           document.validityStatus,
+          document.status,
+          document.indexStatus,
         ]
         .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalized));
       const matchesSource = sourceFilter === 'all' || document.sourceType === sourceFilter || document.type === sourceFilter;
-      const matchesValidity = validityFilter === 'all' || document.validityStatus === validityFilter || document.status === validityFilter;
+      const normalizedStatusFilter = validityFilter.toLowerCase();
+      const matchesValidity =
+        validityFilter === 'all' ||
+        [document.validityStatus, document.status, document.indexStatus]
+          .filter(Boolean)
+          .some((status) => String(status).toLowerCase() === normalizedStatusFilter);
       const matchesValidAt =
         !validAt ||
         ((!document.validFrom || document.validFrom <= validAt) &&
@@ -599,6 +730,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const versions = workMode === 'prod' ? extractVersionItems(versionsQuery.data) : buildDemoVersions(selectedDocument);
   const history = workMode === 'prod' ? (historyQuery.data ?? []) : buildDemoHistory(selectedDocument);
   const errors = workMode === 'prod' ? (errorsQuery.data ?? []) : buildDemoErrors(selectedDocument);
+  const historyRows = useMemo(() => normalizeHistoryRows(history), [history]);
   const parameters = workMode === 'prod' ? parametersQuery.data : buildDemoParameters(selectedDocument);
   const previewPages = useMemo(
     () => {
@@ -627,14 +759,14 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     [detail, gatewayPages, pageContentQuery.data, selectedDocument, selectedGatewayPage, workMode],
   );
   const selectedPreviewPage = previewPages[Math.min(previewPageIndex, Math.max(previewPages.length - 1, 0))] ?? null;
-  const previewText = buildPreviewText(selectedDocument, detail, versions, history, errors, parameters);
+  const previewText = buildPreviewText(selectedDocument, detail, versions, historyRows, errors, parameters);
   const currentPreviewText = selectedPreviewPage?.lines.join('\n') ?? '';
   const compareVersions = versions.filter((version) => selectedVersionIds.includes(version.id)).slice(0, 2);
   const totalVersions = Number(detail?.total_versions ?? versions.length ?? 0);
-  const selectedVersionRows = useMemo(() => {
-    if (selectedVersionIds.length) return versions.filter((version) => selectedVersionIds.includes(version.id)).slice(0, 2);
-    return versions.slice(0, 2);
-  }, [selectedVersionIds, versions]);
+  const selectedVersionRows = useMemo(
+    () => versions.filter((version) => selectedVersionIds.includes(version.id)).slice(0, 2),
+    [selectedVersionIds, versions],
+  );
   const previewSearchMatchCount = useMemo(() => {
     const normalized = previewSearch.trim().toLowerCase();
     if (!normalized || !selectedPreviewPage) return 0;
@@ -643,10 +775,10 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   }, [currentPreviewText, previewSearch]);
 
   useEffect(() => {
-    if (versionsOpen && !selectedVersionIds.length && selectedVersionRows.length) {
-      setSelectedVersionIds(selectedVersionRows.map((version) => version.id));
+    if (versionsOpen && !versionSelectionTouched && !selectedVersionIds.length && versions.length) {
+      setSelectedVersionIds(versions.slice(0, 2).map((version) => version.id));
     }
-  }, [selectedVersionIds.length, selectedVersionRows, versionsOpen]);
+  }, [selectedVersionIds.length, versionSelectionTouched, versions, versionsOpen]);
 
   useEffect(() => {
     setPreviewOpen(false);
@@ -657,6 +789,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     setRegistryNotice('');
     setRegistryError('');
     setSelectedVersionIds([]);
+    setVersionSelectionTouched(false);
     setActionsAnchorEl(null);
   }, [selectedDocumentId]);
 
@@ -674,7 +807,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
 
   const summaryChips = [
     { label: `Версий: ${totalVersions}`, value: totalVersions },
-    { label: `История: ${history.length}`, value: history.length },
+    { label: `История: ${historyRows.length}`, value: historyRows.length },
     { label: `Ошибки: ${errors.length}`, value: errors.length },
     { label: `Страниц: ${previewPages.length}`, value: previewPages.length },
   ];
@@ -693,31 +826,57 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const validityRows: Array<[string, unknown]> = [
     ['valid_from', detailRecord.valid_from ?? selectedDocument?.validFrom],
     ['valid_until', normalizeValidUntil(detailRecord.valid_until ?? selectedDocument?.validUntil)],
-    ['validity_status', detailRecord.validity_status ?? selectedDocument?.validityStatus],
-    ['status', detailRecord.status ?? selectedDocument?.status],
+    ['validity_status', formatRegistryStatus(detailRecord.validity_status ?? selectedDocument?.validityStatus)],
+    ['status', formatRegistryStatus(detailRecord.status ?? selectedDocument?.status)],
   ];
   const handleDownloadOriginal = async () => {
     if (!selectedDocument) return;
 
     setDownloadError('');
     try {
+      try {
+        const binaryResponse = await apiClient.get(`/documents/${selectedDocument.id}/file`, {
+          params: { format: 'binary' },
+          responseType: 'blob',
+        });
+        const contentType = normalizeText(binaryResponse.headers?.['content-type']).toLowerCase();
+        const blob = binaryResponse.data instanceof Blob ? binaryResponse.data : new Blob([binaryResponse.data]);
+
+        if (!contentType.includes('application/json')) {
+          openBlobInNewTab(blob);
+          return;
+        }
+      } catch (binaryError) {
+        const status = (binaryError as { response?: { status?: number } })?.response?.status;
+        if (status && ![404, 410, 501].includes(status)) {
+          throw binaryError;
+        }
+      }
+
       const fileInfo = await documentsApi.file(selectedDocument.id);
-      const fileUrl = resolveGatewayAssetUrl(fileInfo?.file_url ?? fileInfo?.url ?? fileInfo?.download_url);
+      const rawFileUrl = fileInfo?.file_url ?? fileInfo?.url ?? fileInfo?.download_url;
+      const fileUrl = resolveGatewayAssetUrl(rawFileUrl);
+      const internalHost = getInternalServiceHost(rawFileUrl);
 
       if (!fileUrl) {
-        throw new Error('Сервер не передал ссылку на файл.');
+        throw new Error(
+          internalHost
+            ? `Сервер вернул внутреннюю ссылку ${internalHost}, но публичный proxy скачивания файлов не настроен.`
+            : 'Сервер не передал публичную ссылку на файл.',
+        );
       }
 
       const response = await apiClient.get(fileUrl, { responseType: 'blob' });
       const blob = response.data instanceof Blob ? response.data : new Blob([response.data]);
-      const objectUrl = URL.createObjectURL(blob);
-      window.open(objectUrl, '_blank', 'noopener,noreferrer');
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      openBlobInNewTab(blob);
     } catch (error) {
       const status = (error as { response?: { status?: number } })?.response?.status;
+      const serverMessage = await extractServerErrorMessage((error as { response?: { data?: unknown } })?.response?.data);
       setDownloadError(
         status === 404
           ? 'Сервер передал ссылку на файл, но файл по ней не найден (404).'
+          : status === 410
+            ? `Серверный proxy скачивания файлов отключен${serverMessage ? `: ${serverMessage}` : '.'}`
           : error instanceof Error
             ? error.message
             : 'Не удалось получить файл через сервер.',
@@ -811,17 +970,16 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
             <TextField
               size="small"
               select
-              label="Статус действия"
+              label="Статус"
               value={validityFilter}
               onChange={(event) => setValidityFilter(event.target.value)}
             >
               <MenuItem value="all">Все статусы</MenuItem>
-              <MenuItem value="active">active</MenuItem>
-              <MenuItem value="pending">pending</MenuItem>
-              <MenuItem value="expired">expired</MenuItem>
-              <MenuItem value="created">created</MenuItem>
-              <MenuItem value="completed">completed</MenuItem>
-              <MenuItem value="failed">failed</MenuItem>
+              {REGISTRY_STATUS_FILTER_OPTIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
             </TextField>
             <TextField
               size="small"
@@ -976,7 +1134,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                               <Chip
                                 size="small"
                                 variant="outlined"
-                                label={document.validityStatus || document.status || document.indexStatus}
+                                label={formatRegistryStatus(document.validityStatus || document.status || document.indexStatus)}
                                 sx={{
                                   maxWidth: 78,
                                   '& .MuiChip-label': { px: 0.7, overflow: 'hidden', textOverflow: 'ellipsis' },
@@ -1166,8 +1324,8 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                           }}
                         >
                           {[
-                            ['Статус', detailRecord.status ?? selectedDocument.status],
-                            ['Действие', detailRecord.validity_status ?? selectedDocument.validityStatus],
+                            ['Статус', formatRegistryStatus(detailRecord.status ?? selectedDocument.status)],
+                            ['Действие', formatRegistryStatus(detailRecord.validity_status ?? selectedDocument.validityStatus)],
                             ['Обновлен', formatCompactDateTime(selectedDocument.updatedAt)],
                           ].map(([label, value]) => (
                             <React.Fragment key={label}>
@@ -1272,15 +1430,15 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                       <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                         <History size={16} color={isLight ? '#0284c7' : '#98d9d8'} />
                         <Typography sx={{ fontWeight: 560 }}>История и ошибки</Typography>
-                        <Chip size="small" variant="outlined" label={history.length + errors.length} />
+                        <Chip size="small" variant="outlined" label={historyRows.length + errors.length} />
                       </Stack>
                     </Button>
                     <Divider sx={{ borderColor: 'rgba(198,214,236,0.16)' }} />
                     <Collapse in={historyOpen}>
                       <Stack spacing={0.5} sx={{ p: 1.1 }}>
-                        {history.slice(0, 6).map((item: any, index: number) => (
+                        {historyRows.slice(0, 6).map((item) => (
                           <Box
-                            key={item.id ?? index}
+                            key={item.id}
                             sx={{
                               display: 'grid',
                               gridTemplateColumns: { xs: '1fr', md: '110px 1fr 1fr' },
@@ -1290,13 +1448,13 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                             }}
                           >
                             <Typography sx={detailLabelSx}>
-                              {item.at ?? item.created_at ?? 'без даты'}
+                              {formatCompactDateTime(item.at)}
                             </Typography>
                             <Typography sx={detailValueSx}>
-                              {item.action ?? item.event ?? 'Событие'}
+                              {item.action}
                             </Typography>
                             <Typography sx={{ ...detailValueSx, color: 'text.secondary' }}>
-                              {item.note ?? item.message ?? item.description ?? 'Комментарий не передан.'}
+                              {item.note}
                             </Typography>
                           </Box>
                         ))}
@@ -1305,9 +1463,9 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                             Последняя ошибка: {(errors[0] as any)?.error_message ?? 'Сервер вернул список ошибок.'}
                           </Alert>
                         )}
-                        {!history.length && !errors.length && (
+                        {!historyRows.length && !errors.length && (
                           <Typography variant="body2" color="text.secondary">
-                            История и ошибки по документу не переданы.
+                            История и ошибки по документу не переданы сервером.
                           </Typography>
                         )}
                       </Stack>
@@ -1543,6 +1701,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                             checked={checked}
                             onChange={(event) => {
                               const isChecked = event.target.checked;
+                              setVersionSelectionTouched(true);
                               setSelectedVersionIds((current) => {
                                 if (isChecked) {
                                   return Array.from(new Set([...current, version.id])).slice(0, 2);
