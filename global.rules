@@ -1,16 +1,29 @@
-0.1 После index_repository фиксируй project_id из ответа, 
+0.1 После index_repository фиксируй project_id из ответа,
   используй для get_architecture/search_graph/query_graph/trace_path
   get_section — абсолютный путь (H:/)
   advanced-search (grep) — для простого текстового поиска
   trace_path/query_graph — ПЕРЕД search_code/read_file
   Исключение: trace_path не работает для __route__* нод — вместо этого advanced-search по ROUTE_TABLE
 0.1 Приоритет инструментов (не нарушать). Для анализа кода и файлов:
-advanced-search (grep) → search_graph → query_graph → search_code → trace_path → get_code_snippet → get_architecture → get_section → read_file → terminal. Запрашивай в них аргументы строго только для нужной информации
+advanced-search (grep) → search_graph → query_graph → search_code → trace_path → get_code_snippet → get_section → read_file → terminal. Запрашивай в них аргументы строго только для нужной информации
+Краткий вес ответа (ориентир):
+  advanced-search ~ 1x — всегда首选
+  search_code ~ 3-5x — только когда нужны определения/границы
+  search_graph ~ 5-10x — только когда нужно найти qualified_name
+  get_architecture(aspects=['all']) ~ 100x — запрещён без обоснования
+  read_file без границ строк — запрещён для файлов > 100 строк
 Критерий выбора:
   Нужен ТОЛЬКО текст (конфиг/URL/ROUTE_TABLE/вхождение термина) → advanced-search
   Нужны связи/определения/цепочки → search_graph и далее по приоритету
+  Несколько терминов в одной директории → один advanced-search через regex-|, а не последовательные вызовы
 0.3 **Начинаешь подзадачу (анализ, тесты, фикс)?** Выбери ровно один инструмент для первого шага. Не делай два дела одновременно (анализ + правка, тесты)
 0.4 Ответы search_code/search_graph compact жирнее advanced-search на 30-50% за счёт qualified_name и метаданных. Если контекст не нужен (просто найти строку) — бери advanced-search. Если нужны связи — граф.
+0.5 advanced-search:
+  context=N: 0 — только вхождение (по умолчанию), 2 — понять окружение, >=5 — только если восстановить блок кода.
+  Не используй context > 3 без причины.
+0.6 get_architecture:
+  ⚠ Запрещено запрашивать aspects=['all'] — указывай конкретно ['layers'] или ['packages'].
+  Не запрашивай архитектуру всего проекта ради одного сервиса — используй query_graph или search_graph с file_pattern.
 
 1. **Фундамент поведения**
 1.1 Выявляй цель задачи и следуй ей, всегда помни цель и задачу
@@ -56,4 +69,3 @@ advanced-search (grep) → search_graph → query_graph → search_code → trac
 
 Нарушение: путать декларацию (схему/документацию) с фактом (тест/data_flow/runtime).
 Нарушение: считать наличие теста гарантией работы, без контроля получаемых данных в нем
-```
