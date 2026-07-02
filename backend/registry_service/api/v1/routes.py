@@ -609,6 +609,8 @@ def create_document(
                     content=res
                 )
             except ValueError as e:
+                db.rollback()
+                log_event('WARNING', '/registry/documents/', None, payload, f"Transaction rolled back. Reason: {str(e)}")
                 err_msg = str(e)
                 if err_msg == "DUPLICATE_DOCUMENT":
                     raise HTTPException(
@@ -619,6 +621,10 @@ def create_document(
                     status_code=422,
                     detail={'error': {'code': 'VALIDATION_ERROR', 'message': err_msg}}
                 )
+            except Exception as e:
+                db.rollback()
+                log_event('ERROR', '/registry/documents/', None, payload, f"Transaction rolled back. Reason: {str(e)}")
+                raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
         title = payload.get('title')
         doc_code = payload.get('doc_code') or (title or '').strip().upper().replace(' ', '-').replace('/', '-')
@@ -666,7 +672,8 @@ def create_document(
                 detail={'error': {'code': 'DUPLICATE_DOCUMENT', 'message': 'Document already exists'}},
             )
 
-        document = document_crud.create_document(db, doc_code=doc_code, title=title, **clean_payload)
+        document = document_crud.create_document(db, doc_code=doc_code, title=title, commit=False, **clean_payload)
+        db.commit()
         
         log_event('INFO', '/registry/documents/', None, {'doc_code': doc_code}, 'Document created')
         
@@ -677,10 +684,13 @@ def create_document(
             status_code=201,
             content={'data': response_data},
         )
-    except HTTPException:
+    except HTTPException as e:
+        db.rollback()
+        log_event('WARNING', '/registry/documents/', None, payload, f"Transaction rolled back. Reason: HTTP {e.status_code} - {e.detail}")
         raise
     except Exception as e:
-        log_event('ERROR', '/registry/documents/', None, payload, str(e))
+        db.rollback()
+        log_event('ERROR', '/registry/documents/', None, payload, f"Transaction rolled back. Reason: {str(e)}")
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 

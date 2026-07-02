@@ -161,7 +161,7 @@ def get_document_by_id(db: Session, document_id: str) -> Optional[Document]:
     return doc
 
 
-def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Document:
+def create_document(db: Session, doc_code: str, title: str, commit: bool = True, **kwargs) -> Document:
     """Create a new document."""
     if not kwargs.get('title_hash_sha256'):
         norm_title = kwargs.get('normalized_title') or (title or '').strip().lower()
@@ -179,8 +179,11 @@ def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Documen
         **_coerce_int_fields(kwargs),
     )
     db.add(document)
-    db.commit()
-    db.refresh(document)
+    if commit:
+        db.commit()
+        db.refresh(document)
+    else:
+        db.flush()
 
     # Issue 2.3: Link document with file and create document version if draft_id is set
     if document.draft_id:
@@ -258,11 +261,14 @@ def create_document(db: Session, doc_code: str, title: str, **kwargs) -> Documen
                             )
                             db.add(db_sec)
             
-            db.commit()
-            db.refresh(document)
+            if commit:
+                db.commit()
+                db.refresh(document)
+            else:
+                db.flush()
 
     populate_document_extra_fields(db, [document])
-    check_and_quarantine_classifiers(db, document)
+    check_and_quarantine_classifiers(db, document, commit=commit)
     return document
 
 
@@ -628,6 +634,7 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
             doc.updated_at = datetime.now(timezone.utc)
             db.flush()
 
+            # ...
             # Удаляем старые sections только если есть новые на замену
             if content_list:
                 db.query(DocumentSection).filter(
@@ -635,6 +642,7 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
                 ).delete()
                 db.flush()
 
+            # ...
             # Удаляем старые references только если есть новые
             if references_list:
                 db.query(DocumentReference).filter(
@@ -688,7 +696,7 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
             'updated_at': datetime.now(timezone.utc)
         }
         
-        doc = create_document(db, doc_code=doc_code, title=title, **doc_kwargs)
+        doc = create_document(db, doc_code=doc_code, title=title, commit=False, **doc_kwargs)
         
         # Save physical version
         source_data = doc_data.get('source', {})
@@ -747,16 +755,22 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
             from api.v1.crud.terminology import get_terminology_by_raw_term, create_terminology
             existing_t = get_terminology_by_raw_term(db, raw_t)
             if not existing_t:
-                create_terminology(
-                    db,
-                    raw_term=raw_t,
-                    standard_term=raw_t,
-                    normalized_value=norm_t or raw_t.lower(),
-                    term_type='term',
-                    definition=definition,
-                    related_docs=[doc.doc_code]
-                )
-            else:
+                try:
+                    with db.begin_nested():
+                        existing_t = create_terminology(
+                            db,
+                            raw_term=raw_t,
+                            standard_term=raw_t,
+                            normalized_value=norm_t or raw_t.lower(),
+                            term_type='term',
+                            definition=definition,
+                            related_docs=[doc.doc_code],
+                            commit=False
+                        )
+                except Exception:
+                    existing_t = get_terminology_by_raw_term(db, raw_t)
+            
+            if existing_t:
                 current_docs = list(existing_t.related_docs or [])
                 if doc.doc_code not in current_docs:
                     current_docs.append(doc.doc_code)
@@ -858,7 +872,7 @@ def update_document_status(
     return document, history, old_status
 
 
-def check_and_quarantine_classifiers(db: Session, document: Document):
+def check_and_quarantine_classifiers(db: Session, document: Document, commit: bool = True):
     """Check classification codes on the document and add them to pending quarantine if missing."""
     from api.v1.crud.classifier import get_classifier, create_classifier_pending
     from api.v1.models import ClassifierPending
@@ -872,7 +886,11 @@ def check_and_quarantine_classifiers(db: Session, document: Document):
                 ClassifierPending.code == document.mks_oks_code
             ).first()
             if not already_pending:
-                create_classifier_pending(db, system='MKS', code=document.mks_oks_code, found_in_document_id=str(document.id))
+                try:
+                    with db.begin_nested():
+                        create_classifier_pending(db, system='MKS', code=document.mks_oks_code, found_in_document_id=str(document.id), commit=commit)
+                except Exception:
+                    pass
 
     # 2. Check okstu_code
     if document.okstu_code:
@@ -883,7 +901,11 @@ def check_and_quarantine_classifiers(db: Session, document: Document):
                 ClassifierPending.code == document.okstu_code
             ).first()
             if not already_pending:
-                create_classifier_pending(db, system='OKSTU', code=document.okstu_code, found_in_document_id=str(document.id))
+                try:
+                    with db.begin_nested():
+                        create_classifier_pending(db, system='OKSTU', code=document.okstu_code, found_in_document_id=str(document.id), commit=commit)
+                except Exception:
+                    pass
 
     # 3. Check udk_code
     if document.udk_code:
@@ -894,7 +916,11 @@ def check_and_quarantine_classifiers(db: Session, document: Document):
                 ClassifierPending.code == document.udk_code
             ).first()
             if not already_pending:
-                create_classifier_pending(db, system='UDC', code=document.udk_code, found_in_document_id=str(document.id))
+                try:
+                    with db.begin_nested():
+                        create_classifier_pending(db, system='UDC', code=document.udk_code, found_in_document_id=str(document.id), commit=commit)
+                except Exception:
+                    pass
 
 
 def get_document_parameters(db: Session, document_id: int) -> List[Dict[str, Any]]:

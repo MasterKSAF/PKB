@@ -1,8 +1,11 @@
 # TODO
 
-- [x] Issue 2.1: replace `image_url` with `key` in `get_document_page_preview_endpoint`
-- [x] Issue 2.1: update `tests/test_pages_parameters.py`
-- [x] Issue 2.2: copy flat OCR blocks from draft to DocumentSection upon document creation/approval
-- [x] Issue 2.3: add GET `/registry/documents/{document_id}/file` endpoint in `routes.py`
-- [x] Issue 2.3: create version and file record when creating/approving document
-- [x] Run test suite to verify fixes
+- [x] Modify `create_classifier_pending` in `api/v1/crud/classifier.py`
+- [x] Modify `create_terminology` in `api/v1/crud/terminology.py`
+- [x] Modify `create_document` in `api/v1/crud/document.py`
+- [x] Modify `check_and_quarantine_classifiers` in `api/v1/crud/document.py`
+- [x] Modify `create_pipeline_document` in `api/v1/crud/document.py`
+- [x] Modify manual document route `/registry/documents` in `api/v1/routes.py`
+- [x] Run existing test suite to verify no regressions
+- [x] Add concurrent/overlapping document pipeline upload test to `tests/test_documents.py`
+- [x] Verify everything works and all tests pass
