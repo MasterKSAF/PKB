@@ -173,16 +173,19 @@ class TestIntegrityCheckInline:
         assert integrity_ok, "Indexed status should pass integrity"
 
     def test_partially_indexed_when_chunks_less_than_expected(self):
-        """When chunks_count < expected, should be partially_indexed."""
-        status_result = {
-            "status": "indexed",
-            "chunks_count": 5,
-        }
+        """P2I-1: partially_indexed when expected_count > chunks_count.
+
+        expected_count берётся из /check эндпоинта (check_result),
+        chunks_count — из /status (status_result).
+        """
+        check_result = {"expected_count": 10}
+        status_result = {"chunks_count": 5}
+
         chunks_count = status_result.get("chunks_count", 0)
-        expected_count = status_result.get("chunks_count", chunks_count)
+        check_data = check_result or {}
+        expected_count = check_data.get("expected_count", chunks_count)
         is_partial = expected_count > 0 and chunks_count < expected_count
-        # With equal counts, not partial
-        assert not is_partial
+        assert is_partial, "5 < 10 should trigger partially_indexed"
 
     def test_partially_indexed_when_chunks_compared_to_sections(self):
         """partially_indexed when sections_count > chunks_count."""

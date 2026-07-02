@@ -318,16 +318,26 @@ def _activate_document_sync(document_id: int) -> dict:
 
 async def _notify_step_completed(job_id: str, step_name: str, result: dict):
     async with get_db_context() as db:
+        try:
+            task_id = int(job_id)
+        except (ValueError, TypeError):
+            logger.error(f"Invalid job_id for _notify_step_completed: {job_id}")
+            return
         orchestrator = PipelineOrchestrator(db)
-        await orchestrator.on_step_completed(job_id, step_name, result)
+        await orchestrator.on_step_completed(task_id, step_name, result)
 
 
 async def _notify_step_failed(
     job_id: str, step_name: str, error_code: str, error_message: str
 ):
     async with get_db_context() as db:
+        try:
+            task_id = int(job_id)
+        except (ValueError, TypeError):
+            logger.error(f"Invalid job_id for _notify_step_failed: {job_id}")
+            return
         orchestrator = PipelineOrchestrator(db)
-        await orchestrator.on_step_failed(job_id, step_name, error_code, error_message)
+        await orchestrator.on_step_failed(task_id, step_name, error_code, error_message)
 
 
 # ------------------------------------------------------------------
@@ -363,6 +373,7 @@ async def process_rag_index_result(
 
     integrity_ok = True
     integrity_detail = ""
+    check_result = None
     try:
         from app.services.rag_client import RAGBuilderClient
         rag_check = RAGBuilderClient()
@@ -389,7 +400,9 @@ async def process_rag_index_result(
         return
 
     # Check for partially_indexed (P2I-1)
-    expected_count = status_result.get("chunks_count", chunks_count)
+    # expected_count берётся из /check эндпоинта, chunks_count — из /status
+    check_data = check_result or {}
+    expected_count = check_data.get("expected_count", chunks_count)
     if expected_count > 0 and chunks_count < expected_count:
         logger.warning(
             f"Partially indexed: {chunks_count}/{expected_count} chunks for doc {document_id}",
