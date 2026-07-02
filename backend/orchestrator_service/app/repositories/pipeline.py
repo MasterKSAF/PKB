@@ -7,10 +7,11 @@ Manages the lifecycle of pipeline task execution records.
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select, and_
+from sqlalchemy import func, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pipeline import Task, TaskStep
+from app.core.fsm import TaskStatus
 from app.core.fsm import TaskStage
 
 
@@ -23,6 +24,18 @@ class TaskRepository:
     # ------------------------------------------------------------------
     # Task
     # ------------------------------------------------------------------
+
+    async def count_active_tasks(self) -> int:
+        """Count tasks that are currently active (not in terminal state)."""
+        result = await self.db.execute(
+            select(func.count(Task.id)).where(
+                and_(
+                    Task.deleted_at.is_(None),
+                    Task.status == TaskStatus.ACTIVE.value,
+                )
+            )
+        )
+        return result.scalar() or 0
 
     async def create_task(
         self,

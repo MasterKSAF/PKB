@@ -32,12 +32,30 @@ logger = logging.getLogger("orchestrator.pipeline")
 PREVIEW_STEPS = ["upload", "preview_ocr", "preview_converter"]
 
 
+class ConcurrentTaskLimitError(ValueError):
+    """Raised when concurrent task limit is exceeded."""
+
+
 class PipelineOrchestrator:
     """Coordinates pipeline execution for drafts."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
         self.task_repo = TaskRepository(db)
+
+    async def _check_concurrent_limit(self) -> None:
+        """Check if concurrent task limit is reached; raise if so."""
+        active = await self.task_repo.count_active_tasks()
+        limit = settings.pipeline.MAX_CONCURRENT_TASKS
+        if active >= limit:
+            logger.warning(
+                "Concurrent task limit reached",
+                extra={"active": active, "limit": limit},
+            )
+            raise ConcurrentTaskLimitError(
+                f"Concurrent task limit reached: {active} active, "
+                f"max {limit}. Try again later."
+            )
 
     async def start_pipeline(
         self, draft_id: int, task_id: int, file_key: str, mime_type: str,
@@ -56,6 +74,9 @@ class PipelineOrchestrator:
         Args:
             metadata_fields: Initial metadata from POST /drafts form (source_type, doc_code, etc.)
         """
+        # Check concurrent task limit before starting new pipeline
+        await self._check_concurrent_limit()
+
         task = await self.task_repo.get_task(task_id)
         if not task:
             logger.error(
@@ -1011,6 +1032,9 @@ class PipelineOrchestrator:
             raise ValueError(
                 f"Cannot approve task {task_id}: already in terminal state {task.status}"
             )
+
+        # Check concurrent task limit before starting full pipeline
+        await self._check_concurrent_limit()
 
         # --- Step 0: Collect draft metadata from Registry ---
         registry = RegistryServiceClient()

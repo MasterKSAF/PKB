@@ -162,6 +162,12 @@ class PipelineConfig(BaseSettings):
     # Quality confidence thresholds (§3)
     # operator_avg_confidence_below — порог ручной проверки (review_required)
     # reprocess_avg_confidence_below — порог отбраковки (discarded)
+    # Max concurrent pipeline tasks (preview + full)
+    MAX_CONCURRENT_TASKS: int = Field(
+        default=4,
+        description="Max number of concurrent active pipeline tasks",
+    )
+
     QUALITY_OPERATOR_CONFIDENCE_BELOW: float = Field(
         default=0.8,
         description="Confidence below this → review_required (manual check)",

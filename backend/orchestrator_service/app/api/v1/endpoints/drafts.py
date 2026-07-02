@@ -30,7 +30,10 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import settings
-from app.core.pipeline.orchestrator import PipelineOrchestrator
+from app.core.pipeline.orchestrator import (
+    ConcurrentTaskLimitError,
+    PipelineOrchestrator,
+)
 from app.core.trace import set_draft_id, set_document_id, set_version_id
 from app.db.base import get_db
 from app.storage import upload_file
@@ -527,8 +530,22 @@ async def create_draft(
             },
         )
 
-    # --- Create Task in local DB ---
+    # --- Check concurrent task limit before creating a new task ---
     orchestrator = PipelineOrchestrator(db)
+    try:
+        await orchestrator._check_concurrent_limit()
+    except ConcurrentTaskLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": {
+                    "code": "CONCURRENT_LIMIT",
+                    "message": str(exc),
+                }
+            },
+        )
+
+    # --- Create Task in local DB ---
     try:
         task = await orchestrator.task_repo.create_task(
             draft_id=draft_id,
@@ -1318,6 +1335,17 @@ async def decide_draft(
                             "code": "DUPLICATE_FILE_AFTER_APPROVE",
                             "message": "Документ с таким файлом уже существует",
                             "details": {"conflict_document_id": conflict_id},
+                        }
+                    },
+                )
+            # CONCURRENT_LIMIT — too many active pipelines
+            if "Concurrent task limit reached" in err_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail={
+                        "error": {
+                            "code": "CONCURRENT_LIMIT",
+                            "message": err_msg,
                         }
                     },
                 )

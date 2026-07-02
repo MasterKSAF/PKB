@@ -152,7 +152,8 @@ class TestRunConverterFullStep:
             )
 
         mock_client.convert_full.assert_awaited_once_with(
-            {"file_key": "drafts/10/file.pdf", "draft_id": DRAFT_ID},
+            {"file_key": "drafts/10/file.pdf", "draft_id": DRAFT_ID,
+             "task_id": 3, "version_id": 1},
         )
 
         notify_completed.assert_awaited_once()
