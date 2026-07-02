@@ -136,6 +136,18 @@ class PipelineConfig(BaseSettings):
         description="Max hours a task can exist before being killed (P3S-1)",
     )
 
+    # Max step execution time (H1): hard timeout regardless of health check
+    MAX_STEP_EXECUTION_TIME: int = Field(
+        default=1800,
+        description="Max seconds a step can run before hard kill (ignores health-check)",
+    )
+
+    # Validating state timeout (C2): max time a document can stay in validating
+    VALIDATING_STATE_TIMEOUT: int = Field(
+        default=7200,
+        description="Max seconds a document can stay in validating before watchdog fail",
+    )
+
     # Full phase mode (P1F-9): auto | partial | full
     # auto  — full_completed (preview_not_supported) → skip processing, else full Parser/OCR
     # partial — always run full Parser/OCR even if full preview is available
@@ -231,6 +243,45 @@ class HTTPClientConfig(BaseSettings):
     )
 
 
+class ValidationConfig(BaseSettings):
+    """Validation constants for API endpoints (L1)."""
+
+    # Max file size for upload (bytes)
+    MAX_FILE_SIZE_BYTES: int = Field(
+        default=100 * 1024 * 1024,  # 100 MB
+        description="Maximum allowed file size for upload (bytes)",
+    )
+
+    # Allowed source types
+    ALLOWED_SOURCE_TYPES: set[str] = Field(
+        default={"GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "RMRS", "OTHER"},
+        description="Allowed source types for documents",
+    )
+
+    # Allowed eras
+    ALLOWED_ERA: set[str] = Field(
+        default={"USSR", "CIS", "RF", "CURRENT"},
+        description="Allowed document eras",
+    )
+
+    # Allowed jurisdictions
+    ALLOWED_JURISDICTIONS: set[str] = Field(
+        default={"RU", "EU", "US", "NO", "INTL"},
+        description="Allowed jurisdictions",
+    )
+
+    # Allowed MIME types
+    ALLOWED_MIME: set[str] = Field(
+        default={
+            "application/pdf",
+            "image/png",
+            "image/jpeg",
+            "image/tiff",
+        },
+        description="Allowed file MIME types",
+    )
+
+
 class MinioConfig(BaseSettings):
     """MinIO / S3-compatible storage configuration."""
 
@@ -306,6 +357,12 @@ class Settings(BaseSettings):
     pipeline: PipelineConfig = Field(
         default_factory=PipelineConfig,
         description="Pipeline execution parameters",
+    )
+
+    # Validation Configuration
+    validation: ValidationConfig = Field(
+        default_factory=ValidationConfig,
+        description="Validation constants for API endpoints",
     )
 
     # MinIO Storage Configuration

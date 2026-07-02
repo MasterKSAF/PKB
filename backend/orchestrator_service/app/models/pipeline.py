@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects import sqlite
+from sqlalchemy.dialects import sqlite, postgresql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # PK-колонки: BigInteger для PostgreSQL (BIGINT), Integer для SQLite (INTEGER + AUTOINCREMENT)
@@ -182,10 +182,10 @@ class TaskStep(Base):
     # "pending" | "running" | "completed" | "failed" | "compensated"
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
 
-    # JSON data containers (use JSONB on PostgreSQL for production)
-    # Note: For PostgreSQL production, use sqlalchemy.dialects.postgresql.JSONB
-    input_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    output_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # JSON data containers (JSONB on PostgreSQL, JSON on SQLite)
+    _jsonb = postgresql.JSONB().with_variant(JSON, "sqlite")
+    input_data: Mapped[Optional[dict]] = mapped_column(_jsonb, nullable=True)
+    output_data: Mapped[Optional[dict]] = mapped_column(_jsonb, nullable=True)
 
     # Error details
     error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

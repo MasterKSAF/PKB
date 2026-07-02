@@ -58,13 +58,22 @@ FK-колонки (`task_id`, `draft_id`, `document_id`, `version_id`) — пр�
 задача переводится в статус `partially_indexed`, а не `completed`.
 Это позволяет мониторингу обнаружить частичную индексацию.
 
-### 1.7. Таймауты pipeline (P3S-1/P3S-2)
-Два уровня таймаутов:
+### 1.7. Таймауты pipeline (P3S-1/P3S-2, C2, H1)
+Пять уровней контроля (в порядке выполнения в `cleanup_stale_tasks`):
+- **Hard kill timeout (30 мин, H1):** шаг, выполняющийся дольше
+  `MAX_STEP_EXECUTION_TIME` (1800 с), принудительно завершается с кодом
+  `STEP_HARD_TIMEOUT`. Выполняется ДО health-check — убивает шаги даже если
+  сервис жив (для full-фазы где health-check может не помочь).
+- **Health-check (B2):** шаги в `running` проверяются на живость downstream
+  сервиса. Если сервис мёртв — `UPSTREAM_UNAVAILABLE`.
 - **Per-state timeout (30 с):** шаг, зависший в `pending` дольше 30 с,
   помечается как `failed` с кодом `PENDING_TIMEOUT`.
+- **Validating state timeout (2 ч, C2):** indexation-задача, где RAG index
+  завершён, а activation не выполнился — документ завис в `validating`.
+  Принудительно завершается с кодом `VALIDATING_TIMEOUT`.
 - **Absolute timeout (48 ч):** задача, активная дольше 48 ч,
   принудительно завершается с кодом `ABSOLUTE_TIMEOUT`.
-Оба обрабатываются в `cleanup_stale_tasks()` scheduler'а (Celery Beat).
+Все обрабатываются в `cleanup_stale_tasks()` scheduler'а (Celery Beat).
 
 ### 1.8. Валидация цитирований [source:N] (P3S-4)
 LLM-ответы проверяются на корректность формата `[source:N]`.

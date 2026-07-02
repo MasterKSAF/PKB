@@ -55,7 +55,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MOCK_USER_ID = "u-mock-001"
-MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB
 
 # Idempotency cache for POST /drafts and POST /preview
 # Idempotency-Key → {draft_id, task_id, created_at}
@@ -64,21 +63,6 @@ MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100 MB
 _IDEMPOTENCY_CACHE: dict[str, dict] = {}
 _PREVIEW_IDEMPOTENCY_CACHE: dict[str, dict] = {}
 IDEMPOTENCY_TTL_SECONDS = 3600  # 1 hour
-
-ALLOWED_SOURCE_TYPES = {
-    "GOST", "GOST_R", "OST", "RD", "TU", "ISO", "DNV", "ASTM", "RMRS", "OTHER",
-}
-
-ALLOWED_ERA = {"USSR", "CIS", "RF", "CURRENT"}
-
-ALLOWED_JURISDICTIONS = {"RU", "EU", "US", "NO", "INTL"}
-
-ALLOWED_MIME = {
-    "application/pdf",
-    "image/png",
-    "image/jpeg",
-    "image/tiff",
-}
 
 # Actions that can be performed on a draft
 EXTERNAL_ACTIONS = {"approve", "reject", "confirm"}
@@ -179,53 +163,53 @@ async def create_draft(
                 )
                 _IDEMPOTENCY_CACHE.pop(idempotency_key, None)
     # --- Validate file type ---
-    if file.content_type not in ALLOWED_MIME:
+    if file.content_type not in settings.validation.ALLOWED_MIME:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "error": {
                     "code": "UNSUPPORTED_FILE_TYPE",
                     "message": "Неподдерживаемый формат файла",
-                    "details": {"allowed_types": list(ALLOWED_MIME)},
+                    "details": {"allowed_types": list(settings.validation.ALLOWED_MIME)},
                 }
             },
         )
 
     # --- Validate source_type ---
-    if source_type not in ALLOWED_SOURCE_TYPES:
+    if source_type not in settings.validation.ALLOWED_SOURCE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": f"Недопустимый source_type: {source_type}",
-                    "details": {"allowed_values": sorted(ALLOWED_SOURCE_TYPES)},
+                    "details": {"allowed_values": sorted(settings.validation.ALLOWED_SOURCE_TYPES)},
                 }
             },
         )
 
     # --- Validate era ---
-    if era is not None and era not in ALLOWED_ERA:
+    if era is not None and era not in settings.validation.ALLOWED_ERA:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": f"Недопустимый era: {era}",
-                    "details": {"allowed_values": sorted(ALLOWED_ERA)},
+                    "details": {"allowed_values": sorted(settings.validation.ALLOWED_ERA)},
                 }
             },
         )
 
     # --- Validate jurisdiction ---
-    if jurisdiction is not None and jurisdiction not in ALLOWED_JURISDICTIONS:
+    if jurisdiction is not None and jurisdiction not in settings.validation.ALLOWED_JURISDICTIONS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "error": {
                     "code": "VALIDATION_ERROR",
                     "message": f"Недопустимый jurisdiction: {jurisdiction}",
-                    "details": {"allowed_values": sorted(ALLOWED_JURISDICTIONS)},
+                    "details": {"allowed_values": sorted(settings.validation.ALLOWED_JURISDICTIONS)},
                 }
             },
         )
@@ -258,7 +242,7 @@ async def create_draft(
         except (ValueError, TypeError):
             content_length = None
 
-    if content_length is not None and content_length > MAX_FILE_SIZE_BYTES:
+    if content_length is not None and content_length > settings.validation.MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail={
@@ -306,7 +290,7 @@ async def create_draft(
         )
 
     # Validate file size after reading
-    if file_size > MAX_FILE_SIZE_BYTES:
+    if file_size > settings.validation.MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail={

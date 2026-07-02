@@ -459,6 +459,114 @@ class TestCompensateRagIndex:
             settings.pipeline.MAX_STEP_RETRIES = original
 
 
+class TestExecuteCompensation:
+    """Прямые тесты _execute_compensation (C3)."""
+
+    @pytest.fixture
+    def saga(self, mock_db):
+        from app.core.pipeline.saga import SagaCoordinator
+        s = SagaCoordinator(mock_db)
+        s.task_repo = AsyncMock()
+        return s
+
+    @pytest.fixture
+    def step(self):
+        return MockStep(
+            step_name="registry_creation",
+            step_index=4,
+            status="completed",
+            output_data={"registry_id": 123},
+        )
+
+    @pytest.fixture
+    def task(self):
+        return MockTask(id=1, draft_id=42, document_id=100)
+
+    async def test_execute_delete_registry_document(self, saga, step, task):
+        """delete_registry_document вызывает RegistryServiceClient.delete_document с registry_id."""
+        with patch(
+            "app.services.registry_client.RegistryServiceClient.delete_document",
+            new=AsyncMock(return_value={"data": {"deleted": True, "document_id": 123}}),
+        ) as mock_delete:
+            await saga._execute_compensation("delete_registry_document", step, task)
+
+        mock_delete.assert_awaited_once_with(123)
+
+    async def test_execute_delete_registry_document_fallsback_to_task_doc_id(self, saga, task):
+        """Когда output_data пуст, delete_registry_document использует task.document_id."""
+        step = MockStep("registry_creation", 4, status="completed", output_data={})
+
+        with patch(
+            "app.services.registry_client.RegistryServiceClient.delete_document",
+            new=AsyncMock(),
+        ) as mock_delete:
+            await saga._execute_compensation("delete_registry_document", step, task)
+
+        mock_delete.assert_awaited_once_with(100)  # task.document_id
+
+    async def test_execute_delete_registry_document_without_task(self, saga, step):
+        """Когда task=None, delete_registry_document использует '0' (безопасный fallback)."""
+        step_no_output = MockStep("registry_creation", 4, status="completed", output_data={})
+
+        with patch(
+            "app.services.registry_client.RegistryServiceClient.delete_document",
+            new=AsyncMock(),
+        ) as mock_delete:
+            await saga._execute_compensation("delete_registry_document", step_no_output, task=None)
+
+        mock_delete.assert_awaited_once_with(0)
+
+    async def test_execute_delete_from_vector_index(self, saga, step, task):
+        """delete_from_vector_index вызывает RAGBuilderClient.delete_index с document_id."""
+        rag_step = MockStep(
+            "rag_index", 5, status="completed",
+            output_data={"document_id": "42"},
+        )
+
+        with patch(
+            "app.services.rag_client.RAGBuilderClient.delete_index",
+            new=AsyncMock(),
+        ) as mock_delete:
+            await saga._execute_compensation("delete_from_vector_index", rag_step, task)
+
+        mock_delete.assert_awaited_once_with("42")
+
+    async def test_execute_delete_from_vector_index_fallback_to_task(self, saga, task):
+        """Когда output_data пуст, delete_from_vector_index использует task.document_id."""
+        rag_step = MockStep("rag_index", 5, status="completed", output_data={})
+
+        with patch(
+            "app.services.rag_client.RAGBuilderClient.delete_index",
+            new=AsyncMock(),
+        ) as mock_delete:
+            await saga._execute_compensation("delete_from_vector_index", rag_step, task)
+
+        mock_delete.assert_awaited_once_with("100")  # str(task.document_id)
+
+    async def test_execute_compensation_raises_on_exception(self, saga, step, task):
+        """Когда API клиент выбрасывает исключение, _execute_compensation пробрасывает его."""
+        with patch(
+            "app.services.registry_client.RegistryServiceClient.delete_document",
+            new=AsyncMock(side_effect=Exception("API unavailable")),
+        ):
+            with pytest.raises(Exception, match="API unavailable"):
+                await saga._execute_compensation("delete_registry_document", step, task)
+
+    async def test_execute_compensation_release_connection_on_error(self, saga, step, task):
+        """При ошибке клиент закрывается (close вызывается через finally)."""
+        mock_client = AsyncMock()
+        mock_client.delete_document = AsyncMock(side_effect=Exception("fail"))
+
+        with patch(
+            "app.services.registry_client.RegistryServiceClient",
+            return_value=mock_client,
+        ):
+            with pytest.raises(Exception):
+                await saga._execute_compensation("delete_registry_document", step, task)
+
+        mock_client.close.assert_awaited_once()
+
+
 class TestCompensationIdempotency:
     """P2-2: повторный compensate (idempotency)."""
 

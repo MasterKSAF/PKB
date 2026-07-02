@@ -385,8 +385,7 @@ class TestRunRagIndexStep:
         """RAG index submits and exits (no polling)."""
         # Mock redis to avoid real connection
         mock_redis = MagicMock()
-        mock_redis.setnx.return_value = True  # lock acquired
-        mock_redis.expire.return_value = True
+        mock_redis.set.return_value = True  # lock acquired
         mock_redis.delete.return_value = True
 
         import redis as sync_redis
@@ -453,8 +452,7 @@ class TestRunRagIndexStep:
     def test_lock_held_skips(self, monkeypatch):
         """When Redis advisory lock is held, task skips."""
         mock_redis = MagicMock()
-        mock_redis.setnx.return_value = False  # lock NOT acquired
-        mock_redis.expire.return_value = True
+        mock_redis.set.return_value = None  # lock NOT acquired (redis-py SET NX returns None when key exists)
         mock_redis.delete.return_value = True
 
         import redis as sync_redis
@@ -473,8 +471,7 @@ class TestRunRagIndexStep:
     def test_invalid_document_id_format(self, monkeypatch):
         """Non-integer document_id raises ValueError."""
         mock_redis = MagicMock()
-        mock_redis.setnx.return_value = True
-        mock_redis.expire.return_value = True
+        mock_redis.set.return_value = True
         import redis as sync_redis
         monkeypatch.setattr(sync_redis, "from_url", lambda url: mock_redis)
 
@@ -488,8 +485,7 @@ class TestRunRagIndexStep:
     def test_submit_and_save_external_task(self, monkeypatch):
         """Task submits to RAG Builder and saves external_task (no integrity check in task)."""
         mock_redis = MagicMock()
-        mock_redis.setnx.return_value = True
-        mock_redis.expire.return_value = True
+        mock_redis.set.return_value = True
 
         import redis as sync_redis
         monkeypatch.setattr(sync_redis, "from_url", lambda url: mock_redis)
@@ -535,8 +531,7 @@ class TestRunRagIndexStep:
     def test_build_submission_fails_triggers_retry(self, monkeypatch):
         """When RAG Builder fails, task calls notify_failed and retries."""
         mock_redis = MagicMock()
-        mock_redis.setnx.return_value = True
-        mock_redis.expire.return_value = True
+        mock_redis.set.return_value = True
 
         import redis as sync_redis
         monkeypatch.setattr(sync_redis, "from_url", lambda url: mock_redis)

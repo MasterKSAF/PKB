@@ -210,6 +210,104 @@ class TaskRepository:
         )
         return list(result.scalars().all())
 
+    async def get_stale_running_steps_for_hard_kill(
+        self, max_execution_seconds: int = 1800
+    ) -> list[TaskStep]:
+        """Find running steps exceeding absolute execution timeout (H1).
+
+        Unlike get_stale_running_steps, this ignores health-check and returns
+        steps that must be killed regardless of service liveness.
+        """
+        from datetime import timedelta
+
+        threshold = datetime.now(timezone.utc) - timedelta(seconds=max_execution_seconds)
+        result = await self.db.execute(
+            select(TaskStep).where(
+                and_(
+                    TaskStep.status == "running",
+                    TaskStep.started_at < threshold,
+                    TaskStep.deleted_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_stale_running_steps_for_hard_kill(
+        self, max_execution_seconds: int = 1800
+    ) -> list[TaskStep]:
+        """Find running steps exceeding absolute execution timeout (H1).
+
+        Unlike get_stale_running_steps, this ignores health-check and
+        directly returns steps that must be killed.
+        """
+        from datetime import timedelta
+
+        threshold = datetime.now(timezone.utc) - timedelta(seconds=max_execution_seconds)
+        result = await self.db.execute(
+            select(TaskStep).where(
+                and_(
+                    TaskStep.status == "running",
+                    TaskStep.started_at < threshold,
+                    TaskStep.deleted_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_stale_validation_tasks(
+        self, max_validating_seconds: int = 7200
+    ) -> list[Task]:
+        """Find indexation tasks where rag_index completed but activation stuck (C2).
+
+        These are tasks where:
+        - pipeline_type == 'indexation'
+        - status == 'active'
+        - TaskStep 'rag_index' is 'completed'
+        - No 'activate' step completed
+        - Task started_at is older than max_validating_seconds
+        """
+        from datetime import timedelta
+
+        threshold = datetime.now(timezone.utc) - timedelta(seconds=max_validating_seconds)
+
+        # Subquery: find tasks that have a completed rag_index step
+        rag_completed = (
+            select(TaskStep.task_id)
+            .where(
+                and_(
+                    TaskStep.step_name == "rag_index",
+                    TaskStep.status == "completed",
+                    TaskStep.deleted_at.is_(None),
+                )
+            )
+        ).scalar_subquery()
+
+        # Subquery: find tasks that have a completed activate step
+        activate_completed = (
+            select(TaskStep.task_id)
+            .where(
+                and_(
+                    TaskStep.step_name == "activate",
+                    TaskStep.status == "completed",
+                    TaskStep.deleted_at.is_(None),
+                )
+            )
+        ).scalar_subquery()
+
+        result = await self.db.execute(
+            select(Task).where(
+                and_(
+                    Task.pipeline_type == "indexation",
+                    Task.status == "active",
+                    Task.id.in_(rag_completed),
+                    Task.id.not_in(activate_completed),
+                    Task.started_at < threshold,
+                    Task.deleted_at.is_(None),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
     async def get_recently_indexed_tasks(
         self, max_hours: int = 24
     ) -> list[Task]:
@@ -338,6 +436,38 @@ class TaskRepository:
         step.status = "compensated"
         await self.db.flush()
         return step
+
+    async def release_stale_locks(self, max_seconds: int = 3600) -> list[Task]:
+        """Release locks on tasks that have been locked too long (M4).
+
+        Returns the list of released tasks (with locked_by/locked_at info
+        for logging).
+        """
+        from datetime import timedelta
+
+        threshold = datetime.now(timezone.utc) - timedelta(seconds=max_seconds)
+        result = await self.db.execute(
+            select(Task).where(
+                and_(
+                    Task.locked_at.is_not(None),
+                    Task.locked_at < threshold,
+                    Task.deleted_at.is_(None),
+                )
+            )
+        )
+        stale_locks = list(result.scalars().all())
+        released = []
+        for task in stale_locks:
+            released.append({
+                "id": task.id,
+                "locked_by": task.locked_by,
+                "locked_at": task.locked_at,
+            })
+            task.locked_by = None
+            task.locked_at = None
+        if stale_locks:
+            await self.db.flush()
+        return released
 
     async def get_task_steps(self, task_id: int) -> list[TaskStep]:
         """Get all steps for a task, ordered by step index (excludes soft-deleted)."""

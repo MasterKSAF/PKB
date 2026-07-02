@@ -58,6 +58,24 @@ async def lifespan(app: FastAPI):
     # Start BackgroundTaskPoller
     await start_poller()
 
+    # Cleanup stale locks at startup (M5: fallback if Celery Beat was down)
+    try:
+        from app.db.session import get_db_context
+        from app.repositories.pipeline import TaskRepository
+
+        async with get_db_context() as db:
+            repo = TaskRepository(db)
+            released = await repo.release_stale_locks(
+                max_seconds=settings.pipeline.MAX_JOB_RUNNING_TIME
+            )
+            if released:
+                logger.warning(
+                    f"Startup: released {len(released)} stale task locks "
+                    "(Celery Beat may have been down)"
+                )
+    except Exception as cleanup_err:
+        logger.warning(f"Startup lock cleanup failed (non-fatal): {cleanup_err}")
+
     yield
 
     # Shutdown

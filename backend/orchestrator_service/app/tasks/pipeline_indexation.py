@@ -41,12 +41,10 @@ def run_rag_index_step(self, job_id: str, document_id: str):
     lock_ttl = 3600  # 1 hour max
 
     try:
-        # Try to acquire advisory lock via Redis
+        # Try to acquire advisory lock via Redis (atomic SET NX EX — P2I-7)
         import redis as sync_redis
         r = sync_redis.from_url(settings.REDIS_URL)
-        acquired = r.setnx(lock_key, "1")
-        if acquired:
-            r.expire(lock_key, lock_ttl)
+        acquired = r.set(lock_key, "1", nx=True, ex=lock_ttl)
         r.close()
 
         if not acquired:

@@ -1909,6 +1909,24 @@ class PipelineOrchestrator:
             )
             cleaned += 1
 
+        # Handle stale running steps — hard kill (H1: absolute execution timeout)
+        # Runs BEFORE health-check: kills steps that exceed MAX_STEP_EXECUTION_TIME
+        # regardless of whether the service is alive.
+        max_exec_time = settings.pipeline.MAX_STEP_EXECUTION_TIME
+        stale_hard_kill = await self.task_repo.get_stale_running_steps_for_hard_kill(max_exec_time)
+        for step in stale_hard_kill:
+            logger.warning(
+                f"Step {step.step_name} running for >{max_exec_time}s "
+                f"— hard kill (H1)",
+                extra={"step_id": step.id, "step_name": step.step_name},
+            )
+            await self.task_repo.fail_task_step(
+                step.id,
+                error_code="STEP_HARD_TIMEOUT",
+                error_message=f"Step running for >{max_exec_time}s (hard limit)",
+            )
+            cleaned += 1
+
         # Handle stale running steps (B2: check if service is alive)
         running_timeout = settings.pipeline.RUNNING_STEP_TIMEOUT
         stale_running = await self.task_repo.get_stale_running_steps(running_timeout)
@@ -1953,32 +1971,35 @@ class PipelineOrchestrator:
             )
             cleaned += 1
 
-        # Handle stale locks (todo_pipeline_coverage §14)
-        # Lock with locked_at older than MAX_JOB_RUNNING_TIME is considered
-        # orphaned (worker crashed without unlock). Auto-release and warn.
-        from datetime import timedelta as _td
-        from datetime import datetime as _dt
-        from datetime import timezone as _tz
-        lock_threshold = _dt.now(_tz.utc) - _td(seconds=max_time)
-        from sqlalchemy import select as _select
-        from app.models.pipeline import Task as _Task
-        result = await self.db.execute(
-            _select(_Task).where(
-                _Task.locked_at.is_not(None),
-                _Task.locked_at < lock_threshold,
-                _Task.deleted_at.is_(None),
-            )
-        )
-        stale_locks = list(result.scalars().all())
-        for task in stale_locks:
-            old_worker = task.locked_by
-            await self.task_repo.unlock_task(task.id)
+        # Handle stale validation tasks (C2: rag_index completed but activation stuck)
+        validating_timeout = settings.pipeline.VALIDATING_STATE_TIMEOUT
+        stale_validating = await self.task_repo.get_stale_validation_tasks(validating_timeout)
+        for task in stale_validating:
             logger.warning(
-                f"Auto-released stale lock on task {task.id} "
-                f"(was held by {old_worker!r}, locked_at={task.locked_at})",
-                extra={"task_id": task.id, "old_worker": old_worker},
+                f"Task {task.id} stuck in validating for >{validating_timeout}s "
+                f"(rag_index completed, activation never finished) — failing (C2)",
+                extra={"task_id": task.id, "draft_id": task.draft_id},
+            )
+            await self.task_repo.update_task_status(
+                task.id,
+                status=TaskStatus.FAILED.value,
+            )
+            await self.task_repo.set_task_error(
+                task.id,
+                error_code="VALIDATING_TIMEOUT",
+                error_message=f"Document stuck in validating for >{validating_timeout}s",
             )
             cleaned += 1
+
+        # Handle stale locks (M4: extracted to TaskRepository)
+        released_locks = await self.task_repo.release_stale_locks(max_seconds=max_time)
+        for lock in released_locks:
+            logger.warning(
+                f"Auto-released stale lock on task {lock['id']} "
+                f"(was held by {lock['locked_by']!r}, locked_at={lock['locked_at']})",
+                extra={"task_id": lock["id"], "old_worker": lock["locked_by"]},
+            )
+        cleaned += len(released_locks)
 
         if cleaned:
             logger.warning(f"Cleaned up {cleaned} stale pipeline items")
