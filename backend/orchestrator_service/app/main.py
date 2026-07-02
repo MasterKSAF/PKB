@@ -15,6 +15,7 @@ from app.core.logging_config import setup_logging
 from app.core.otel import setup_otel
 from app.core.trace import get_trace_id, set_trace_id, set_user_id, reset_trace_id
 from app.db.base import engine, Base
+from app.services.task_poller import start_poller, stop_poller
 from sqlalchemy import text
 
 
@@ -53,9 +54,15 @@ async def lifespan(app: FastAPI):
         setup_otel(app)
     except Exception as otel_err:
         logger.warning(f"OTEL init failed (non-fatal): {otel_err}")
+
+    # Start BackgroundTaskPoller
+    await start_poller()
+
     yield
+
     # Shutdown
     logger.info("Shutting down Orchestrator Service")
+    await stop_poller()
     await engine.dispose()
 
 

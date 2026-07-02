@@ -207,29 +207,31 @@ class TestRunConverterFullStep:
 
 
 class TestRunParserFullStep:
-    """Tests for run_parser_full_step Celery task."""
+    """Tests for run_parser_full_step Celery task (fire-and-forget mode)."""
 
-    HAPPY_PARSER_FULL = {
+    HAPPY_PARSER_RESP = {
         "data": {
-            "sections": [{"id": 1, "title": "Section 1"}, {"id": 2, "title": "Section 2"}],
-            "status": "completed",
+            "task_id": "parser-task-123",
+            "status": "processing",
         }
     }
 
     def test_happy_path(self):
-        """Parser full step completes successfully."""
+        """Parser full submits task and exits (no polling)."""
         mock_client = AsyncMock()
-        mock_client.process.return_value = self.HAPPY_PARSER_FULL
+        mock_client.process.return_value = self.HAPPY_PARSER_RESP
         mock_client.close = AsyncMock()
 
-        notify_completed = AsyncMock()
+        mock_ext_repo = AsyncMock()
 
         with patch(
             "app.tasks.pipeline_formation.ParserServiceClient",
             return_value=mock_client,
         ), patch(
-            "app.tasks.pipeline_formation._notify_step_completed",
-            notify_completed,
+            "app.tasks.pipeline_formation.ExternalTaskRepository",
+            return_value=mock_ext_repo,
+        ), patch(
+            "app.tasks.pipeline_formation.get_db_context",
         ):
             from app.tasks.pipeline_formation import run_parser_full_step
 
@@ -242,13 +244,16 @@ class TestRunParserFullStep:
             mode="full",
         )
 
-        notify_completed.assert_awaited_once()
-        args, _ = notify_completed.await_args
-        assert args[0] == 4
-        assert args[1] == "full_ocr"
-        assert len(args[3]["sections"]) == 2
+        # Verify external task was saved
+        mock_ext_repo.create.assert_awaited_once_with(
+            orchestrator_task_id="4",
+            step_name="full_ocr",
+            external_service="parser",
+            external_task_id="parser-task-123",
+            context_data={"draft_id": DRAFT_ID, "file_key": "drafts/10/file.pdf"},
+        )
 
-        assert result == {"status": "completed", "step": "full_ocr", "task_id": 4}
+        assert result == {"status": "pending", "step": "full_ocr", "task_id": 4, "parser_task_id": "parser-task-123"}
 
     def test_failure_path_triggers_retry(self):
         """When Parser full raises, task calls notify_failed and retries."""
@@ -374,10 +379,10 @@ class TestRunRegistryStepFailure:
 
 
 class TestRunRagIndexStep:
-    """Tests for run_rag_index_step Celery task (pipeline_indexation)."""
+    """Tests for run_rag_index_step Celery task (pipeline_indexation, fire-and-forget)."""
 
     def test_happy_path(self, monkeypatch):
-        """RAG index step completes successfully with Registry + RAG Builder mocks."""
+        """RAG index submits and exits (no polling)."""
         # Mock redis to avoid real connection
         mock_redis = MagicMock()
         mock_redis.setnx.return_value = True  # lock acquired
@@ -400,19 +405,9 @@ class TestRunRagIndexStep:
             "status": "indexing",
             "indexing_txn_id": "txn-123",
         }
-        mock_rag.get_build_status.return_value = {
-            "status": "indexed",
-            "chunks_count": 10,
-            "indexed_at": "2026-06-25T12:00:00Z",
-        }
-        mock_rag.check_index.return_value = {
-            "integrity_ok": True,
-            "indexed_count": 10,
-            "expected_count": 10,
-        }
         mock_rag.close = AsyncMock()
 
-        notify_completed = AsyncMock()
+        mock_ext_repo = AsyncMock()
 
         with patch(
             "app.services.registry_client.RegistryServiceClient",
@@ -421,8 +416,10 @@ class TestRunRagIndexStep:
             "app.services.rag_client.RAGBuilderClient",
             return_value=mock_rag,
         ), patch(
-            "app.tasks.pipeline_indexation._notify_step_completed",
-            notify_completed,
+            "app.tasks.pipeline_indexation.ExternalTaskRepository",
+            return_value=mock_ext_repo,
+        ), patch(
+            "app.tasks.pipeline_indexation.get_db_context",
         ):
             from app.tasks.pipeline_indexation import run_rag_index_step
 
@@ -440,23 +437,18 @@ class TestRunRagIndexStep:
             document_id=str(DOCUMENT_ID),
             sections=[{"id": 1, "title": "S1"}, {"id": 2, "title": "S2"}],
         )
-        mock_rag.get_build_status.assert_awaited_once_with(
-            document_id=str(DOCUMENT_ID),
-        )
-        mock_rag.check_index.assert_awaited_once_with(
-            document_id=str(DOCUMENT_ID),
-        )
 
-        # Verify notify
-        notify_completed.assert_awaited_once()
-        args, _ = notify_completed.await_args
-        assert args[0] == "job-1"
-        assert args[1] == "rag_index"
+        # Verify NO polling — get_build_status should NOT be called from the task
+        mock_rag.get_build_status.assert_not_called()
 
-        # Verify result
-        assert result["status"] == "indexed"
-        assert result["step"] == "rag_index"
-        assert result["chunks_count"] == 10
+        # Verify external task was saved
+        mock_ext_repo.create.assert_awaited_once()
+
+        assert result == {"status": "pending", "step": "rag_index", "job_id": "job-1"}
+        # No integrity check from the task anymore — Poller handles it
+        mock_rag.check_index.assert_not_called()
+
+        assert result["status"] == "pending"
 
     def test_lock_held_skips(self, monkeypatch):
         """When Redis advisory lock is held, task skips."""
@@ -493,12 +485,11 @@ class TestRunRagIndexStep:
                 job_id="job-bad", document_id="not-an-int",
             )
 
-    def test_integrity_check_failure(self, monkeypatch):
-        """When integrity check fails, task returns failed status."""
+    def test_submit_and_save_external_task(self, monkeypatch):
+        """Task submits to RAG Builder and saves external_task (no integrity check in task)."""
         mock_redis = MagicMock()
         mock_redis.setnx.return_value = True
         mock_redis.expire.return_value = True
-        mock_redis.delete.return_value = True
 
         import redis as sync_redis
         monkeypatch.setattr(sync_redis, "from_url", lambda url: mock_redis)
@@ -510,16 +501,10 @@ class TestRunRagIndexStep:
         mock_registry.close = AsyncMock()
 
         mock_rag = AsyncMock()
-        mock_rag.index_document.return_value = {"status": "indexed", "chunks_count": 5}
-        mock_rag.get_build_status.return_value = {"status": "indexed", "chunks_count": 5}
-        mock_rag.check_index.return_value = {
-            "integrity_ok": False,
-            "indexed_count": 3,
-            "expected_count": 5,
-        }
+        mock_rag.index_document.return_value = {"status": "indexing"}
         mock_rag.close = AsyncMock()
 
-        notify_failed = AsyncMock()
+        mock_ext_repo = AsyncMock()
 
         with patch(
             "app.services.registry_client.RegistryServiceClient",
@@ -528,8 +513,10 @@ class TestRunRagIndexStep:
             "app.services.rag_client.RAGBuilderClient",
             return_value=mock_rag,
         ), patch(
-            "app.tasks.pipeline_indexation._notify_step_failed",
-            notify_failed,
+            "app.tasks.pipeline_indexation.ExternalTaskRepository",
+            return_value=mock_ext_repo,
+        ), patch(
+            "app.tasks.pipeline_indexation.get_db_context",
         ):
             from app.tasks.pipeline_indexation import run_rag_index_step
 
@@ -537,16 +524,19 @@ class TestRunRagIndexStep:
                 job_id="job-int-fail", document_id="50",
             )
 
-        notify_failed.assert_awaited_once()
-        assert result["status"] == "failed"
-        assert result["error_code"] == "INTEGRITY_CHECK_FAILED"
+        # Integrity check is NOT called from the task anymore
+        mock_rag.check_index.assert_not_called()
 
-    def test_build_failed_triggers_integrity_fail(self, monkeypatch):
-        """When RAG Build status is 'failed', integrity check fails."""
+        # External task was saved
+        mock_ext_repo.create.assert_awaited_once()
+
+        assert result["status"] == "pending"
+
+    def test_build_submission_fails_triggers_retry(self, monkeypatch):
+        """When RAG Builder fails, task calls notify_failed and retries."""
         mock_redis = MagicMock()
         mock_redis.setnx.return_value = True
         mock_redis.expire.return_value = True
-        mock_redis.delete.return_value = True
 
         import redis as sync_redis
         monkeypatch.setattr(sync_redis, "from_url", lambda url: mock_redis)
@@ -558,15 +548,7 @@ class TestRunRagIndexStep:
         mock_registry.close = AsyncMock()
 
         mock_rag = AsyncMock()
-        # index_document returns indexing -> triggers polling via get_build_status
-        mock_rag.index_document.return_value = {
-            "status": "indexing",
-            "indexing_txn_id": "txn-fail",
-        }
-        mock_rag.get_build_status.return_value = {
-            "status": "failed",
-            "errors": [{"code": "CHUNKING_FAILED"}],
-        }
+        mock_rag.index_document.side_effect = Exception("RAG Builder unavailable")
         mock_rag.close = AsyncMock()
 
         notify_failed = AsyncMock()
@@ -583,14 +565,19 @@ class TestRunRagIndexStep:
         ):
             from app.tasks.pipeline_indexation import run_rag_index_step
 
-            result = run_rag_index_step.run(
-                job_id="job-build-fail", document_id="51",
+            mock_retry, retry_patcher = _patch_task_retry(
+                run_rag_index_step, exc_to_raise=RuntimeError("retry-called"),
             )
+            try:
+                with pytest.raises(RuntimeError, match="retry-called"):
+                    run_rag_index_step.run(
+                        job_id="job-build-fail", document_id="51",
+                    )
+            finally:
+                retry_patcher.stop()
 
         notify_failed.assert_awaited_once()
-        args, _ = notify_failed.await_args
-        assert args[2] == "INTEGRITY_CHECK_FAILED"
-        assert result["status"] == "failed"
+        mock_retry.assert_called_once()
 
 
 # ============================================================================
@@ -599,14 +586,13 @@ class TestRunRagIndexStep:
 
 
 class TestRunReprocessStep:
-    """Tests for run_reprocess_step Celery task."""
+    """Tests for run_reprocess_step Celery task (fire-and-forget)."""
 
     def test_happy_path(self):
-        """Reprocess step completes successfully."""
+        """Reprocess submits and exits (no polling)."""
         mock_rag = AsyncMock()
         mock_rag.delete_index = AsyncMock()
-        mock_rag.index_document.return_value = {"status": "indexed", "chunks_count": 10}
-        mock_rag.get_build_status.return_value = {"status": "indexed", "chunks_count": 10}
+        mock_rag.index_document.return_value = {"status": "indexing", "indexing_txn_id": "txn-456"}
         mock_rag.close = AsyncMock()
 
         mock_registry = AsyncMock()
@@ -615,7 +601,7 @@ class TestRunReprocessStep:
         }
         mock_registry.close = AsyncMock()
 
-        notify_completed = AsyncMock()
+        mock_ext_repo = AsyncMock()
 
         with patch(
             "app.services.rag_client.RAGBuilderClient",
@@ -624,8 +610,10 @@ class TestRunReprocessStep:
             "app.services.registry_client.RegistryServiceClient",
             return_value=mock_registry,
         ), patch(
-            "app.tasks.pipeline_indexation._notify_step_completed",
-            notify_completed,
+            "app.tasks.pipeline_indexation.ExternalTaskRepository",
+            return_value=mock_ext_repo,
+        ), patch(
+            "app.tasks.pipeline_indexation.get_db_context",
         ):
             from app.tasks.pipeline_indexation import run_reprocess_step
 
@@ -639,14 +627,13 @@ class TestRunReprocessStep:
         # Verify index_document was called
         mock_rag.index_document.assert_awaited_once()
 
-        # Verify notify
-        notify_completed.assert_awaited_once()
-        args, _ = notify_completed.await_args
-        assert args[0] == 7
-        assert args[1] == "reprocess"
+        # Verify NO polling
+        mock_rag.get_build_status.assert_not_called()
 
-        assert result["status"] == "indexed"
-        assert result["step"] == "reprocess"
+        # Verify external task was saved
+        mock_ext_repo.create.assert_awaited_once()
+
+        assert result["status"] == "pending"
 
     def test_failure_triggers_retry(self):
         """Reprocess failure calls notify_failed and retries."""
@@ -693,8 +680,8 @@ class TestRunReprocessStep:
 class TestRunActivateDocumentStep:
     """Tests for run_activate_document_step Celery task."""
 
-    def test_happy_path_activates(self):
-        """Poll → indexed → check OK → active."""
+    def test_already_indexed_activates(self):
+        """Build already indexed → activate immediately."""
         mock_rag = AsyncMock()
         mock_rag.get_build_status.return_value = {
             "status": "indexed", "chunks_count": 42,
@@ -721,7 +708,7 @@ class TestRunActivateDocumentStep:
 
         assert result == {"status": "active", "document_id": 42}
         mock_rag.get_build_status.assert_awaited_once_with(
-            document_id=42, longpoll=1,
+            document_id=42, longpoll=0,
         )
         mock_rag.check_index.assert_awaited_once_with(document_id=42)
         mock_registry.update_document_status.assert_awaited_once_with(
@@ -729,7 +716,7 @@ class TestRunActivateDocumentStep:
         )
 
     def test_build_failed_stays_validating(self):
-        """Poll returns failed → document stays in validating."""
+        """Build already failed → stays in validating."""
         mock_rag = AsyncMock()
         mock_rag.get_build_status.return_value = {
             "status": "failed", "errors": ["chunking error"],
@@ -745,67 +732,65 @@ class TestRunActivateDocumentStep:
             result = run_activate_document_step.run(document_id=42)
 
         assert result == {"status": "build_failed", "document_id": 42}
-        # No check_index or update_document_status calls
         mock_rag.check_index.assert_not_called()
 
-    def test_integrity_fail_stays_validating(self):
-        """Integrity check fails → stays in validating."""
+    def test_still_indexing_defers_to_poller(self):
+        """Build still processing → defer to Poller via external_tasks."""
         mock_rag = AsyncMock()
         mock_rag.get_build_status.return_value = {
-            "status": "indexed", "chunks_count": 10,
-        }
-        mock_rag.check_index.return_value = {
-            "integrity_ok": False,
-            "indexed_count": 0, "expected_count": 42,
+            "status": "processing", "chunks_count": 0,
         }
         mock_rag.close = AsyncMock()
 
-        mock_registry = AsyncMock()
-        mock_registry.close = AsyncMock()
+        mock_ext_repo = AsyncMock()
 
         with patch(
             "app.services.rag_client.RAGBuilderClient",
             return_value=mock_rag,
         ), patch(
-            "app.services.registry_client.RegistryServiceClient",
-            return_value=mock_registry,
+            "app.tasks.pipeline_indexation.ExternalTaskRepository",
+            return_value=mock_ext_repo,
+        ), patch(
+            "app.tasks.pipeline_indexation.get_db_context",
         ):
             from app.tasks.pipeline_indexation import run_activate_document_step
 
             result = run_activate_document_step.run(document_id=42)
 
-        assert result == {"status": "integrity_failed", "document_id": 42}
-        mock_rag.check_index.assert_awaited_once_with(document_id=42)
-        # No update to active
-        mock_registry.update_document_status.assert_not_called()
+        assert result == {"status": "pending", "document_id": 42}
+        mock_ext_repo.create.assert_awaited_once()
+        # No check_index for still-processing status
+        mock_rag.check_index.assert_not_called()
 
-    def test_still_indexing_triggers_retry(self):
-        """Poll returns indexing → retry."""
-        from celery.exceptions import Retry
-
+    def test_processing_status_defers_to_poller(self):
+        """Poll returns indexing/processing → defer to Poller."""
         mock_rag = AsyncMock()
         mock_rag.get_build_status.return_value = {
             "status": "indexing", "progress": 50,
         }
         mock_rag.close = AsyncMock()
 
+        mock_ext_repo = AsyncMock()
+
         with patch(
             "app.services.rag_client.RAGBuilderClient",
             return_value=mock_rag,
+        ), patch(
+            "app.tasks.pipeline_indexation.ExternalTaskRepository",
+            return_value=mock_ext_repo,
+        ), patch(
+            "app.tasks.pipeline_indexation.get_db_context",
         ):
             from app.tasks.pipeline_indexation import run_activate_document_step
 
-            mock_retry, retry_patcher = _patch_task_retry(
-                run_activate_document_step,
-                exc_to_raise=Retry("RAG build not complete: indexing"),
-            )
-            try:
-                with pytest.raises(Retry, match="RAG build not complete"):
-                    run_activate_document_step.run(document_id=42)
-            finally:
-                retry_patcher.stop()
+            result = run_activate_document_step.run(document_id=42)
 
-        mock_retry.assert_called_once()
+        # No self.retry() — defer to Poller
+        assert result == {"status": "pending", "document_id": 42}
+        mock_ext_repo.create.assert_awaited_once()
+        mock_rag.get_build_status.assert_awaited_once_with(
+            document_id=42, longpoll=0,
+        )
 
 
 # ============================================================================

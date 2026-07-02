@@ -177,6 +177,12 @@ class PipelineConfig(BaseSettings):
         description="Confidence below this → discarded (unreadable)",
     )
 
+    # External task timeout: max time waiting for external service (seconds)
+    EXTERNAL_TASK_TIMEOUT: int = Field(
+        default=10800,
+        description="Max seconds an external task can stay pending before being marked failed",
+    )
+
 
 class HTTPClientConfig(BaseSettings):
     """HTTP client settings for external service calls."""

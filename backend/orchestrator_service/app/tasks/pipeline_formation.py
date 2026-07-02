@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.pipeline.orchestrator import PipelineOrchestrator
 from app.core.trace import set_trace_id
 from app.db.session import get_db_context
+from app.repositories.external_task_repo import ExternalTaskRepository
 from app.services.ocr_client import OCRServiceClient
 from app.services.parser_client import ParserServiceClient
 from app.services.converter_client import ConverterValidatorClient
@@ -260,101 +261,126 @@ def run_parser_full_step(
     self, task_id: int, draft_id: int, file_key: str,
     trace_id: str = "",
 ):
-    """Full Parser step — parse entire document."""
+    """Full Parser step — submit to Parser Service, then exit.
+
+    BackgroundTaskPoller handles waiting for completion and notifying the orchestrator.
+    """
     if trace_id:
         set_trace_id(trace_id)
     try:
         logger.info(f"Parser full started: task={task_id} draft={draft_id}")
 
-        async def _do_parser_full():
+        async def _submit_parser_full():
             client = ParserServiceClient()
             try:
-                # Step 1: запуск асинхронного парсинга
-                resp = await client.process(task_id=task_id, file_key=file_key, draft_id=draft_id, mode="full")
+                # Submit async parsing job to Parser Service
+                resp = await client.process(
+                    task_id=task_id, file_key=file_key, draft_id=draft_id, mode="full"
+                )
                 data = resp.get("data", resp)
                 parser_task_id = data.get("task_id")
                 if not parser_task_id:
-                    logger.warning(f"Parser did not return task_id, using orchestrator task_id")
+                    logger.warning(
+                        f"Parser did not return task_id, notifying as completed directly"
+                    )
                     return data
 
-                # Step 2: ждём завершения парсинга (poll до 5 минут)
-                max_poll = 30  # 30 * 10s = 5 min timeout
-                for i in range(max_poll):
-                    status_resp = await client.get_status(parser_task_id)
-                    status_data = status_resp.get("data", status_resp)
-                    p_status = status_data.get("status", "")
-                    logger.info(f"Parser status poll [{i+1}/{max_poll}]: {p_status}")
-                    if p_status == "completed":
-                        break
-                    elif p_status == "failed":
-                        raise Exception(f"Parser processing failed: {status_data.get('error', 'unknown')}")
-                    await asyncio.sleep(10)
-                else:
-                    raise Exception(f"Parser did not complete within timeout for task {parser_task_id}")
+                # Save to external_tasks — Poller will track completion
+                async with get_db_context() as db:
+                    repo = ExternalTaskRepository(db)
+                    await repo.create(
+                        orchestrator_task_id=str(task_id),
+                        step_name="full_ocr",
+                        external_service="parser",
+                        external_task_id=parser_task_id,
+                        context_data={
+                            "draft_id": draft_id,
+                            "file_key": file_key,
+                        },
+                    )
+                    await db.commit()
 
-                # Step 3: получаем результат
-                result_resp = await client.get_result(parser_task_id)
-                return result_resp.get("data", result_resp)
+                logger.info(
+                    f"Parser task {parser_task_id} submitted, will be polled by BackgroundTaskPoller",
+                    extra={"task_id": task_id, "draft_id": draft_id},
+                )
+                return {"task_id": parser_task_id, "status": "pending"}
             finally:
                 await client.close()
 
-        full_parser_result = _run_async(_do_parser_full())
-
-        # Transform parser blocks into sections format for RAG Builder
-        # Parser returns {document: {block: [{number, type, page, content, ...}, ...]}}
-        # RAG Builder expects [{section_id, document_id, level, path, page, type, content: {text}},...]
-        def _normalize_bbox(bbox_val):
-            """Normalize bbox to list[float, float, float, float] or None."""
-            if bbox_val is None:
-                return None
-            if isinstance(bbox_val, (list, tuple)):
-                return [float(v) for v in bbox_val]
-            if isinstance(bbox_val, str):
-                try:
-                    parts = [float(x.strip()) for x in bbox_val.replace(";", ",").split(",")]
-                    return parts if len(parts) == 4 else None
-                except (ValueError, TypeError):
-                    logger.warning(f"Cannot parse bbox string: {bbox_val!r}")
-                    return None
-            return None
-
-        sections = full_parser_result.get("sections", [])
-        if not sections:
-            raw_blocks = full_parser_result.get("document", {}).get("block", [])
-            sections = [
-                {
-                    "section_id": b.get("number", i + 1),
-                    "document_id": draft_id,
-                    "level": 1 if b.get("type") == "heading" else 2,
-                    "path": str(b.get("number", i + 1)),
-                    "page": b.get("page", 1),
-                    "type": "text",
-                    "content": {"text": b.get("content", "")},
-                    "bbox": _normalize_bbox(b.get("bbox")),
-                }
-                for i, b in enumerate(raw_blocks)
-                if b.get("content", "").strip()
-            ]
-            if sections:
-                logger.info(
-                    f"Transformed {len(sections)} parser blocks into sections for RAG"
-                )
-
-        input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
-        output_data = {
-            "sections": sections,
-            "full_result": full_parser_result,
-            "status": "completed",
-        }
-
-        _run_async(_notify_step_completed(task_id, "full_ocr", input_data, output_data))
-
-        return {"status": "completed", "step": "full_ocr", "task_id": task_id}
+        result = _run_async(_submit_parser_full())
+        return {"status": "pending", "step": "full_ocr", "task_id": task_id, "parser_task_id": result.get("task_id")}
 
     except Exception as exc:
-        logger.error(f"Parser full failed: {exc}")
+        logger.error(f"Parser full submission failed: {exc}")
         _run_async(_notify_step_failed(task_id, "full_ocr", "PARSER_ERROR", str(exc)))
         raise self.retry(exc=exc)
+
+
+# ------------------------------------------------------------------
+#  Parser result processing (used by BackgroundTaskPoller)
+# ------------------------------------------------------------------
+
+
+def _normalize_bbox(bbox_val):
+    """Normalize bbox to list[float, float, float, float] or None."""
+    if bbox_val is None:
+        return None
+    if isinstance(bbox_val, (list, tuple)):
+        return [float(v) for v in bbox_val]
+    if isinstance(bbox_val, str):
+        try:
+            parts = [float(x.strip()) for x in bbox_val.replace(";", ",").split(",")]
+            return parts if len(parts) == 4 else None
+        except (ValueError, TypeError):
+            logger.warning(f"Cannot parse bbox string: {bbox_val!r}")
+            return None
+    return None
+
+
+async def process_parser_full_result(
+    task_id: int,
+    draft_id: int,
+    file_key: str,
+    full_parser_result: dict,
+) -> None:
+    """Transform parser full result and notify orchestrator step completed.
+
+    Called by BackgroundTaskPoller when Parser external task completes.
+    """
+    # Transform parser blocks into sections format for RAG Builder
+    # Parser returns {document: {block: [{number, type, page, content, ...}, ...]}}
+    # RAG Builder expects [{section_id, document_id, level, path, page, type, content: {text}},...]
+    sections = full_parser_result.get("sections", [])
+    if not sections:
+        raw_blocks = full_parser_result.get("document", {}).get("block", [])
+        sections = [
+            {
+                "section_id": b.get("number", i + 1),
+                "document_id": draft_id,
+                "level": 1 if b.get("type") == "heading" else 2,
+                "path": str(b.get("number", i + 1)),
+                "page": b.get("page", 1),
+                "type": "text",
+                "content": {"text": b.get("content", "")},
+                "bbox": _normalize_bbox(b.get("bbox")),
+            }
+            for i, b in enumerate(raw_blocks)
+            if b.get("content", "").strip()
+        ]
+        if sections:
+            logger.info(
+                f"Transformed {len(sections)} parser blocks into sections for RAG"
+            )
+
+    input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
+    output_data = {
+        "sections": sections,
+        "full_result": full_parser_result,
+        "status": "completed",
+    }
+
+    await _notify_step_completed(task_id, "full_ocr", input_data, output_data)
 
 
 @celery_app.task(
@@ -568,52 +594,51 @@ def run_rag_index_step(
     sections: Optional[list] = None,
     trace_id: str = "",
 ):
-    """RAG index step — build vector index via RAG Builder."""
+    """RAG index step — submit to RAG Builder, then exit.
+
+    BackgroundTaskPoller handles waiting for completion and notifying the orchestrator.
+    """
     if trace_id:
         set_trace_id(trace_id)
     try:
         logger.info(f"RAG index started: task={task_id} doc={document_id}")
 
-        async def _do_rag_index():
+        async def _submit_rag_index():
             client = RAGBuilderClient()
             try:
                 result = await client.index_document(
                     document_id=document_id,
                     sections=sections or [],
                 )
-                txn_id = result.get("indexing_txn_id")
-                if txn_id:
-                    # Poll until indexing completes
-                    for i in range(12):
-                        status_resp = await client.get_build_status(
-                            document_id=str(document_id), longpoll=1
-                        )
-                        idx_status = status_resp.get("status", "")
-                        if idx_status in ("indexed", "completed"):
-                            logger.info(f"RAG indexing completed: doc={document_id}")
-                            break
-                        elif idx_status == "failed":
-                            raise Exception(f"RAG indexing failed: {status_resp}")
-                        await asyncio.sleep(5)
+                # Save to external_tasks — Poller will track completion
+                async with get_db_context() as db:
+                    repo = ExternalTaskRepository(db)
+                    await repo.create(
+                        orchestrator_task_id=str(task_id),
+                        step_name="rag_index",
+                        external_service="rag_builder",
+                        external_task_id=str(document_id),
+                        context_data={
+                            "draft_id": draft_id,
+                            "document_id": document_id,
+                            "sections": sections,
+                        },
+                    )
+                    await db.commit()
+
+                logger.info(
+                    f"RAG index submitted for doc {document_id}, will be polled by BackgroundTaskPoller",
+                    extra={"task_id": task_id, "draft_id": draft_id},
+                )
                 return result
             finally:
                 await client.close()
 
-        result = _run_async(_do_rag_index())
-
-        input_data = {"document_id": document_id, "draft_id": draft_id}
-        output_data = {
-            "document_id": document_id,
-            "status": "indexed",
-            "chunks_count": result.get("chunks_count", 0),
-        }
-
-        _run_async(_notify_step_completed(task_id, "rag_index", input_data, output_data))
-
-        return {"status": "completed", "step": "rag_index", "task_id": task_id}
+        _run_async(_submit_rag_index())
+        return {"status": "pending", "step": "rag_index", "task_id": task_id}
 
     except Exception as exc:
-        logger.error(f"RAG index failed: {exc}")
+        logger.error(f"RAG index submission failed: {exc}")
         _run_async(_notify_step_failed(task_id, "rag_index", "RAG_INDEX_ERROR", str(exc)))
         raise self.retry(exc=exc)
 

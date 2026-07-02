@@ -1829,19 +1829,10 @@ class PipelineOrchestrator:
             saga = SagaCoordinator(self.db)
             await saga.compensate(task_id, step_name, task=task)
 
-            # Update draft status
-            try:
-                registry = RegistryServiceClient()
-                await registry.update_draft_status(
-                    draft_id=task.draft_id,
-                    status=DraftState.DISCARDED.value,
-                )
-                await registry.close()
-            except Exception as e:
-                logger.warning(
-                    f"Failed to update draft status: {e}",
-                    extra={"draft_id": task.draft_id},
-                )
+            # NOTE: draft status is NOT set to DISCARDED here.
+            # Pipeline failure due to external service timeout is a transient error,
+            # not a logical rejection. The draft remains in its current state
+            # so the user can retry later via the UI.
 
             logger.error(
                 f"Pipeline failed at step {step_name}",

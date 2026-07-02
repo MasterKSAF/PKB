@@ -413,10 +413,9 @@ class TestDocumentActivation:
         assert result.get("status") == "build_failed"
         mock_registry.update_document_status.assert_not_called()
 
-    def test_activation_retries_on_pending(self):
+    def test_activation_still_indexing_defers_to_poller(self):
         """
-        RAG Build всё ещё в процессе (pending) → не обновляет статус,
-        возвращает управление Celery для retry.
+        RAG Build всё ещё в процессе (pending) → defer to Poller via external_tasks.
         """
         from app.tasks.pipeline_indexation import run_activate_document_step
 
@@ -426,21 +425,19 @@ class TestDocumentActivation:
         )
         mock_rag.close = AsyncMock()
 
-        mock_registry = AsyncMock()
-        mock_registry.update_document_status = AsyncMock()
+        mock_ext_repo = AsyncMock()
 
         with patch(
             "app.services.rag_client.RAGBuilderClient",
             return_value=mock_rag,
         ), patch(
-            "app.services.registry_client.RegistryServiceClient",
-            return_value=mock_registry,
-        ), patch.object(
-            run_activate_document_step, "retry",
-            side_effect=Exception("celery_will_retry"),
+            "app.tasks.pipeline_indexation.ExternalTaskRepository",
+            return_value=mock_ext_repo,
+        ), patch(
+            "app.tasks.pipeline_indexation.get_db_context",
         ):
-            with pytest.raises(Exception):
-                run_activate_document_step.run(document_id=103)
+            result = run_activate_document_step.run(document_id=103)
 
-        # Регистрация статуса документа НЕ вызывается при pending
-        mock_registry.update_document_status.assert_not_called()
+        # No self.retry() call anymore — we defer to Poller
+        assert result == {"status": "pending", "document_id": 103}
+        mock_ext_repo.create.assert_awaited_once()
