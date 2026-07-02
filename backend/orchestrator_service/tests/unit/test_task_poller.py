@@ -665,13 +665,11 @@ class TestProcessRagIndexResult:
                 "chunking error",
             )
 
-    async def test_partially_indexed_uses_chunks_count_for_expected(self):
-        """P2I-1: expected_count = status_result['chunks_count'] (same key).
+    async def test_partially_indexed_when_expected_gt_chunks(self):
+        """P2I-1: expected_count > chunks_count → partially_indexed status.
 
-        NOTE: The code reads `expected_count = status_result.get("chunks_count", chunks_count)`,
-        which always equals `chunks_count` since it's the same key.
-        This means the partially_indexed branch is effectively unreachable.
-        The test documents the actual behavior (potential bug).
+        expected_count берётся из /check эндпоинта (check_result),
+        chunks_count — из /status (status_result).
         """
         from app.tasks.pipeline_indexation import process_rag_index_result
 
@@ -685,17 +683,35 @@ class TestProcessRagIndexResult:
         ), patch(
             "app.tasks.pipeline_indexation._notify_step_completed"
         ) as mock_notify:
-            # chunks_count = 5, expected_count also reads chunks_count (5)
-            # Since 5 < 5 is False, partially_indexed is NOT triggered
+            # expected_count (10 из check_result) > chunks_count (5 из status_result)
             status_result = {"status": "indexed", "chunks_count": 5}
             await process_rag_index_result(
                 job_id="job-1", document_id="42", status_result=status_result,
             )
 
             args, _ = mock_notify.await_args
-            # Actual behavior: sends status_result as-is (not partially_indexed)
+            assert args[2]["status"] == "partially_indexed", \
+                "P2I-1: expected_count > chunks_count should trigger partially_indexed"
+
+    async def test_partially_indexed_skipped_when_check_fails(self):
+        """P2I-1: when /check endpoint fails, fallback to chunks_count → skip partial."""
+        from app.tasks.pipeline_indexation import process_rag_index_result
+
+        # /check возвращает пустой результат (без expected_count)
+        mock_rag = self._make_rag_mock({})
+        with patch(
+            "app.services.rag_client.RAGBuilderClient", return_value=mock_rag,
+        ), patch(
+            "app.tasks.pipeline_indexation._notify_step_completed"
+        ) as mock_notify:
+            status_result = {"status": "indexed", "chunks_count": 5}
+            await process_rag_index_result(
+                job_id="job-1", document_id="42", status_result=status_result,
+            )
+
+            args, _ = mock_notify.await_args
             assert args[2]["status"] == "indexed", \
-                "P2I-1 bug: expected_count reads chunks_count key, so partial check never triggers"
+                "Expected not to trigger partially_indexed when check has no expected_count"
 
 
 # ============================================================================

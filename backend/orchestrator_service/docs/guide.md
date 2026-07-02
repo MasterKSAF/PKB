@@ -111,7 +111,11 @@ DB CHECK-ограничения, DDL-миграции и спецификаци�
 После `approved` → создаётся документ, начинается Пайплайн 2:
 `task.status = "indexing"` → `document.processing_status = "indexing"` (одновременно).
 
-`partially_indexed` — не выделен в отдельный FSM-статус, но фиксируется в `processing_status` при `chunk_count_actual < chunk_count_expected`. См. LP-V2.
+`partially_indexed` — не выделен в отдельный FSM-статус, но фиксируется в `processing_status` при `chunk_count_actual < chunk_count_expected`.
+- `chunk_count_actual` (`chunks_count`) — из ответа `GET /rag/build/{doc_id}/status` (статус индексации)
+- `chunk_count_expected` (`expected_count`) — из ответа `GET /rag/build/{doc_id}/check` (проверка целостности)
+Подробнее: `rag_builder_service_api.md §GET /rag/build/{doc_id}/status`, `rag_builder_service_api.md §GET /rag/build/{doc_id}/check`.
+См. LP-V2.
 
 ---
 

@@ -131,7 +131,7 @@ stateDiagram-v2
 | `validating` | Индексация завершена (task=completed). Документ переведён в `validating`, Оркестратор запрашивает `GET /rag/build/{doc_id}/check` у RAG Builder для финального подтверждения |
 | `active` | Integrity check пройден (`integrity_ok=true`). Документ активирован, доступен для семантического поиска |
 | `indexed` | Legacy — заменён на `validating` + `active`. Может встречаться в существующих данных |
-| `partially_indexed` | Часть чанков проиндексирована, часть пропущена из-за ошибок embeddings/БД. Документ **исключён** из RAG Search (RAG фильтрует `WHERE processing_status = 'active'`). **Уточнение (P1-16)**: `partially_indexed` не выделен отдельной FSM-стрелкой на диаграмме, но фиксируется в `processing_status` при `chunk_count_actual < chunk_count_expected` после завершения индексации. Планируется выделить в отдельный статус в Sprint 4 (задача SPEC-19) |
+| `partially_indexed` | Часть чанков проиндексирована, часть пропущена из-за ошибок embeddings/БД. Документ **исключён** из RAG Search (RAG фильтрует `WHERE processing_status = 'active'`). **Уточнение (P1-16)**: `partially_indexed` не выделен отдельной FSM-стрелкой на диаграмме, но фиксируется в `processing_status` при `chunk_count_actual < chunk_count_expected` после завершения индексации. `chunk_count_actual` (`chunks_count`) — из `GET /rag/build/{doc_id}/status`, `chunk_count_expected` (`expected_count`) — из `GET /rag/build/{doc_id}/check`. См. `rag_builder_service_api.md`. Планируется выделить в отдельный статус в Sprint 4 (задача SPEC-19) |
 | `failed` | Ошибка индексации (таймаут, превышение retry, нарушение целостности). Требуется переиндексация (`POST /api/v1/documents/{doc_id}/reprocess`) |
 
 ---
