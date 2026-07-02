@@ -73,6 +73,7 @@ def create_terminology(
     term_type: str,
     is_blocked: Optional[bool] = False,
     definition: Optional[str] = None,
+    commit: bool = True,
     **kwargs,
 ) -> Terminology:
     term = Terminology(
@@ -85,9 +86,13 @@ def create_terminology(
         **kwargs,
     )
     db.add(term)
-    db.commit()
-    db.refresh(term)
+    if commit:
+        db.commit()
+        db.refresh(term)
+    else:
+        db.flush()
     return term
+
 
 
 def update_terminology(db: Session, term_id: str, **kwargs) -> Optional[Terminology]:

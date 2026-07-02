@@ -410,4 +410,88 @@ def test_patch_document_fixes(client, db_session):
     assert links2[0].category_id == cat2_id
 
 
+def test_consecutive_pipeline_documents_overlapping(client):
+    payload_a = {
+        "document": {
+            "metadata": {
+                "title": "Overlap Doc A",
+                "doc_code": "OVERLAP-CODE-1",
+                "source_type": "GOST",
+                "mks_oks_code": "99.99.99",
+                "era": "RF",
+                "status": "uploaded"
+            },
+            "source": {
+                "file_name": "doc_a.pdf",
+                "file_hash_sha256": "aaaa1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+            },
+            "content": [
+                {
+                    "clause": "1",
+                    "title": "Intro A",
+                    "level": 1,
+                    "type": "text",
+                    "content": "Content A"
+                }
+            ],
+            "terminology": [
+                {
+                    "term": "OverlapTerm",
+                    "normalized_term": "overlapterm",
+                    "definition": "Overlapping Term Definition"
+                }
+            ],
+            "references": []
+        }
+    }
+
+    payload_b = {
+        "document": {
+            "metadata": {
+                "title": "Overlap Doc B",  # different title -> different title_hash
+                "doc_code": "OVERLAP-CODE-1",  # same doc_code
+                "source_type": "GOST",
+                "mks_oks_code": "99.99.99",    # same classifier
+                "era": "USSR",
+                "status": "uploaded"
+            },
+            "source": {
+                "file_name": "doc_b.pdf",
+                "file_hash_sha256": "bbbb1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+            },
+            "content": [
+                {
+                    "clause": "1",
+                    "title": "Intro B",
+                    "level": 1,
+                    "type": "text",
+                    "content": "Content B"
+                }
+            ],
+            "terminology": [
+                {
+                    "term": "OverlapTerm",          # same terminology term
+                    "normalized_term": "overlapterm",
+                    "definition": "Overlapping Term Definition"
+                }
+            ],
+            "references": []
+        }
+    }
+
+    # 1. Create first document
+    res_a = client.post("/api/v1/registry/documents", json=payload_a)
+    assert res_a.status_code == 201
+    doc_a_id = res_a.json()["document_id"]
+
+    # 2. Create second document (consecutive/overlapping content)
+    res_b = client.post("/api/v1/registry/documents", json=payload_b)
+    assert res_b.status_code == 201
+    doc_b_id = res_b.json()["document_id"]
+
+    # Verify both got unique IDs
+    assert doc_a_id != doc_b_id
+
+
+
 

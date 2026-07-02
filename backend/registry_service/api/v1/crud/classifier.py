@@ -309,6 +309,7 @@ def create_classifier_pending(
     system: str,
     code: str,
     found_in_document_id: Optional[str] = None,
+    commit: bool = True,
 ) -> ClassifierPending:
     document_int = None
     if found_in_document_id:
@@ -324,9 +325,13 @@ def create_classifier_pending(
         status='new',
     )
     db.add(pending)
-    db.commit()
-    db.refresh(pending)
+    if commit:
+        db.commit()
+        db.refresh(pending)
+    else:
+        db.flush()
     return pending
+
 
 
 def accept_classifier_pending(
