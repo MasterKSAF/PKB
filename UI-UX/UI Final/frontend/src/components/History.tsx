@@ -57,6 +57,10 @@ const statusLabel: Record<AnswerStatus, string> = {
   generating: 'генерация ответа',
   enriching_citations: 'обогащение цитат',
   answered: 'ответ найден',
+  not_found: 'не найдено',
+  out_of_scope: 'вне области',
+  needs_clarification: 'нужно уточнение',
+  source_conflict: 'конфликт источников',
   failed: 'ошибка',
 };
 
@@ -67,6 +71,10 @@ const statusColor: Record<AnswerStatus, 'success' | 'warning' | 'error' | 'info'
   generating: 'warning',
   enriching_citations: 'info',
   answered: 'success',
+  not_found: 'info',
+  out_of_scope: 'warning',
+  needs_clarification: 'warning',
+  source_conflict: 'warning',
   failed: 'error',
 };
 
