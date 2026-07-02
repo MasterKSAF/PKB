@@ -246,10 +246,10 @@ class TestRunParserFullStep:
 
         # Verify external task was saved
         mock_ext_repo.create.assert_awaited_once_with(
-            orchestrator_task_id="4",
+            orchestrator_task_id=4,
             step_name="full_ocr",
             external_service="parser",
-            external_task_id="parser-task-123",
+            external_task_id=123,
             context_data={"draft_id": DRAFT_ID, "file_key": "drafts/10/file.pdf"},
         )
 

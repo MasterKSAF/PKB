@@ -33,14 +33,6 @@ def get_direct_rag_url() -> Optional[str]:
     return None
 
 
-# ─── Какие сервисы собираются локально (не системные) ───────────────────
-_APP_SERVICES_MINIMAL = ["gateway", "auth", "registry", "orchestrator", "celery-worker"]
-_APP_SERVICES_ALL = [
-    "auth", "registry", "parser", "converter-validator",
-    "rag-builder", "rag-search", "query",
-    "orchestrator", "celery-worker", "gateway", "frontend",
-]
-# Системные сервисы НЕ перезапускаем: postgres, redis, minio, infinity, db-init, minio-init
 
 
 def _subp(cmd, cwd, timeout=120):
@@ -56,55 +48,31 @@ def _subp(cmd, cwd, timeout=120):
 
 
 def ensure_services(service_set: str = "all"):
-    """Перезапустить рабочие сервисы корневого docker-compose, очистить данные.
+    """Очистить тестовые данные перед запуском.
 
-    - Системные сервисы (postgres, redis, minio, infinity) НЕ трогает.
-    - Init-задания (db-init, minio-init) НЕ перезапускает.
-    - Базу данных и Minio ОЧИЩАЕТ от тестовых данных.
-    - Образы НЕ пересобирает (использует существующие).
+    Не трогает контейнеры — код подхватывается через volume-монтирование.
+    Если нужно пересоздать контейнеры (например, после изменений в compose):
+      docker compose up -d --force-recreate <service>
 
-    Вызывается автоматически из тестов для локального запуска.
     Пропускается если:
       - TEST_API_URL указывает на внешний сервер (не localhost)
-      - TEST_SKIP_REBUILD=true (для быстрых итераций без изменений кода)
-
-    Args:
-        service_set: "minimal" (gateway+auth+registry) или "all" (все сервисы).
+      - TEST_SKIP_REBUILD=true (для быстрых итераций)
     """
     import sys
 
     if not is_local():
         return
     if os.environ.get("TEST_SKIP_REBUILD", "").lower() in ("1", "true", "yes"):
-        print("  [SKIP] SERVICE RESTART (TEST_SKIP_REBUILD=true)")
+        print("  [SKIP] DATA CLEANUP (TEST_SKIP_REBUILD=true)")
         return
 
-    compose_file = os.environ.get("TEST_COMPOSE_FILE", "docker-compose.yml")
-    project_dir = os.environ.get("TEST_PROJECT_DIR", os.path.join(os.path.dirname(__file__), "..", ".."))
-    project_dir = os.path.abspath(project_dir)
-
-    if service_set == "minimal":
-        services = _APP_SERVICES_MINIMAL[:]
-    else:
-        services = _APP_SERVICES_ALL[:]
-
-    svc_str = " ".join(services)
-    print(f"\n  >>> BUILD & UP: {svc_str}")
+    print(f"\n  >>> CLEANUP TEST DATA")
     sys.stdout.flush()
 
-    # ─── Step 1: Rebuild images ──────────────────────────────────────────
-    code, out, err = _subp(
-        ["docker", "compose", "-f", compose_file, "build"] + services,
-        project_dir, timeout=300,
-    )
-
-    # ─── Step 2: Clean DB data ───────────────────────────────────────────
     _clean_database()
-
-    # ─── Step 3: Clean Minio data ────────────────────────────────────────
     _clean_minio()
 
-    print(f"  [OK] Test environment ready")
+    print(f"  [OK] Test data cleaned")
     sys.stdout.flush()
 
 

@@ -274,6 +274,9 @@ services:
     restart: unless-stopped
     ports:
       - "8082:8082"
+    volumes:
+      - ./backend/auth_service/app:/app/app
+      - ./backend/auth_service/telemetry_lib:/app/telemetry_lib
     environment:
       <<: [*env-db, *env-auth]
       LOG_LEVEL: DEBUG
@@ -303,6 +306,9 @@ services:
     restart: unless-stopped
     ports:
       - "8084:8084"
+    volumes:
+      - ./backend/registry_service/api:/app/api
+      - ./backend/registry_service/services:/app/services
     environment:
       <<: [*env-db]
       LOG_LEVEL: DEBUG
@@ -331,6 +337,8 @@ services:
     restart: unless-stopped
     ports:
       - "8087:8087"
+    volumes:
+      - ./backend/parser_service/app:/app/app
     environment:
       <<: [*env-minio]
       LOG_LEVEL: DEBUG
@@ -358,6 +366,8 @@ services:
     restart: unless-stopped
     ports:
       - "8086:8086"
+    volumes:
+      - ./backend/converter_validator_service/app:/app/app
     environment:
       LOG_LEVEL: DEBUG
       OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
@@ -389,6 +399,8 @@ services:
     restart: unless-stopped
     ports:
       - "8090:8090"
+    volumes:
+      - ./backend/rag_builder_service/src:/app/src
     environment:
       <<: [*env-db, *env-embeddings, *env-rerank]
       LOG_LEVEL: DEBUG
@@ -423,6 +435,8 @@ services:
     restart: unless-stopped
     ports:
       - "8091:8091"
+    volumes:
+      - ./backend/rag_search_service/app:/app/app
     environment:
           <<: [*env-db, *env-embeddings, *env-rerank]
           LOG_LEVEL: DEBUG
@@ -464,6 +478,8 @@ services:
     restart: unless-stopped
     ports:
       - "8083:8083"
+    volumes:
+      - ./backend/query_service/app:/app/app
     environment:
       <<: [*env-db, *env-service-urls]
       LOG_LEVEL: DEBUG
@@ -506,6 +522,8 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8081"
+    volumes:
+      - ./backend/orchestrator_service/app:/app/app
     environment:
       <<: [*env-db, *env-minio, *env-auth, *env-service-urls]
       DEBUG: "true"
@@ -561,6 +579,8 @@ services:
     container_name: pkb-celery-worker
     restart: unless-stopped
     working_dir: /app
+    volumes:
+      - ./backend/orchestrator_service/app:/app/app
     command: celery -A app.celery_app worker --loglevel=debug --concurrency=4 --pool=threads -Q celery,pipeline,saga
     healthcheck:
       disable: true
@@ -597,6 +617,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - .:/project:ro
       - /proc:/host/proc:ro
+      - ./backend/gateway_service/gateway:/app/gateway
     environment:
       <<: [*env-service-urls]
       GATEWAY_LOG_LEVEL: "DEBUG"

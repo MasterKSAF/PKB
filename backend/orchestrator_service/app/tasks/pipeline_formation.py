@@ -289,7 +289,7 @@ def run_parser_full_step(
                 async with get_db_context() as db:
                     repo = ExternalTaskRepository(db)
                     await repo.create(
-                        orchestrator_task_id=str(task_id),
+                        orchestrator_task_id=task_id,
                         step_name="full_ocr",
                         external_service="parser",
                         external_task_id=parser_task_id,
@@ -614,10 +614,10 @@ def run_rag_index_step(
                 async with get_db_context() as db:
                     repo = ExternalTaskRepository(db)
                     await repo.create(
-                        orchestrator_task_id=str(task_id),
+                        orchestrator_task_id=task_id,
                         step_name="rag_index",
                         external_service="rag_builder",
-                        external_task_id=str(document_id),
+                        external_task_id=document_id,
                         context_data={
                             "draft_id": draft_id,
                             "document_id": document_id,

@@ -98,10 +98,10 @@ def run_rag_index_step(self, job_id: str, document_id: str):
                 async with get_db_context() as db:
                     repo = ExternalTaskRepository(db)
                     await repo.create(
-                        orchestrator_task_id=str(job_id),
+                        orchestrator_task_id=int(job_id),
                         step_name="rag_index",
                         external_service="rag_builder",
-                        external_task_id=document_id,
+                        external_task_id=int(document_id),
                         context_data={
                             "job_id": job_id,
                             "document_id": document_id,
@@ -200,10 +200,10 @@ def run_reprocess_step(self, task_id: int, document_id: str):
             async with get_db_context() as db:
                 repo = ExternalTaskRepository(db)
                 await repo.create(
-                    orchestrator_task_id=str(task_id),
+                    orchestrator_task_id=task_id,
                     step_name="reprocess",
                     external_service="rag_builder",
-                    external_task_id=document_id,
+                    external_task_id=int(document_id),
                     context_data={
                         "task_id": task_id,
                         "document_id": document_id,
@@ -260,10 +260,10 @@ def run_activate_document_step(self, document_id: int):
                 async with get_db_context() as db:
                     repo = ExternalTaskRepository(db)
                     await repo.create(
-                        orchestrator_task_id=str(document_id),  # not a pipeline step
+                        orchestrator_task_id=int(job_id),
                         step_name="activate",
                         external_service="rag_builder",
-                        external_task_id=str(document_id),
+                        external_task_id=int(document_id),
                         context_data={
                             "document_id": document_id,
                         },

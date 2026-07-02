@@ -15,8 +15,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-# PK-колонки: BigInteger для PostgreSQL, Integer для SQLite
-_BIGINT_PK = BigInteger().with_variant(Integer, "sqlite")
+# BigInteger для PostgreSQL, Integer для SQLite
+_BIGINT = BigInteger().with_variant(Integer, "sqlite")
 
 
 class ExternalTask(Base):
@@ -27,10 +27,10 @@ class ExternalTask(Base):
     __table_args__ = {"schema": "pipeline"}
 
     id: Mapped[int] = mapped_column(
-        _BIGINT_PK, primary_key=True, autoincrement=True
+        _BIGINT, primary_key=True, autoincrement=True
     )
-    orchestrator_task_id: Mapped[str] = mapped_column(
-        String(64), nullable=False, index=True
+    orchestrator_task_id: Mapped[int] = mapped_column(
+        _BIGINT, nullable=False, index=True
     )
     step_name: Mapped[str] = mapped_column(
         String(64), nullable=False
@@ -38,8 +38,8 @@ class ExternalTask(Base):
     external_service: Mapped[str] = mapped_column(
         String(32), nullable=False
     )  # parser, rag_builder
-    external_task_id: Mapped[str] = mapped_column(
-        String(128), nullable=False
+    external_task_id: Mapped[int] = mapped_column(
+        _BIGINT, nullable=False
     )
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="pending", index=True

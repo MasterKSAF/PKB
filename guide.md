@@ -161,9 +161,16 @@ Gateway проксирует `/api/v1/rag/...` на rag_search. Но если tr
 Перед запуском каждый тест вызывает `ensure_services()` из `data/tests/config.py`.
 Функция:
 1. Проверяет что тест идёт на `localhost` (не внешний сервер)
-2. Перезапускает контейнеры только рабочих сервисов (НЕ postgres, redis, minio, infinity)
+2. Перезапускает контейнеры рабочих сервисов (НЕ postgres, redis, minio, infinity) — **без пересборки образов**
 3. Очищает БД (`TRUNCATE registry.drafts, registry.documents, pipeline.tasks CASCADE`)
 4. Очищает Minio (удаление файлов в /data/documents/ и /data/images/)
+
+**Образы НЕ пересобираются.** Код синхронизируется через volume-монтирование:
+контейнеры читают файлы напрямую из `backend/<service>/`. Перезапуск (`docker compose up -d`)
+подхватывает изменения без rebuild. Если нужна пересборка образа — делай вручную:
+```
+docker compose build <service>
+```
 
 **Два режима:**
 | Режим | Сервисы | Какие тесты используют |
@@ -172,7 +179,6 @@ Gateway проксирует `/api/v1/rag/...` на rag_search. Но если tr
 | `all` | gateway, auth, registry, parser, converter-validator, rag-builder, rag-search, query, orchestrator, celery-worker, frontend | `test_e2e`, `test_full_pipeline`, `test_load_pkps_pdf`, `test_quick`, `test_universal_pdf_loader` |
 
 **Системные сервисы НЕ перезапускаются:** postgres, redis, minio, infinity, db-init, minio-init.
-Образы НЕ пересобираются (используются существующие).
 
 **Отключение авто-подготовки** (для быстрых итераций — данные не чистятся):
 ```
