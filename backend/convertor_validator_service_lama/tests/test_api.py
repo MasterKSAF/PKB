@@ -40,6 +40,11 @@ def test_parse_job_dry_run_returns_parse_job_contract() -> None:
     assert data["expected_parser"] == "LlamaParse"
     assert data["expected_parse_job_id"] == "dry-run-parse-job-id"
     assert data["next_step"] == "run LlamaExtract passes by parse_job_id"
+    assert data["parse_payload"] == {
+        "source_pdf_path": "D:/tmp/source.pdf",
+        "result_format": "markdown",
+        "base_url": "https://api.cloud.llamaindex.ai",
+    }
 
 
 def test_extract_passes_plan_uses_parse_job_id() -> None:

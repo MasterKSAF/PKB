@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -34,6 +34,7 @@ class ParseJobDryRunResponse(BaseModel):
     expected_parser: str = "LlamaParse"
     expected_parse_job_id: str = "dry-run-parse-job-id"
     next_step: str = "run LlamaExtract passes by parse_job_id"
+    parse_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 LlamaExtractPassName = Literal[
