@@ -1,8 +1,7 @@
 """
 Маппер: Docling → JsonStandardizer.
  1. StandardPdfPipeline (layout + таблицы)
- 2. layout_analyzer (группировка строк, заголовки, списки)
- 3. DoclingPdfParser (сырые строки)
+ 2. enrich — заполнение пустых блоков из сырого PDF
 """
 import hashlib
 import json
@@ -11,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'shared'))
 
 import tempfile
@@ -19,7 +17,6 @@ import os
 
 from standardizer import JsonStandardizer
 from normalizer import Normalizer, ParseResult
-from layout_analyzer import parse_pdf as layout_parse
 from quality_metrics import assess_quality_from_json
 
 logger = logging.getLogger(__name__)
@@ -28,40 +25,31 @@ logger = logging.getLogger(__name__)
 def docling_to_raw_json(pdf_path: str, max_pages: Optional[int] = None) -> Dict[str, Any]:
     """
     Парсит PDF → raw JSON в формате opendataloader (с `kids`).
-    Последовательно пробует три метода.
+    Pipeline + обогащение пустых блоков из сырого PDF.
     """
     file_name = Path(pdf_path).name
     file_bytes = Path(pdf_path).read_bytes()
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
-    # --- Метод 1: Pipeline ---
     doc = _try_pipeline(pdf_path, max_pages)
-    if doc is not None:
-        print("  ✅ Pipeline OK", file=sys.stderr, flush=True)
-        return _docling_doc_to_raw(doc, pdf_path)
+    if doc is None:
+        raise RuntimeError("Pipeline failed")
 
-    # --- Метод 2: Layout analyzer ---
-    print("  Pipeline failed → layout analyzer...", file=sys.stderr, flush=True)
-    raw = layout_parse(pdf_path, max_pages=max_pages)
-    if raw and raw.get("kids"):
-        raw["file name"] = file_name
-        raw["file_hash_sha256"] = file_hash
-        print(f"  ✅ Layout analyzer: {len(raw['kids'])} blocks", file=sys.stderr, flush=True)
-        return raw
+    print("  ✅ Pipeline OK", file=sys.stderr, flush=True)
+    raw = _docling_doc_to_raw(doc, pdf_path)
+    raw["file name"] = file_name
+    raw["file_hash_sha256"] = file_hash
 
-    # --- Метод 3: Raw DoclingPdfParser (строки) ---
-    print("  Layout analyzer failed → raw parser...", file=sys.stderr, flush=True)
-    doc = _build_via_parse(pdf_path, max_pages)
-    if doc is not None:
-        raw = _docling_doc_to_raw(doc, pdf_path)
-        print(f"  ✅ Raw parser: {len(raw.get('kids', []))} blocks", file=sys.stderr, flush=True)
-        return raw
-
-    raise RuntimeError("All parsing methods failed")
+    # Обогащение: заполняем пустые блоки (таблицы, параграфы) из сырого PDF
+    enriched = _enrich_empty_blocks(pdf_path, raw)
+    return enriched
 
 
-def _try_pipeline(pdf_path: str, max_pages: Optional[int] = None):
-    """Прямой вызов StandardPdfPipeline.execute() с InputDocument + backend."""
+def _try_pipeline(pdf_path: str, max_pages: Optional[int] = None, page_start: int = 1):
+    """
+    StandardPdfPipeline.execute() с батчами по 5 страниц.
+    Надёжнее DocumentConverter — нет std::bad_alloc на больших диапазонах.
+    """
     try:
         from docling.datamodel.base_models import InputFormat
         from docling.datamodel.document import InputDocument
@@ -75,76 +63,225 @@ def _try_pipeline(pdf_path: str, max_pages: Optional[int] = None):
         pipeline_options.do_table_structure = True
         pipeline_options.table_structure_options.do_cell_matching = True
         pipeline_options.accelerator_options.num_threads = 4
+        pipeline_options.layout_batch_size = 2
+        pipeline_options.table_batch_size = 2
 
         pipeline = StandardPdfPipeline(pipeline_options=pipeline_options)
 
-        limits = DocumentLimits(page_range=(1, max_pages or 9223372036854775807))
-        in_doc = InputDocument(
+        # Определяем общее количество страниц
+        limits_all = DocumentLimits(page_range=(1, 1))
+        in_doc_all = InputDocument(
             path_or_stream=Path(pdf_path),
             format=InputFormat.PDF,
             backend=DoclingParseV2DocumentBackend,
-            limits=limits,
+            limits=limits_all,
         )
-        if not in_doc.valid:
+        if not in_doc_all.valid:
             return None
+        total_pages = in_doc_all.page_count
+        page_limit = min(max_pages or total_pages, total_pages)
 
-        result = pipeline.execute(in_doc, raises_on_error=False)
-        if result.status.name == "SUCCESS" and result.document and result.document.pages:
-            return result.document
+        from docling_core.types.doc import DoclingDocument
+        result_doc = DoclingDocument(name=Path(pdf_path).stem)
+        batch_size = 5
+
+        for start in range(page_start, page_limit + 1, batch_size):
+            end = min(start + batch_size - 1, page_limit)
+            limits = DocumentLimits(page_range=(start, end))
+            in_doc = InputDocument(
+                path_or_stream=Path(pdf_path),
+                format=InputFormat.PDF,
+                backend=DoclingParseV2DocumentBackend,
+                limits=limits,
+            )
+            if not in_doc.valid:
+                continue
+
+            result = pipeline.execute(in_doc, raises_on_error=False)
+            if result.status.name == "SUCCESS" and result.document and result.document.pages:
+                _merge_pages(result_doc, result.document)
+
+        if result_doc.pages:
+            return result_doc
+
     except Exception as e:
         logger.debug("Pipeline error: %s", e)
     return None
 
 
-def _build_via_parse(pdf_path: str, max_pages: Optional[int] = None):
-    from docling_parse.pdf_parser import DoclingPdfParser
-    from docling_core.types.doc import DoclingDocument, BoundingBox, ProvenanceItem, Size, DocItemLabel
+def _merge_pages(target, source):
+    """Сливает содержимое source в target."""
+    from docling_core.types.doc import DoclingDocument
+    for page_no, page in source.pages.items():
+        if page_no not in target.pages:
+            target.add_page(page_no=page_no, size=page.size)
+    for item, level in source.iterate_items():
+        prov = getattr(item, "prov", None)
+        if not prov:
+            continue
+        if isinstance(prov, list):
+            prov = prov[0] if prov else None
+        if not prov:
+            continue
 
-    parser = DoclingPdfParser(loglevel="error")
-    pdf_doc = parser.load(pdf_path, lazy=True)
-    total = pdf_doc.number_of_pages()
-    limit = min(max_pages or total, total)
+        label = getattr(item, "label", None)
+        text = getattr(item, "text", None)
+        item_type = type(item).__name__
 
-    doc = DoclingDocument(name=Path(pdf_path).stem)
-    for page_idx in range(limit):
-        page = pdf_doc.get_page(page_idx + 1)
-        page_no = page_idx + 1
-        dim = page.dimension
-        doc.add_page(page_no=page_no, size=Size(
-            width=getattr(dim, "width", 595),
-            height=getattr(dim, "height", 842),
-        ))
-        words = list(page.word_cells) if hasattr(page, "word_cells") and page.word_cells else []
-        lines = []
-        current, last_y = [], None
-        for wc in words:
-            yc = (wc.rect.r_y1 + wc.rect.r_y3) / 2
-            if last_y is not None and abs(yc - last_y) > 5:
-                lines.append(current); current = []
-            current.append(wc); last_y = yc
-        if current:
-            lines.append(current)
+        if item_type == "TextItem":
+            target.add_text(label=label, text=text or "", prov=prov)
+        elif item_type == "TableItem" and hasattr(item, "data") and item.data is not None:
+            target.add_table(data=item.data, prov=prov)
+        elif item_type == "PictureItem":
+            target.add_picture(prov=prov)
+        else:
+            target.add_text(label=label, text=text or "", prov=prov)
 
-        for line_words in lines:
-            text = " ".join(wc.text for wc in line_words).strip()
-            if not text:
+
+def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
+    """
+    Обогащение: для блоков с пустым content извлекает текст из сырого PDF
+    через PyMuPDF (координаты совпадают с Docling).
+    """
+    try:
+        import fitz
+    except ImportError:
+        return raw
+
+    kids = raw.get("kids", [])
+    if not kids:
+        return raw
+
+    # Определяем, какие страницы нужно загрузить
+    pages_needed = sorted(set(
+        k.get("page number", 0) for k in kids
+        if not k.get("content", "").strip()
+    ))
+    if not pages_needed:
+        return raw
+
+    # Открываем PDF и извлекаем текст по страницам
+    doc = fitz.open(pdf_path)
+    page_text_blocks = {}  # page_no -> [(bbox, text), ...]
+
+    for pno in pages_needed:
+        if pno < 1 or pno > len(doc):
+            continue
+        page = doc[pno - 1]
+        blocks = page.get_text('dict')['blocks']
+        text_blocks = []
+        for b in blocks:
+            if b['type'] == 0:  # text
+                for line in b['lines']:
+                    line_text = ''.join(span['text'] for span in line['spans']).strip()
+                    if line_text:
+                        lb = [round(line['bbox'][0], 1), round(line['bbox'][1], 1),
+                              round(line['bbox'][2], 1), round(line['bbox'][3], 1)]
+                        text_blocks.append((lb, line_text))
+        page_text_blocks[pno] = text_blocks
+
+    doc.close()
+
+    enriched = 0
+    for kid in kids:
+        if kid.get("content", "").strip():
+            continue
+
+        p = kid.get("page number", 0)
+        bbox = kid.get("bounding box", None)
+        if not bbox or len(bbox) < 4 or p not in page_text_blocks:
+            continue
+
+        bx0, by0, bx1, by1 = bbox
+        # Docling bbox в BOTTOMLEFT (y растёт вверх). PyMuPDF — SCREEN (y растёт вниз).
+        # Конвертируем: screen_y0 = page_h - by1, screen_y1 = page_h - by0
+        page_h = 842.0
+        screen_y0 = page_h - max(by0, by1)  # верх
+        screen_y1 = page_h - min(by0, by1)  # низ
+        by0, by1 = screen_y0, screen_y1
+        bbox_h = abs(by1 - by0)
+
+        # Если bbox слишком мал (<20px) — берём текст всей страницы
+        # (Docling часто даёт битые bbox для таблиц)
+        if bbox_h < 20:
+            all_text = " ".join(t for _, t in page_text_blocks[p])
+            if all_text:
+                kid["content"] = all_text
+                enriched += 1
+            continue
+
+        matching = []
+        for tb, ttext in page_text_blocks[p]:
+            if min(by1, tb[3]) > max(by0, tb[1]):
+                if min(bx1, tb[2]) > max(bx0, tb[0]):
+                    matching.append((tb[1], ttext))
+
+        if matching:
+            matching.sort(key=lambda x: x[0])
+            text = " ".join(t for _, t in matching).strip()
+            if text:
+                kid["content"] = text
+                enriched += 1
+
+    if enriched:
+        print(f"  Enriched: {enriched} empty blocks filled",
+              file=sys.stderr, flush=True)
+
+    # --- Добавление колонтитулов, пропущенных Docling ---
+    # Для ВСЕХ страниц проверяем, какие строки PyMuPDF не покрыты Docling
+    import fitz as _fitz
+    _doc = _fitz.open(pdf_path)
+    added_footer = 0
+    # Все страницы, которые есть в kids
+    all_pages_in_doc = sorted(set(k.get('page number', 0) for k in kids))
+    for pno in all_pages_in_doc:
+        if pno < 1 or pno > len(_doc):
+            continue
+        page = _doc[pno - 1]
+        blocks = page.get_text('dict')['blocks']
+        
+        # Весь текст Docling на этой странице
+        page_doc_text = ' '.join(
+            k.get('content', '') for k in kids
+            if k.get('page number') == pno and k.get('content', '').strip()
+        )
+        page_doc_norm = __import__('re').sub(r'[\s\u00a0]+', ' ', page_doc_text).lower().strip()
+
+        for b in blocks:
+            if b['type'] != 0:  # text only
                 continue
-            f, lw = line_words[0], line_words[-1]
-            bbox = BoundingBox(l=f.rect.r_x0, t=f.rect.r_y3, r=lw.rect.r_x2, b=f.rect.r_y1)
-            prov = ProvenanceItem(page_no=page_no, bbox=bbox, charspan=(0, len(text)))
-            doc.add_text(label=DocItemLabel.PARAGRAPH, text=text, prov=prov)
+            for line in b['lines']:
+                ttext = ''.join(span['text'] for span in line['spans']).strip()
+                if not ttext or len(ttext) < 15:
+                    continue
+                t_norm = __import__('re').sub(r'[\s\u00a0]+', ' ', ttext).lower().strip()
+                if t_norm in page_doc_norm:
+                    continue
+                # Строка есть в PDF, но не в Docling — добавляем
+                tb = [round(line['bbox'][0], 1), round(line['bbox'][1], 1),
+                      round(line['bbox'][2], 1), round(line['bbox'][3], 1)]
+                kid = {
+                    'type': 'paragraph',
+                    'page number': pno,
+                    'bounding box': tb,
+                    'content': ttext,
+                }
+                kids.append(kid)
+                added_footer += 1
 
-        if (page_idx + 1) % 20 == 0:
-            print(f"  Raw parsed {page_idx + 1}/{limit}", file=sys.stderr, flush=True)
-    return doc
+    _doc.close()
+    if added_footer:
+        print(f"  Added {added_footer} missing lines (headers/footers)",
+              file=sys.stderr, flush=True)
+
+    raw["kids"] = kids
+    return raw
 
 
 def _docling_doc_to_raw(doc, pdf_path: str) -> Dict[str, Any]:
     """Конвертирует DoclingDocument в raw JSON (opendataloader-формат)."""
-    file_name = Path(pdf_path).name
-    file_hash = hashlib.sha256(Path(pdf_path).read_bytes()).hexdigest()
-
     kids = []
+
     for item, level in doc.iterate_items():
         prov = getattr(item, "prov", None)
         if not prov:
@@ -180,7 +317,6 @@ def _docling_doc_to_raw(doc, pdf_path: str) -> Dict[str, Any]:
             td = item.data
             kid["number of rows"] = td.num_rows
             kid["number of columns"] = td.num_cols
-            # Собираем ячейки по grid
             grid = [[""] * td.num_cols for _ in range(td.num_rows)]
             for cell in td.table_cells:
                 r = cell.start_row_offset_idx if hasattr(cell, 'start_row_offset_idx') else 0
@@ -203,8 +339,6 @@ def _docling_doc_to_raw(doc, pdf_path: str) -> Dict[str, Any]:
         kids.append(kid)
 
     return {
-        "file name": file_name,
-        "file_hash_sha256": file_hash,
         "number of pages": len(doc.pages) if doc.pages else 1,
         "kids": kids,
     }
@@ -217,7 +351,7 @@ def convert_docling_to_standard(pdf_path: str, max_pages: Optional[int] = None) 
     std = JsonStandardizer()
     standardized = std.transform(raw, Path(pdf_path).name)
 
-    # Оценка качества через quality_metrics (как в parser_service)
+    # Оценка качества через quality_metrics
     try:
         tmp_path = tempfile.mktemp(suffix='.json')
         with open(tmp_path, 'w', encoding='utf-8') as f:
