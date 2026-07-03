@@ -17,7 +17,6 @@ from app.services.pipeline.steps import (
     TransformStep,
     SaveJsonToFileStep,
     StoreResultStep,
-    TruncatePdfStep,
 )
 from app.services.pipeline.context import ProcessingContext
 from app.services.parsers.base import ParseResult
@@ -81,7 +80,7 @@ async def test_pages_total_step_pdf():
 
 # ===================== ParseStep =====================
 @pytest.mark.asyncio
-async def test_parse_step_success():
+async def test_parse_step_success_without_truncation():
     ctx = ProcessingContext(task_id=1, draft_id=1, file_key="test.pdf",
                             mime_type="application/pdf", file_bytes=b"fake")
     ctx.track_progress = True
@@ -94,6 +93,24 @@ async def test_parse_step_success():
         new_ctx = await step.execute(ctx)
 
     assert new_ctx.parse_result.total_pages == 5
+
+
+@pytest.mark.asyncio
+async def test_parse_step_truncation_does_not_affect_full_mode():
+    """В full mode (track_progress=True) PDF не обрезается."""
+    ctx = ProcessingContext(task_id=1, draft_id=1, file_key="test.pdf",
+                            mime_type="application/pdf", file_bytes=b"some data",
+                            max_pages=3, track_progress=True)
+
+    mock_parser = AsyncMock()
+    mock_parser.parse.return_value = ParseResult(full_json={"pages": []}, total_pages=2)
+
+    with patch("app.services.pipeline.steps.ParserFactory.get_parser", return_value=mock_parser):
+        step = ParseStep()
+        new_ctx = await step.execute(ctx)
+
+    # В full mode preview_not_supported не выставляется
+    assert new_ctx.preview_not_supported is not True
 
 
 # ===================== TransformStep (объединяет Normalize + Standardize) =====================
@@ -189,22 +206,37 @@ async def test_upload_images_step_preview_mode():
             assert ctx.temp_dir is None
 
 
-# ===================== TruncatePdfStep =====================
+# ===================== ParseStep: PDF truncation for preview =====================
 @pytest.mark.asyncio
-async def test_truncate_pdf_step_reduces_pages():
+async def test_parse_step_truncates_pdf_for_preview():
+    """PDF обрезается до max_pages перед парсингом в preview mode."""
     writer = PdfWriter()
     for _ in range(5):
         writer.add_blank_page(width=72, height=72)
     pdf_bytes = BytesIO()
     writer.write(pdf_bytes)
     pdf_bytes.seek(0)
+    raw = pdf_bytes.read()
 
     ctx = ProcessingContext(task_id=1, draft_id=1, file_key="test.pdf",
-                            max_pages=3, file_bytes=pdf_bytes.read())
-    step = TruncatePdfStep()
-    new_ctx = await step.execute(ctx)
-    reader = PdfReader(BytesIO(new_ctx.file_bytes))
+                            mime_type="application/pdf", file_bytes=raw,
+                            max_pages=3, track_progress=False)
+
+    mock_parser = AsyncMock()
+    # Парсер получает обрезанный PDF (3 страницы)
+    mock_parser.parse.return_value = ParseResult(full_json={"pages": []}, total_pages=3)
+
+    with patch("app.services.pipeline.steps.ParserFactory.get_parser", return_value=mock_parser):
+        step = ParseStep()
+        new_ctx = await step.execute(ctx)
+
+    # Проверяем, что парсер получил обрезанный PDF
+    call_bytes = mock_parser.parse.call_args[0][0]
+    reader = PdfReader(BytesIO(call_bytes))
     assert len(reader.pages) == 3
+    # total_pages должен быть max_pages, а preview_not_supported=True
+    assert new_ctx.parse_result.total_pages == 3
+    assert new_ctx.preview_not_supported is True
 
 
 # ===================== SaveJsonToFileStep =====================

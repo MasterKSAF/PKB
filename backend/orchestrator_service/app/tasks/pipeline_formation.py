@@ -88,7 +88,8 @@ def run_ocr_preview_step(
 
     except Exception as exc:
         logger.error(f"OCR preview failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "preview_ocr", "OCR_ERROR", str(exc)))
+        if self.request.retries >= self.max_retries:
+            _run_async(_notify_step_failed(task_id, "preview_ocr", "OCR_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 
@@ -141,7 +142,8 @@ def run_parser_preview_step(
 
     except Exception as exc:
         logger.error(f"Parser preview failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "preview_ocr", "PARSER_ERROR", str(exc)))
+        if self.request.retries >= self.max_retries:
+            _run_async(_notify_step_failed(task_id, "preview_ocr", "PARSER_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 
@@ -249,7 +251,8 @@ def run_ocr_full_step(
 
     except Exception as exc:
         logger.error(f"OCR full failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "full_ocr", "OCR_ERROR", str(exc)))
+        if self.request.retries >= self.max_retries:
+            _run_async(_notify_step_failed(task_id, "full_ocr", "OCR_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 
@@ -313,7 +316,8 @@ def run_parser_full_step(
 
     except Exception as exc:
         logger.error(f"Parser full submission failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "full_ocr", "PARSER_ERROR", str(exc)))
+        if self.request.retries >= self.max_retries:
+            _run_async(_notify_step_failed(task_id, "full_ocr", "PARSER_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 

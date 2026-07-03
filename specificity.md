@@ -212,21 +212,18 @@ Preview-этап работает (там `MetadataExtractionFailedError` пер
 
 ### B2. Pipeline full_phase: full_ocr (Parser) не завершается на больших PDF
 
-**Симптом:** `full_ocr` висит `running` на PDF 249 страниц более 300с.
-`full_converter`, `registry_creation`, `rag_index` — все `pending`, ждут full_ocr.
+**Симптом:** `full_ocr` зависает `running` на больших PDF (>50 страниц) >300с.
+`full_converter`, `registry_creation`, `rag_index` — `pending`, ждут full_ocr.
 
-**Причина:** Parser full не может обработать большой PDF (таймаут/зависание).
-Шаги стартуются последовательно: full_ocr → full_converter → registry → rag_index.
-Если full_ocr не completed — цепочка не движется.
+**Причина:** CLI парсер (full) не может обработать весь PDF за разумное время.
 
-**Где:** `PipelineOrchestrator._on_full_step_completed()` (orchestrator.py:714–842).
+**Фикс — preview (03.07):** `ParseStep` обрезает PDF до `ctx.max_pages` перед передачей в CLI парсер.
+Без этого preview висел >300с на 249-страничном PDF. После обрезания — 5-10с.
 
-**Фикс (30.06):**
-- добавлен `RUNNING_STEP_TIMEOUT = 600с` (10 мин) в `PipelineConfig`
-- `get_stale_running_steps()` в TaskRepository — ищет шаги running > N секунд
-- `_check_service_health()` — HTTP health check сервиса (Parser, OCR, Converter, Registry, RAG)
-- `cleanup_stale_tasks` проверяет stale running шаги: если сервис жив → warning (медленная обработка),
-  если сервис мёртв → fail шага (SERVICE_DEAD)
+**Фикс — full (30.06):** `RUNNING_STEP_TIMEOUT = 600с` + `cleanup_stale_tasks`
+автоматически убивает зависшие шаги по таймауту.
+
+**Где:** `steps.py:ParseStep.execute()` (truncation), `orchestrator.py:714–842` (таймаут).
 
 ### B3. RAG-индексация не стартует даже при доступных данных
 

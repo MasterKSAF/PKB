@@ -339,6 +339,14 @@ services:
       - "8087:8087"
     volumes:
       - ./backend/parser_service/app:/app/app
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/parser_service/app
+          target: /app/app
+          ignore:
+            - __pycache__/
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8087 --reload
     environment:
       <<: [*env-minio]
       LOG_LEVEL: DEBUG
@@ -524,6 +532,13 @@ services:
       - "8081:8081"
     volumes:
       - ./backend/orchestrator_service/app:/app/app
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/orchestrator_service/app
+          target: /app/app
+          ignore:
+            - __pycache__/
     environment:
       <<: [*env-db, *env-minio, *env-auth, *env-service-urls]
       DEBUG: "true"
@@ -537,6 +552,7 @@ services:
       OCR_ENABLED: "false"
       PARSER_FALLBACK_TO_OCR: "false"
       CONVERTER_SERVICE_URL: http://converter-validator:8086
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8081 --reload
     depends_on:
       postgres:
         condition: service_healthy
@@ -581,6 +597,13 @@ services:
     working_dir: /app
     volumes:
       - ./backend/orchestrator_service/app:/app/app
+    develop:
+      watch:
+        - action: sync
+          path: ./backend/orchestrator_service/app
+          target: /app/app
+          ignore:
+            - __pycache__/
     command: celery -A app.celery_app worker --loglevel=debug --concurrency=4 --pool=threads -Q celery,pipeline,saga
     healthcheck:
       disable: true
