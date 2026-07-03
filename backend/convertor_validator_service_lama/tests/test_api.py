@@ -47,6 +47,25 @@ def test_parse_job_dry_run_returns_parse_job_contract() -> None:
     }
 
 
+def test_extract_pass_dry_run_returns_extract_payload() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/extract-pass/dry-run",
+        json={"parse_job_id": "parse-job-123", "pass_name": "sections"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mode"] == "extract_pass_dry_run"
+    assert data["parse_job_id"] == "parse-job-123"
+    assert data["pass_name"] == "sections"
+    assert data["extract_payload"] == {
+        "parse_job_id": "parse-job-123",
+        "pass_name": "sections",
+        "base_url": "https://api.cloud.llamaindex.ai",
+    }
+
+
 def test_extract_passes_plan_uses_parse_job_id() -> None:
     client = TestClient(app)
     response = client.get("/extract-passes/plan")

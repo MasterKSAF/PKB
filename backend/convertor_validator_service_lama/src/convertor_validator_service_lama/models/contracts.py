@@ -63,6 +63,19 @@ class ExtractPassPlanResponse(BaseModel):
     passes: list[ExtractPassPlanItem] = Field(default_factory=list)
 
 
+class ExtractPassDryRunRequest(BaseModel):
+    parse_job_id: str
+    pass_name: LlamaExtractPassName
+
+
+class ExtractPassDryRunResponse(BaseModel):
+    service: str = "convertor_validator_service_lama"
+    mode: Literal["extract_pass_dry_run"] = "extract_pass_dry_run"
+    parse_job_id: str
+    pass_name: LlamaExtractPassName
+    extract_payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class RichDocumentArtifactPlanItem(BaseModel):
     artifact_key: str
     produced_by: str

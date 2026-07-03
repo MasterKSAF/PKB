@@ -1,9 +1,12 @@
+from convertor_validator_service_lama.clients.llama_extract_client import LlamaExtractClient
 from convertor_validator_service_lama.clients.llama_parse_client import LlamaParseClient
 from convertor_validator_service_lama.core.settings import get_settings
 from convertor_validator_service_lama.models.contracts import (
     DryRunResponse,
     ExtractPassPlanItem,
     ExtractPassPlanResponse,
+    ExtractPassDryRunRequest,
+    ExtractPassDryRunResponse,
     ParseJobDryRunRequest,
     ParseJobDryRunResponse,
     PipelineStep,
@@ -28,6 +31,21 @@ def build_parse_job_dry_run_response(request: ParseJobDryRunRequest) -> ParseJob
     return ParseJobDryRunResponse(
         source_pdf_path=request.source_pdf_path,
         parse_payload=parse_payload,
+    )
+
+
+def build_extract_pass_dry_run_response(
+    request: ExtractPassDryRunRequest,
+) -> ExtractPassDryRunResponse:
+    client = LlamaExtractClient(get_settings())
+    extract_payload = client.build_extract_payload(
+        parse_job_id=request.parse_job_id,
+        pass_name=request.pass_name,
+    )
+    return ExtractPassDryRunResponse(
+        parse_job_id=request.parse_job_id,
+        pass_name=request.pass_name,
+        extract_payload=extract_payload,
     )
 
 
