@@ -60,3 +60,17 @@ class ExtractPassPlanResponse(BaseModel):
     mode: Literal["extract_pass_plan"] = "extract_pass_plan"
     source: Literal["parse_job_id"] = "parse_job_id"
     passes: list[ExtractPassPlanItem] = Field(default_factory=list)
+
+
+class RichDocumentArtifactPlanItem(BaseModel):
+    artifact_key: str
+    produced_by: str
+    source: Literal["parse_job_id", "extract_pass", "python_validator"]
+
+
+class RichDocumentPackagePlanResponse(BaseModel):
+    service: str = "convertor_validator_service_lama"
+    mode: Literal["rich_document_package_plan"] = "rich_document_package_plan"
+    package_name: str = "rich_document_package.json"
+    final_correction_policy: str = "python_validator_assembler_applies_final_corrections"
+    artifacts: list[RichDocumentArtifactPlanItem] = Field(default_factory=list)

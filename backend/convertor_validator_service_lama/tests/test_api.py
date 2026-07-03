@@ -62,3 +62,19 @@ def test_extract_passes_plan_uses_parse_job_id() -> None:
         "validation_critic",
     ]
     assert all(item["uses_parse_job_id"] is True for item in data["passes"])
+
+
+def test_rich_document_package_plan_keeps_final_corrections_in_python() -> None:
+    client = TestClient(app)
+    response = client.get("/rich-document-package/plan")
+
+    assert response.status_code == 200
+    data = response.json()
+    artifact_keys = [item["artifact_key"] for item in data["artifacts"]]
+
+    assert data["package_name"] == "rich_document_package.json"
+    assert data["final_correction_policy"] == "python_validator_assembler_applies_final_corrections"
+    assert "quality_report" in artifact_keys
+    assert "correction_proposals" in artifact_keys
+    assert data["artifacts"][-2]["source"] == "python_validator"
+    assert data["artifacts"][-1]["source"] == "python_validator"

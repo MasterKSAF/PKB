@@ -1,4 +1,4 @@
-from convertor_validator_service_lama.models.contracts import DryRunResponse, ExtractPassPlanItem, ExtractPassPlanResponse, ParseJobDryRunRequest, ParseJobDryRunResponse, PipelineStep
+from convertor_validator_service_lama.models.contracts import DryRunResponse, ExtractPassPlanItem, ExtractPassPlanResponse, RichDocumentArtifactPlanItem, RichDocumentPackagePlanResponse, ParseJobDryRunRequest, ParseJobDryRunResponse, PipelineStep
 
 
 def build_dry_run_response() -> DryRunResponse:
@@ -28,3 +28,21 @@ def build_extract_pass_plan_response() -> ExtractPassPlanResponse:
         ExtractPassPlanItem(name="validation_critic", output_key="validation_critic")
     ]
     return ExtractPassPlanResponse(passes=passes)
+
+
+def build_rich_document_package_plan_response() -> RichDocumentPackagePlanResponse:
+    artifacts = [
+        RichDocumentArtifactPlanItem(artifact_key="parse_job_id", produced_by="llama_parse_source_pdf", source="parse_job_id"),
+        RichDocumentArtifactPlanItem(artifact_key="raw_artifacts", produced_by="llama_parse_source_pdf", source="parse_job_id"),
+        RichDocumentArtifactPlanItem(artifact_key="document_boundaries", produced_by="document_boundaries", source="extract_pass"),
+        RichDocumentArtifactPlanItem(artifact_key="title_metadata", produced_by="title_metadata", source="extract_pass"),
+        RichDocumentArtifactPlanItem(artifact_key="table_of_contents", produced_by="table_of_contents", source="extract_pass"),
+        RichDocumentArtifactPlanItem(artifact_key="sections", produced_by="sections", source="extract_pass"),
+        RichDocumentArtifactPlanItem(artifact_key="tables", produced_by="tables", source="extract_pass"),
+        RichDocumentArtifactPlanItem(artifact_key="images", produced_by="images", source="extract_pass"),
+        RichDocumentArtifactPlanItem(artifact_key="formulas", produced_by="formulas", source="extract_pass"),
+        RichDocumentArtifactPlanItem(artifact_key="cross_references", produced_by="cross_references", source="extract_pass"),
+        RichDocumentArtifactPlanItem(artifact_key="quality_report", produced_by="python_validator_critic", source="python_validator"),
+        RichDocumentArtifactPlanItem(artifact_key="correction_proposals", produced_by="python_validator_critic", source="python_validator")
+    ]
+    return RichDocumentPackagePlanResponse(artifacts=artifacts)
