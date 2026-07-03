@@ -40,19 +40,21 @@ def upload_to_minio(pdf_path: str) -> str:
     return file_key
 
 
-def call_parser_preview(file_key: str, max_pages: int = 5) -> dict:
-    """Вызывает preview API парсера и возвращает JSON."""
+def call_parser_process(file_key: str, max_pages: int = None) -> dict:
+    """Вызывает API парсера и возвращает JSON."""
     payload = {
         "task_id": 9999,
         "draft_id": 9999,
         "file_key": file_key,
-        "mode": "preview",
-        "max_pages": max_pages,
+        "mode": "full" if max_pages is None else "preview",
         "options": {},
     }
+    if max_pages is not None:
+        payload["max_pages"] = max_pages
 
-    with httpx.Client(timeout=300) as client:
-        print(f"  Calling parser preview (pages={max_pages})...", file=sys.stderr)
+    with httpx.Client(timeout=600) as client:
+        mode_name = "full" if max_pages is None else f"preview ({max_pages} pages)"
+        print(f"  Calling parser {mode_name}...", file=sys.stderr)
         resp = client.post(f"{PARSER_API_URL}/process", json=payload)
         resp.raise_for_status()
         result = resp.json()
@@ -82,7 +84,8 @@ def main():
     print(f"Uploading {pdf_path} to MinIO...", file=sys.stderr)
     file_key = upload_to_minio(pdf_path)
 
-    result = call_parser_preview(file_key, max_pages=max_pages)
+    max_pages_arg = max_pages if max_pages < 100 else None
+    result = call_parser_process(file_key, max_pages=max_pages_arg)
 
     json_str = json.dumps(result, indent=2, ensure_ascii=False)
 

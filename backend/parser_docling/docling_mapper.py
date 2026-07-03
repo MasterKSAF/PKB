@@ -21,6 +21,307 @@ from quality_metrics import assess_quality_from_json
 
 logger = logging.getLogger(__name__)
 
+# ============================================================
+# Новый MD-конвейер: DocumentConverter -> enrich(DoclingDocument) -> export_to_markdown -> md_to_json
+# ============================================================
+
+
+def enrich_docling_document(doc, pdf_path: str):
+    """
+    Обогащает DoclingDocument пропущенными элементами (колонтитулы, подписи Рис.).
+    Использует PyMuPDF для поиска строк, отсутствующих в Docling, и добавляет их
+    через doc.add_text() с корректным ProvenanceItem.
+    Поиск отсутствующих строк — по координатам (bbox), а не по тексту.
+
+    Returns:
+        (doc, bbox_map) где bbox_map = {(page_no, norm_text): [l, t, r, b], ...}
+    """
+    import fitz
+    import re as _re
+    from collections import defaultdict
+    from docling_core.types.doc import DocItemLabel, ProvenanceItem, BoundingBox, CoordOrigin
+
+    pdf = fitz.open(pdf_path)
+    added_count = 0
+
+    # Карта bbox: (page_no, norm_text) -> [l, t, r, b]
+    bbox_map = {}
+
+    # Собираем полный текст элементов Docling по страницам
+    doc_fulltext_by_page = {}  # pno -> 'norm_text1 norm_text2 ...'
+
+    # Собираем полный текст + bbox элементов Docling для карты bbox
+    for item, level in doc.iterate_items():
+        prov = getattr(item, 'prov', None)
+        if isinstance(prov, list):
+            prov = prov[0] if prov else None
+        if prov is None:
+            continue
+        pno = prov.page_no
+
+        # Собираем полный текст элемента (включая ячейки таблиц)
+        texts = []
+        text = getattr(item, 'text', '') or ''
+        if text.strip():
+            texts.append(text)
+        if hasattr(item, 'data') and item.data is not None:
+            for cell in item.data.table_cells:
+                if hasattr(cell, 'text') and cell.text:
+                    texts.append(cell.text)
+        full_text = ' '.join(texts) if texts else ''
+        norm_text = _re.sub(r'[\s\u00a0]+', ' ', full_text).strip().lower()
+        if norm_text:
+            doc_fulltext_by_page[pno] = doc_fulltext_by_page.get(pno, ' ') + norm_text
+
+        # Сохраняем bbox для карты bbox_map
+        label = str(getattr(item, 'label', ''))
+        page_h = pdf[pno - 1].rect.height if pno <= len(pdf) else 842.0
+        l = round(prov.bbox.l, 1)
+        r = round(prov.bbox.r, 1)
+        t_val = page_h - round(prov.bbox.t, 1)
+        b_val = page_h - round(prov.bbox.b, 1)
+        bbox_tl = [l, min(t_val, b_val), r, max(t_val, b_val)]
+
+        if label in ('table',):
+            bbox_map[('__table__', pno)] = bbox_tl
+        elif text.strip():
+            t_norm = _re.sub(r'[\s\u00a0]+', ' ', text).strip().lower()
+            bbox_map[(t_norm, pno)] = bbox_tl
+
+    # Обрабатываем только страницы, присутствующие в DoclingDocument
+    for pno in sorted(doc.pages.keys()):
+        page = pdf[pno - 1]
+        page_h = page.rect.height
+        blocks = page.get_text('dict')['blocks']
+
+        page_doc_text = doc_fulltext_by_page.get(pno, '')
+
+        for b in blocks:
+            if b['type'] != 0:  # text only
+                continue
+            for line in b['lines']:
+                ttext = ''.join(span['text'] for span in line['spans']).strip()
+                if not ttext or len(ttext) < 3:
+                    continue
+
+                bx0, by0, bx1, by1 = line['bbox']
+
+                t_norm = _re.sub(r'[\s\u00a0]+', ' ', ttext).lower().strip()
+
+                # Проверка: текст уже есть в Docling (как подстрока полного текста страницы)
+                if page_doc_text and t_norm in page_doc_text:
+                    continue
+
+                # Минимальные фильтры: только номера строк и пустые
+                if _re.match(r'^\.?\d+\s*$', ttext.strip()):
+                    continue
+
+                is_caption = 'рис' in ttext.lower() and len(ttext) <= 80
+                is_header = by1 < page_h * 0.15
+                is_footer = by0 > page_h * 0.85
+
+                if is_caption:
+                    label = DocItemLabel.CAPTION
+                elif is_header:
+                    label = DocItemLabel.PAGE_HEADER
+                elif is_footer:
+                    label = DocItemLabel.PAGE_FOOTER
+                else:
+                    label = DocItemLabel.PARAGRAPH
+
+                prov = ProvenanceItem(
+                    page_no=pno,
+                    bbox=BoundingBox(
+                        l=round(bx0, 1), t=round(by0, 1),
+                        r=round(bx1, 1), b=round(by1, 1),
+                        coord_origin=CoordOrigin.TOPLEFT,
+                    ),
+                    charspan=(0, len(ttext)),
+                )
+
+                doc.add_text(label=label, text=ttext, prov=prov)
+                added_count += 1
+
+                # Сохраняем bbox для enrich-элемента
+                bbox_key = (t_norm, pno)
+                if bbox_key not in bbox_map:
+                    bbox_map[bbox_key] = [round(bx0, 1), round(by0, 1),
+                                          round(bx1, 1), round(by1, 1)]
+
+    pdf.close()
+
+    if added_count:
+        print(f"  Enrich (DoclingDocument): added {added_count} missing items",
+              file=sys.stderr, flush=True)
+    return doc, bbox_map
+
+
+def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
+                            page_start: int = 1) -> Dict[str, Any]:
+    """
+    Новый конвейер:
+      DocumentConverter → enrich(DoclingDocument) → export_to_markdown() → md_to_json()
+
+    Параметры (совместимы со старым _try_pipeline):
+        pdf_path: путь к PDF
+        max_pages: последняя страница (включительно, None = все)
+        page_start: начальная страница
+
+    Returns:
+        JSON в формате opendataloader
+    """
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling_core.types.doc.base import ImageRefMode
+    from md_to_json import md_to_document_json
+
+    file_name = Path(pdf_path).name
+    file_bytes = Path(pdf_path).read_bytes()
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+    # Pipeline options
+    pipeline_options = PdfPipelineOptions()
+    pipeline_options.do_ocr = False
+    pipeline_options.do_table_structure = True
+    pipeline_options.table_structure_options.do_cell_matching = True
+    pipeline_options.accelerator_options.num_threads = 4
+    pipeline_options.layout_batch_size = 2
+    pipeline_options.table_batch_size = 2
+    pipeline_options.generate_picture_images = True
+    pipeline_options.generate_parsed_pages = False
+
+    converter = DocumentConverter(
+        format_options={
+            InputFormat.PDF: PdfFormatOption(
+                pipeline_options=pipeline_options,
+            )
+        }
+    )
+
+    # Определяем диапазон страниц
+    page_end = max_pages if max_pages is not None else None
+
+    # Обрабатываем батчами по 5 страниц (как _try_pipeline), чтобы избежать std::bad_alloc
+    from docling_core.types.doc import DoclingDocument
+    doc = DoclingDocument(name=Path(pdf_path).stem)
+    batch_size = 5
+    page_limit = page_end or 9999
+
+    for batch_start in range(page_start, page_limit + 1, batch_size):
+        batch_end = min(batch_start + batch_size - 1, page_limit)
+        try:
+            batch_result = converter.convert(
+                pdf_path, raises_on_error=False,
+                page_range=(batch_start, batch_end),
+            )
+            if batch_result and batch_result.document and batch_result.document.pages:
+                _merge_pages(doc, batch_result.document)
+        except Exception as e:
+            print(f"  Batch {batch_start}-{batch_end} failed: {e}",
+                  file=sys.stderr, flush=True)
+            continue
+
+    if not doc.pages:
+        raise RuntimeError("DocumentConverter failed on all pages")
+
+    print(f"  Docling OK: {len(doc.pages)} pages processed",
+          file=sys.stderr, flush=True)
+
+    # Enrich на уровне DoclingDocument (возвращает карту bbox)
+    doc, bbox_map = enrich_docling_document(doc, pdf_path)
+
+    # Export каждой страницы отдельно (чтобы избежать склейки страниц в MD)
+    import re as _re
+    page_mds = []
+    for pno in sorted(doc.pages.keys()):
+        md_text = doc.export_to_markdown(
+            page_no=pno,
+            compact_tables=True,
+            image_mode=ImageRefMode.REFERENCED,
+            traverse_pictures=True,
+        )
+        if md_text and md_text.strip():
+            page_mds.append((pno, md_text.strip()))
+
+    if not page_mds:
+        raise RuntimeError("No markdown generated")
+
+    json_result = md_to_document_json(page_mds, file_name)
+
+    # Проставляем bbox из карты, собранной во время enrich
+    bbox_matched = 0
+    for block in json_result.get('content', {}).get('document', {}).get('block', []):
+        pno = block.get('page number', 1)
+        btype = block.get('type', '')
+        text = block.get('content', '') or ''
+
+        if btype == 'table':
+            key = ('__table__', pno)
+            if key in bbox_map:
+                block['bounding box'] = bbox_map[key]
+                bbox_matched += 1
+            continue
+
+        if not text.strip():
+            continue
+
+        norm = _re.sub(r'[\s\u00a0]+', ' ', text).strip().lower()
+        norm_clean = norm.rstrip('.')
+        
+        for candidate in [norm, norm_clean, norm_clean + '.']:
+            key = (candidate, pno)
+            if key in bbox_map:
+                block['bounding box'] = bbox_map[key]
+                bbox_matched += 1
+                break
+        else:
+            for (map_text, map_page), map_bbox in bbox_map.items():
+                if map_page == pno and map_text != '__table__':
+                    if len(norm) > 10 and norm in map_text:
+                        block['bounding box'] = map_bbox
+                        bbox_matched += 1
+                        break
+                    if len(map_text) > 10 and map_text in norm:
+                        block['bounding box'] = map_bbox
+                        bbox_matched += 1
+                        break
+
+    if bbox_matched:
+        print(f"  Bbox: restored {bbox_matched} block positions",
+              file=sys.stderr, flush=True)
+
+    # Проставляем размеры страниц из DoclingDocument
+    pages_info = []
+    for pno in sorted(doc.pages.keys()):
+        page_obj = doc.pages[pno]
+        pages_info.append({
+            'page': pno,
+            'width': round(page_obj.size.width, 1),
+            'height': round(page_obj.size.height, 1),
+        })
+    json_result['content']['document']['pages'] = pages_info
+
+    # Заполняем per_page качество
+    per_page = []
+    for pno in sorted(doc.pages.keys()):
+        per_page.append({
+            'page': pno,
+            'confidence': 0.75,
+            'status': 'ok',
+        })
+    json_result['content']['quality']['per_page'] = per_page
+    json_result['content']['quality']['pages_processed'] = len(per_page)
+
+    # Добавляем хеш
+    if 'source' in json_result.get('content', {}).get('document', {}):
+        json_result['content']['document']['source']['file_hash_sha256'] = file_hash
+
+    print(f"  Converted via MD pipeline: pages={len(doc.pages)}, page_mds={len(page_mds)}, blocks={len(json_result['content']['document']['block'])}",
+          file=sys.stderr, flush=True)
+
+    return json_result
+
 
 def docling_to_raw_json(pdf_path: str, max_pages: Optional[int] = None) -> Dict[str, Any]:
     """
@@ -463,8 +764,44 @@ def _docling_doc_to_raw(doc, pdf_path: str) -> Dict[str, Any]:
     }
 
 
+
+def _split_md_by_pages(md_text: str, default_page: int = 1) -> List[Tuple[int, str]]:
+    """
+    Разбивает многостраничный Markdown от Docling на страницы.
+    Docling разделяет страницы маркером `--- page X ---`.
+
+    Args:
+        md_text: Markdown-текст
+        default_page: страница по умолчанию, если разделители не найдены
+    """
+    import re
+    # Паттерн: --- page X --- или ---page X---
+    parts = re.split(r'\n---{3,}\s*page\s+(\d+)\s*---{3,}\s*\n', md_text)
+    if len(parts) < 2:
+        # Нет разделителей — весь текст одна страница
+        return [(default_page, md_text)]
+
+    result = []
+    # Первый элемент — текст до первой страницы (обычно пустой или преамбула)
+    preamble = parts[0].strip()
+    for i in range(1, len(parts), 2):
+        page_num = int(parts[i])
+        content = parts[i + 1] if i + 1 < len(parts) else ''
+        if preamble and i == 1:
+            content = preamble + '\n\n' + content
+        result.append((page_num, content.strip()))
+
+    return result if result else [(1, md_text.strip())]
+
+
+
+# ============================================================
+# 3. Старый конвейер (JSON, сохранён для обратной совместимости)
+# ============================================================
+
+
 def convert_docling_to_standard(pdf_path: str, max_pages: Optional[int] = None) -> Dict[str, Any]:
-    """Парсит PDF → стандартизированный JSON."""
+    """Парсит PDF → стандартизированный JSON (старый конвейер)."""
     raw = docling_to_raw_json(pdf_path, max_pages)
 
     std = JsonStandardizer()

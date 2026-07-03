@@ -69,12 +69,26 @@ def split_markdown_blocks(md_text: str) -> List[Dict[str, Any]]:
             i += 1
             continue
         
-        # Table: | ... |
-        if line.startswith('|') and line.endswith('|'):
+        # Table: | ... | (с поддержкой многострочных ячеек)
+        if line.startswith('|'):
             table_rows = []
-            # Собираем все строки таблицы
-            while i < len(lines) and lines[i].strip().startswith('|'):
-                table_rows.append(lines[i].strip())
+            # Собираем все строки таблицы, включая продолжения
+            while i < len(lines):
+                current = lines[i]
+                stripped = current.strip()
+                if not stripped:
+                    break
+                if not stripped.startswith('|'):
+                    # Если предыдущая строка не закрыта '|', это продолжение ячейки
+                    if table_rows and not table_rows[-1].strip().endswith('|'):
+                        table_rows[-1] = table_rows[-1].strip() + ' ' + stripped
+                        i += 1
+                        continue
+                    break
+                # Проверяем, не является ли строка частью другой конструкции (---)
+                if re.match(r'^-{3,}\s*$', stripped.strip('|')):
+                    break
+                table_rows.append(stripped)
                 i += 1
             blocks.append({'type': 'table', 'rows': table_rows})
             continue
@@ -101,13 +115,18 @@ def split_markdown_blocks(md_text: str) -> List[Dict[str, Any]]:
             l = lines[i]
             if not l.strip():
                 break
-            # Не захватываем заголовки и таблицы
+            # Не захватываем заголовки
             if re.match(r'^#{1,6}\s', l):
                 break
-            if l.strip().startswith('|') and l.strip().endswith('|'):
+            # Не захватываем таблицы (строка начинается с |)
+            if l.strip().startswith('|'):
                 break
             if re.match(r'^<!--\s*image\s*-->$', l.strip()):
                 break
+            # Пропускаем разделители ---
+            if re.match(r'^-{3,}\s*$', l.strip()):
+                i += 1
+                continue
             para_lines.append(l)
             i += 1
         

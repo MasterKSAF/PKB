@@ -1,12 +1,16 @@
 # parser_docling — план сессии
 
-## Выполнено
-- [x] Установка зависимостей docling
-- [x] compare_json.py — расширенное сравнение с ODO
-- [x] evaluate_quality.py — Precision/Recall/F1 через сырой PDF
-- [x] Починен pipeline: батчи по 5 стр. (std::bad_alloc)
-- [x] Enrich: заполнение пустых блоков через PyMuPDF
-- [x] Enrich: конвертация BOTTOMLEFT → Screen координат
-- [x] Добавление колонтитулов (строки, пропущенные Docling)
-- [x] DocumentConverter протестирован (≤5 стр. работает)
-- [x] Итог: Precision=0.993, Recall=0.996, F1=0.995, Confidence=0.75
+### Сделано
+- [x] MD-конвейер: DocumentConverter → enrich(DoclingDocument) → export_to_markdown(params) → md_to_json()
+- [x] enrich с гибридной проверкой дублей: bbox overlap + текст подстрока
+- [x] Постраничный export (page_no= параметр)
+- [x] Старый JSON-конвейер сохранён (--mode json)
+- [x] bbox для блоков (из bbox_map по ключу текст+страница)
+- [x] Размеры страниц из doc.pages
+- [x] quality.per_page заполнен
+- [x] generate_picture_images = True
+- [x] Парсинг таблиц с многострочным контентом
+
+### Осталось
+- [ ] Полный прогон (327 стр.) и оценка метрик
+- [ ] Обновить README.md
