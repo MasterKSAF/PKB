@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
-from convertor_validator_service_lama.models.contracts import DryRunResponse, HealthResponse, ParseJobDryRunRequest, ParseJobDryRunResponse
-from convertor_validator_service_lama.services.lama_validator_service import build_dry_run_response, build_parse_job_dry_run_response
+from convertor_validator_service_lama.models.contracts import DryRunResponse, ExtractPassPlanResponse, HealthResponse, ParseJobDryRunRequest, ParseJobDryRunResponse
+from convertor_validator_service_lama.services.lama_validator_service import build_dry_run_response, build_extract_pass_plan_response, build_parse_job_dry_run_response
 
 
 app = FastAPI(
@@ -23,3 +23,8 @@ def dry_run() -> DryRunResponse:
 @app.post("/parse-job/dry-run", response_model=ParseJobDryRunResponse)
 def parse_job_dry_run(request: ParseJobDryRunRequest) -> ParseJobDryRunResponse:
     return build_parse_job_dry_run_response(request)
+
+
+@app.get("/extract-passes/plan", response_model=ExtractPassPlanResponse)
+def extract_passes_plan() -> ExtractPassPlanResponse:
+    return build_extract_pass_plan_response()

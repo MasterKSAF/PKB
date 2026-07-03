@@ -40,3 +40,25 @@ def test_parse_job_dry_run_returns_parse_job_contract() -> None:
     assert data["expected_parser"] == "LlamaParse"
     assert data["expected_parse_job_id"] == "dry-run-parse-job-id"
     assert data["next_step"] == "run LlamaExtract passes by parse_job_id"
+
+
+def test_extract_passes_plan_uses_parse_job_id() -> None:
+    client = TestClient(app)
+    response = client.get("/extract-passes/plan")
+
+    assert response.status_code == 200
+    data = response.json()
+    names = [item["name"] for item in data["passes"]]
+    assert data["source"] == "parse_job_id"
+    assert names == [
+        "document_boundaries",
+        "title_metadata",
+        "table_of_contents",
+        "sections",
+        "tables",
+        "images",
+        "formulas",
+        "cross_references",
+        "validation_critic",
+    ]
+    assert all(item["uses_parse_job_id"] is True for item in data["passes"])

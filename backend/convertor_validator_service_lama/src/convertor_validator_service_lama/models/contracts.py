@@ -34,3 +34,29 @@ class ParseJobDryRunResponse(BaseModel):
     expected_parser: str = "LlamaParse"
     expected_parse_job_id: str = "dry-run-parse-job-id"
     next_step: str = "run LlamaExtract passes by parse_job_id"
+
+
+LlamaExtractPassName = Literal[
+    "document_boundaries",
+    "title_metadata",
+    "table_of_contents",
+    "sections",
+    "tables",
+    "images",
+    "formulas",
+    "cross_references",
+    "validation_critic",
+]
+
+
+class ExtractPassPlanItem(BaseModel):
+    name: LlamaExtractPassName
+    uses_parse_job_id: bool = True
+    output_key: str
+
+
+class ExtractPassPlanResponse(BaseModel):
+    service: str = "convertor_validator_service_lama"
+    mode: Literal["extract_pass_plan"] = "extract_pass_plan"
+    source: Literal["parse_job_id"] = "parse_job_id"
+    passes: list[ExtractPassPlanItem] = Field(default_factory=list)
