@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.fsm import DraftFSM, DraftState, TaskStage, TaskStatus
+from app.models.pipeline import Task
 from app.core.pipeline.saga import SagaCoordinator
 from app.core.trace import get_trace_id, set_trace_id
 from app.repositories.pipeline import TaskRepository
@@ -43,24 +44,231 @@ class PipelineOrchestrator:
         self.db = db
         self.task_repo = TaskRepository(db)
 
-    async def _check_concurrent_limit(self) -> None:
-        """Check if concurrent task limit is reached; raise if so."""
+    async def _has_free_slot(self) -> bool:
+        """Check if a concurrent execution slot is available.
+
+        Returns True if the number of active tasks is below MAX_CONCURRENT_TASKS.
+        Defensive: non-int return treated as no slot.
+        """
         active = await self.task_repo.count_active_tasks()
+        if not isinstance(active, int):
+            logger.warning(
+                "count_active_tasks returned non-int",
+                extra={"type": type(active).__name__},
+            )
+            return False
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
         if active >= limit:
             logger.warning(
-                "Concurrent task limit reached",
+                "No free execution slot",
                 extra={"active": active, "limit": limit},
             )
-            raise ConcurrentTaskLimitError(
-                f"Concurrent task limit reached: {active} active, "
-                f"max {limit}. Try again later."
+            return False
+        return True
+
+    async def _enqueue_celery_tasks(
+        self, task: Task, file_key: str,
+    ) -> None:
+        """Dispatch Celery preview tasks for a pipeline.
+
+        Uses task.current_step_name to determine Parser vs OCR.
+        The converter step is dispatched later in on_step_completed.
+        """
+        from app.tasks.pipeline_formation import (
+            run_ocr_preview_step,
+            run_parser_preview_step,
+        )
+
+        current_trace_id = task.trace_id or get_trace_id() or ""
+        use_parser = task.current_step_name == "Parser Service"
+
+        if use_parser:
+            _params = {
+                "task_id": task.id, "draft_id": task.draft_id,
+                "file_key": file_key, "max_pages": 3, "trace_id": current_trace_id,
+            }
+            logger.info(
+                "Parser-first: enqueuing celery task",
+                extra={
+                    "celery_task": "tasks.pipeline.run_parser_preview_step",
+                    "queue": "pipeline",
+                    "params": _params,
+                    "draft_id": task.draft_id, "task_id": task.id,
+                },
             )
+            run_parser_preview_step.delay(**_params)
+        else:
+            _params = {
+                "task_id": task.id, "draft_id": task.draft_id,
+                "file_key": file_key, "max_pages": 3, "trace_id": current_trace_id,
+            }
+            logger.info(
+                "OCR: enqueuing celery task",
+                extra={
+                    "celery_task": "tasks.pipeline.run_ocr_preview_step",
+                    "queue": "pipeline",
+                    "params": _params,
+                    "draft_id": task.draft_id, "task_id": task.id,
+                },
+            )
+            run_ocr_preview_step.delay(**_params)
+
+        # Converter запускается ПОСЛЕ parser/ocr в on_step_completed
+        # с результатом парсинга как raw_json
+
+    async def _enqueue_celery_full_tasks(
+        self, task: Task, file_key: str,
+    ) -> None:
+        """Dispatch Celery full-phase tasks for a pipeline.
+
+        Starts the first full step (full_ocr) based on the step's service_name.
+        Subsequent steps (converter, registry, rag_index) are chained
+        via on_step_completed → _on_full_step_completed.
+        """
+        from app.tasks.pipeline_formation import (
+            run_ocr_full_step,
+            run_parser_full_step,
+            run_converter_full_step,
+        )
+
+        current_trace_id = task.trace_id or get_trace_id() or ""
+
+        # Get task steps and find pending full_ocr
+        steps = await self.task_repo.get_task_steps(task.id)
+        full_step = next(
+            (s for s in steps if s.step_name == "full_ocr" and s.status == "pending"),
+            None,
+        )
+
+        if not full_step:
+            # No pending full_ocr — check for full_converter (full_preview case)
+            full_converter = next(
+                (s for s in steps if s.step_name == "full_converter" and s.status == "pending"),
+                None,
+            )
+            if full_converter:
+                await self.task_repo.start_task_step(full_converter.id)
+                run_converter_full_step.delay(
+                    task.id, task.draft_id, file_key, trace_id=current_trace_id,
+                )
+                logger.info(
+                    "Dequeued full converter step (full preview, no Parser/OCR)",
+                    extra={"task_id": task.id, "draft_id": task.draft_id},
+                )
+            else:
+                logger.warning(
+                    "No pending full_ocr or full_converter step found for dequeued task",
+                    extra={"task_id": task.id, "draft_id": task.draft_id},
+                )
+            return
+
+        # Start full_ocr step and dispatch — use step's service_name to decide engine
+        await self.task_repo.start_task_step(full_step.id)
+        if full_step.service_name == "Parser Service":
+            run_parser_full_step.delay(
+                task.id, task.draft_id, file_key, trace_id=current_trace_id,
+            )
+            logger.info(
+                "Dequeued full Parser step (Parser-first)",
+                extra={"task_id": task.id, "draft_id": task.draft_id},
+            )
+        else:
+            run_ocr_full_step.delay(
+                task.id, task.draft_id, file_key, trace_id=current_trace_id,
+            )
+            logger.info(
+                "Dequeued full OCR step",
+                extra={"task_id": task.id, "draft_id": task.draft_id},
+            )
+
+    async def _drain_queue(self) -> int:
+        """Process queued tasks if execution slots are available.
+
+        FIFO order: picks oldest queued task (by created_at) and dispatches
+        its Celery tasks. Continues until all slots are filled or queue is empty.
+
+        Returns:
+            int: Number of tasks dequeued and activated.
+        """
+        dequeued = 0
+        while await self._has_free_slot():
+            queued_task = await self.task_repo.get_next_queued_task()
+            if not queued_task:
+                break
+
+            # Get file_key from upload step output first
+            steps = await self.task_repo.get_task_steps(queued_task.id)
+            file_key = None
+            for s in steps:
+                if s.step_name == "upload" and s.output_data:
+                    file_key = s.output_data.get("file_key")
+                    break
+            if not file_key:
+                # Fallback: try input_data
+                for s in steps:
+                    if s.step_name == "upload" and s.input_data:
+                        file_key = s.input_data.get("file_key")
+                        break
+
+            if not file_key:
+                logger.warning(
+                    "Cannot dequeue task: no file_key found in upload step, skipping",
+                    extra={
+                        "task_id": queued_task.id,
+                        "draft_id": queued_task.draft_id,
+                    },
+                )
+                # Skip this task (leave as queued) and try next
+                continue
+
+            logger.info(
+                "Dequeuing task",
+                extra={
+                    "task_id": queued_task.id,
+                    "draft_id": queued_task.draft_id,
+                    "stage": queued_task.pipeline_stage,
+                },
+            )
+
+            # Switch to active
+            await self.task_repo.update_task_status(
+                queued_task.id,
+                status=TaskStatus.ACTIVE.value,
+            )
+
+            # Choose dispatcher based on pipeline stage
+            if queued_task.pipeline_stage in (
+                TaskStage.FULL.value,
+                TaskStage.REGISTRY.value,
+                "decision",
+            ):
+                await self._enqueue_celery_full_tasks(queued_task, file_key)
+            else:
+                # Preview phase (default)
+                await self._enqueue_celery_tasks(queued_task, file_key)
+
+            logger.info(
+                "Queued task activated and dispatched",
+                extra={
+                    "task_id": queued_task.id,
+                    "draft_id": queued_task.draft_id,
+                },
+            )
+
+            dequeued += 1
+
+        if dequeued:
+            logger.info(
+                "Queue drain complete",
+                extra={"dequeued": dequeued},
+            )
+
+        return dequeued
 
     async def start_pipeline(
         self, draft_id: int, task_id: int, file_key: str, mime_type: str,
         metadata_fields: Optional[dict] = None,
-    ) -> None:
+    ) -> bool:
         """Start the pipeline for a draft (preview phase).
 
         Parser-first strategy: if Parser is enabled, it is always tried first.
@@ -69,14 +277,16 @@ class PipelineOrchestrator:
 
         1. Validates task exists
         2. Creates TaskSteps for preview phase (idempotent — skips existing)
-        3. Enqueues preview Celery tasks
+        3. Checks for free execution slot:
+           - If slot available: enqueues preview Celery tasks, task stays active
+           - If no slot: task is set to queued, Celery tasks are NOT dispatched
+
+        Returns:
+            bool: True if Celery tasks were dispatched (active), False if queued.
 
         Args:
             metadata_fields: Initial metadata from POST /drafts form (source_type, doc_code, etc.)
         """
-        # Check concurrent task limit before starting new pipeline
-        await self._check_concurrent_limit()
-
         task = await self.task_repo.get_task(task_id)
         if not task:
             logger.error(
@@ -100,13 +310,8 @@ class PipelineOrchestrator:
         )
 
         # --- Parser-first strategy (P1F-8 updated) ---
-        # Try Parser first if enabled, fall back to OCR if:
-        #   - Parser is disabled
-        #   - Parser fails and PARSER_FALLBACK_TO_OCR is enabled
-        #   - Parser returns preview_not_supported and PARSER_FALLBACK_TO_OCR is enabled
         parser_enabled = settings.services.PARSER_ENABLED
         ocr_enabled = settings.services.OCR_ENABLED
-        fallback_to_ocr = settings.services.PARSER_FALLBACK_TO_OCR
 
         if not parser_enabled and not ocr_enabled:
             raise ValueError(
@@ -121,7 +326,6 @@ class PipelineOrchestrator:
             preview_service = "OCR Service"
             use_parser = False
         else:
-            # Should not reach here due to check above
             preview_service = "Parser Service"
             use_parser = True
 
@@ -151,9 +355,9 @@ class PipelineOrchestrator:
 
         # Step 1: preview Parser/OCR
         if "preview_ocr" not in existing_step_names:
-            preview_step = await self.task_repo.create_task_step(
+            await self.task_repo.create_task_step(
                 task_id=task_id,
-                step_name="preview_ocr",  # unified step name
+                step_name="preview_ocr",
                 step_index=1,
                 service_name=preview_service,
                 input_data={"file_key": file_key, "mode": "preview", "max_pages": 3, "draft_id": draft_id},
@@ -161,7 +365,7 @@ class PipelineOrchestrator:
 
         # Step 2: preview Converter-validator
         if "preview_converter" not in existing_step_names:
-            converter_step = await self.task_repo.create_task_step(
+            await self.task_repo.create_task_step(
                 task_id=task_id,
                 step_name="preview_converter",
                 step_index=2,
@@ -177,62 +381,45 @@ class PipelineOrchestrator:
             output_data={"draft_id": draft_id, "task_id": task_id, "file_key": file_key},
         )
 
-        # Enqueue preview tasks via Celery
-        from app.tasks.pipeline_formation import (
-            run_ocr_preview_step,
-            run_parser_preview_step,
-            run_converter_preview_step,
-        )
+        # ── Check free slot and dispatch or queue ───────────────────
+        if await self._has_free_slot():
+            # Ensure task is active
+            if task.status != TaskStatus.ACTIVE.value:
+                await self.task_repo.update_task_status(
+                    task_id=task_id,
+                    status=TaskStatus.ACTIVE.value,
+                )
 
-        current_trace_id = get_trace_id() or ""
+            # Dispatch Celery tasks
+            await self._enqueue_celery_tasks(task, file_key)
 
-        task_names = {
-            run_parser_preview_step: "tasks.pipeline.run_parser_preview_step",
-            run_ocr_preview_step: "tasks.pipeline.run_ocr_preview_step",
-        }
-
-        if use_parser:
-            _task = run_parser_preview_step
-            _params = {"task_id": task_id, "draft_id": draft_id,
-                       "file_key": file_key, "max_pages": 3, "trace_id": current_trace_id}
-            logger.info(
-                "Parser-first: enqueuing celery task",
-                extra={
-                    "celery_task": task_names[_task],
-                    "queue": "pipeline",
-                    "params": _params,
-                    "draft_id": draft_id, "task_id": task_id,
-                },
+            # Update progress
+            await self.task_repo.update_task_status(
+                task_id=task_id,
+                progress_percent=10,
             )
-            _task.delay(**_params)
+
+            logger.info(
+                "Pipeline preview started (active)",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+            return True
         else:
-            _task = run_ocr_preview_step
-            _params = {"task_id": task_id, "draft_id": draft_id,
-                       "file_key": file_key, "max_pages": 3, "trace_id": current_trace_id}
+            # No free slot — queue the task
+            await self.task_repo.update_task_status(
+                task_id=task_id,
+                status=TaskStatus.QUEUED.value,
+                progress_percent=5,
+            )
+
             logger.info(
-                "OCR: enqueuing celery task",
+                "Pipeline preview queued (no free slot)",
                 extra={
-                    "celery_task": task_names[_task],
-                    "queue": "pipeline",
-                    "params": _params,
                     "draft_id": draft_id, "task_id": task_id,
+                    "active_tasks": await self.task_repo.count_active_tasks(),
                 },
             )
-            _task.delay(**_params)
-
-        # Converter запускается ПОСЛЕ parser/ocr в on_step_completed
-        # с результатом парсинга как raw_json
-
-        # Update progress
-        await self.task_repo.update_task_status(
-            task_id=task_id,
-            progress_percent=10,
-        )
-
-        logger.info(
-            "Pipeline preview started",
-            extra={"draft_id": draft_id, "task_id": task_id},
-        )
+            return False
 
     async def _start_converter_preview(
         self, task_id: int, draft_id: int, file_key: str,
@@ -366,6 +553,9 @@ class PipelineOrchestrator:
             await self._on_preview_completed(task, steps, output_data)
         elif step_name in ("full_ocr", "full_converter", "registry_creation", "rag_index"):
             await self._on_full_step_completed(task, step_name, steps)
+
+        # Try to process queued tasks if a slot freed up
+        await self._drain_queue()
 
     async def _run_ocr_fallback(self, task, file_key: str) -> None:
         """Run OCR preview as fallback after Parser failed or returned preview_not_supported."""
@@ -1033,9 +1223,6 @@ class PipelineOrchestrator:
                 f"Cannot approve task {task_id}: already in terminal state {task.status}"
             )
 
-        # Check concurrent task limit before starting full pipeline
-        await self._check_concurrent_limit()
-
         # --- Step 0: Collect draft metadata from Registry ---
         registry = RegistryServiceClient()
         try:
@@ -1312,6 +1499,29 @@ class PipelineOrchestrator:
 
         # Refresh steps after potential creation
         steps = await self.task_repo.get_task_steps(task_id)
+
+        # Check concurrent slot — queue if none available
+        if not await self._has_free_slot():
+            await self.task_repo.update_task_status(
+                task_id=task_id,
+                status=TaskStatus.QUEUED.value,
+                stage=TaskStage.FULL.value,
+                progress_percent=50,
+            )
+            logger.info(
+                "Approve queued (no free slot)",
+                extra={
+                    "draft_id": draft_id, "task_id": task_id,
+                    "active_tasks": await self.task_repo.count_active_tasks(),
+                },
+            )
+            return {
+                "document_id": document_id,
+                "version_id": version_id,
+                "is_new_document": is_new_document,
+                "queued": True,
+            }
+
         if need_full_processing:
             full_step = next(
                 (
@@ -1365,6 +1575,7 @@ class PipelineOrchestrator:
             "document_id": document_id,
             "version_id": version_id,
             "is_new_document": is_new_document,
+            "queued": False,
         }
 
     async def proceed_draft(
@@ -1404,6 +1615,9 @@ class PipelineOrchestrator:
                 f"Failed to update draft status: {e}",
                 extra={"draft_id": draft_id},
             )
+
+        # Try to process queued tasks if a slot freed up
+        await self._drain_queue()
 
         return {
             "document_id": None,
@@ -1557,6 +1771,28 @@ class PipelineOrchestrator:
                 },
             )
 
+        # Check free slot — queue if none available
+        if not await self._has_free_slot():
+            await self.task_repo.update_task_status(
+                task_id=task_id,
+                status=TaskStatus.QUEUED.value,
+                stage=TaskStage.FULL.value,
+                progress_percent=5,
+            )
+            logger.info(
+                "Confirm queued (no free slot)",
+                extra={
+                    "draft_id": draft_id, "task_id": task_id,
+                    "active_tasks": await self.task_repo.count_active_tasks(),
+                },
+            )
+            return {
+                "status": "queued",
+                "task_id": task_id,
+                "draft_id": draft_id,
+                "queued": True,
+            }
+
         # Start full_ocr step
         steps = await self.task_repo.get_task_steps(task_id)
         full_step = next(
@@ -1584,6 +1820,7 @@ class PipelineOrchestrator:
             "status": "validation",
             "task_id": task_id,
             "draft_id": draft_id,
+            "queued": False,
         }
 
     async def reject_draft(self, draft_id: int, task_id: int) -> None:
@@ -1624,6 +1861,9 @@ class PipelineOrchestrator:
                 f"Failed to update draft status to discarded: {e}",
                 extra={"draft_id": draft_id},
             )
+
+        # Try to process queued tasks if a slot freed up
+        await self._drain_queue()
 
     async def on_step_failed(
         self,
@@ -1842,6 +2082,9 @@ class PipelineOrchestrator:
                     "error": error_message,
                 },
             )
+
+        # Try to process queued tasks if a slot freed up
+        await self._drain_queue()
 
     async def _check_service_health(self, service_name: str) -> bool:
         """Check if a service is alive via HTTP health check."""

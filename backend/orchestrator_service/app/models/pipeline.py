@@ -89,7 +89,7 @@ class Task(Base):
     # Task status and stage
     status: Mapped[str] = mapped_column(
         String(16), default="active", nullable=False, index=True
-    )  # "active" | "completed" | "failed"
+    )  # "queued" | "active" | "completed" | "failed" | "partially_indexed"
     pipeline_stage: Mapped[str] = mapped_column(
         String(16), default="upload", nullable=False
     )  # "upload" | "preview" | "decision" | "full" | "registry" | "indexation"

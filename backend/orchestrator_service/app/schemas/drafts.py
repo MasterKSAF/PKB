@@ -42,6 +42,7 @@ class DraftCreateResponse(BaseModel):
     display_name: Optional[str] = Field(
         None, description="Отображаемое имя черновика для UI"
     )
+    queued: bool = Field(False, description="Задача поставлена в очередь ожидания")
     created_at: datetime = Field(..., description="Время создания")
 
 

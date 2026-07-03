@@ -31,7 +31,6 @@ from sqlalchemy.exc import IntegrityError
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import settings
 from app.core.pipeline.orchestrator import (
-    ConcurrentTaskLimitError,
     PipelineOrchestrator,
 )
 from app.core.trace import set_draft_id, set_document_id, set_version_id
@@ -538,24 +537,13 @@ async def create_draft(
 
     # --- Start pipeline (preview phase) ---
     mime_type = file.content_type or "application/octet-stream"
-    try:
-        await orchestrator.start_pipeline(
-            draft_id=draft_id,
-            task_id=task.id,
-            file_key=file_key,
-            mime_type=mime_type,
-            metadata_fields=metadata_fields if metadata_fields else None,
-        )
-    except ConcurrentTaskLimitError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": {
-                    "code": "CONCURRENT_LIMIT",
-                    "message": str(exc),
-                }
-            },
-        )
+    is_active = await orchestrator.start_pipeline(
+        draft_id=draft_id,
+        task_id=task.id,
+        file_key=file_key,
+        mime_type=mime_type,
+        metadata_fields=metadata_fields if metadata_fields else None,
+    )
 
     # --- Idempotency: update cache with task_id ---
     if idempotency_key and idempotency_key in _IDEMPOTENCY_CACHE:
@@ -576,6 +564,7 @@ async def create_draft(
         title_key=title_key,
         original_filename=original_filename,
         display_name=original_filename,
+        queued=not is_active,
         created_at=datetime.now(timezone.utc),
     )
 
@@ -838,23 +827,12 @@ async def start_preview(
 
     # Start pipeline with actual mime_type
     orchestrator = PipelineOrchestrator(db)
-    try:
-        await orchestrator.start_pipeline(
-            draft_id=draft_id,
-            task_id=task.id,
-            file_key=file_key or "",
-            mime_type=mime_type,
-        )
-    except ConcurrentTaskLimitError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": {
-                    "code": "CONCURRENT_LIMIT",
-                    "message": str(exc),
-                }
-            },
-        )
+    is_active = await orchestrator.start_pipeline(
+        draft_id=draft_id,
+        task_id=task.id,
+        file_key=file_key or "",
+        mime_type=mime_type,
+    )
 
     # Cache for idempotency
     if idempotency_key:
@@ -867,8 +845,9 @@ async def start_preview(
     return {
         "draft_id": draft_id,
         "task_id": task.id,
-        "status": "previewing",
-        "message": "Preview phase started",
+        "status": "previewing" if is_active else "queued",
+        "queued": not is_active,
+        "message": "Preview phase started" if is_active else "Task queued, waiting for free slot",
     }
 
 
@@ -1330,19 +1309,21 @@ async def decide_draft(
                         }
                     },
                 )
-            # CONCURRENT_LIMIT — too many active pipelines
-            if "Concurrent task limit reached" in err_msg:
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail={
-                        "error": {
-                            "code": "CONCURRENT_LIMIT",
-                            "message": err_msg,
-                        }
-                    },
-                )
             # Other ValueErrors — re-raise as 500
             raise
+
+        # Check if the approve was queued
+        if result_data.get("queued"):
+            return DecideResponse(
+                draft_id=draft_id,
+                task_id=task.id,
+                document_id=None,
+                version_id=None,
+                is_new_document=False,
+                status="queued",
+                action="approve",
+                message="Задача поставлена в очередь ожидания",
+            )
 
         # Set correlation IDs for downstream (CM-5)
         doc_id = result_data.get("document_id")
@@ -1367,6 +1348,17 @@ async def decide_draft(
             draft_id, task.id,
             metadata_overrides=request.metadata_overrides,
         )
+        if result_data.get("queued"):
+            return DecideResponse(
+                draft_id=draft_id,
+                task_id=task.id,
+                document_id=None,
+                version_id=None,
+                is_new_document=False,
+                status="queued",
+                action="confirm",
+                message="Задача поставлена в очередь ожидания",
+            )
         return DecideResponse(
             draft_id=draft_id,
             task_id=task.id,

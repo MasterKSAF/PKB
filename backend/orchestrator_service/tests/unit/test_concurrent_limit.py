@@ -1,21 +1,45 @@
 """
-Tests for concurrent task limit in pipeline execution.
+Tests for queue-based concurrent task limiting in pipeline execution.
 
 Covers:
 1. TaskRepository.count_active_tasks() — counts only active (non-terminal) tasks
-2. PipelineOrchestrator._check_concurrent_limit() — raises when limit exceeded
-3. Endpoint integration — 5th concurrent approve returns 429
+2. PipelineOrchestrator._has_free_slot() — returns bool
+3. start_pipeline() queues when limit reached, dispatches when slot free
+4. approve_draft() queues when limit reached
+5. _drain_queue() processes queued tasks FIFO
+6. get_next_queued_task() FIFO ordering with SKIP LOCKED
 """
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.repositories.pipeline import TaskRepository
-from app.core.pipeline.orchestrator import (
-    ConcurrentTaskLimitError,
-    PipelineOrchestrator,
-)
+from app.core.pipeline.orchestrator import PipelineOrchestrator
+from app.core.fsm import TaskStatus
 from app.core.config import settings
+from app.models.pipeline import Task as TaskModel
+
+
+async def _create_task_with_upload_step(
+    db: AsyncSession, draft_id: int, file_key: str = "test.pdf",
+) -> TaskModel:
+    """Create a task and run start_pipeline to set up proper upload steps.
+
+    Returns the task after pipeline start (which may be active or queued).
+    """
+    repo = TaskRepository(db)
+    task = await repo.create_task(
+        draft_id=draft_id, pipeline_type="formation", total_steps=4,
+    )
+    orchestrator = PipelineOrchestrator(db)
+    await orchestrator.start_pipeline(
+        draft_id=draft_id,
+        task_id=task.id,
+        file_key=file_key,
+        mime_type="application/pdf",
+    )
+    return task
 
 
 @pytest.mark.asyncio
@@ -50,6 +74,14 @@ class TestCountActiveTasks:
         count = await repo.count_active_tasks()
         assert count == 1
 
+    async def test_excludes_queued(self, db_session: AsyncSession):
+        """QUEUED tasks should NOT be counted as active."""
+        repo = TaskRepository(db_session)
+        t1 = await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
+        await repo.update_task_status(t1.id, status=TaskStatus.QUEUED.value)
+        count = await repo.count_active_tasks()
+        assert count == 0
+
     async def test_does_not_count_soft_deleted(self, db_session: AsyncSession):
         repo = TaskRepository(db_session)
         from datetime import datetime, timezone
@@ -61,15 +93,15 @@ class TestCountActiveTasks:
 
 
 @pytest.mark.asyncio
-class TestCheckConcurrentLimit:
-    """Tests for PipelineOrchestrator._check_concurrent_limit."""
+class TestHasFreeSlot:
+    """Tests for PipelineOrchestrator._has_free_slot."""
 
-    async def test_allows_when_below_limit(self, db_session: AsyncSession):
+    async def test_returns_true_when_below_limit(self, db_session: AsyncSession):
         orchestrator = PipelineOrchestrator(db_session)
-        # No active tasks — should pass without error
-        await orchestrator._check_concurrent_limit()
+        # No active tasks — should return True
+        assert await orchestrator._has_free_slot() is True
 
-    async def test_raises_when_limit_reached(self, db_session: AsyncSession):
+    async def test_returns_false_when_limit_reached(self, db_session: AsyncSession):
         repo = TaskRepository(db_session)
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
         # Fill up to the limit
@@ -80,11 +112,9 @@ class TestCheckConcurrentLimit:
                 total_steps=4,
             )
         orchestrator = PipelineOrchestrator(db_session)
-        with pytest.raises(ConcurrentTaskLimitError) as excinfo:
-            await orchestrator._check_concurrent_limit()
-        assert str(limit) in str(excinfo.value)
+        assert await orchestrator._has_free_slot() is False
 
-    async def test_passes_when_completed_task_frees_slot(
+    async def test_returns_true_when_completed_frees_slot(
         self, db_session: AsyncSession
     ):
         repo = TaskRepository(db_session)
@@ -98,38 +128,173 @@ class TestCheckConcurrentLimit:
         # Complete the last task — frees a slot
         await repo.update_task_status(tasks[-1].id, status="completed")
         orchestrator = PipelineOrchestrator(db_session)
-        # Should not raise (one completed, remaining active = limit - 1)
-        await orchestrator._check_concurrent_limit()
+        assert await orchestrator._has_free_slot() is True
+
+    async def test_queued_not_counted_as_active(self, db_session: AsyncSession):
+        """QUEUED tasks should not consume slots."""
+        repo = TaskRepository(db_session)
+        limit = settings.pipeline.MAX_CONCURRENT_TASKS
+        # Fill up with queued tasks
+        for i in range(limit):
+            t = await repo.create_task(
+                draft_id=i + 1, pipeline_type="formation", total_steps=4,
+            )
+            await repo.update_task_status(t.id, status=TaskStatus.QUEUED.value)
+
+        orchestrator = PipelineOrchestrator(db_session)
+        # Should return True because queued tasks don't count as active
+        assert await orchestrator._has_free_slot() is True
 
 
 @pytest.mark.asyncio
-class TestConcurrentLimitInPipeline:
-    """Integration: concurrent limit blocks a new start_pipeline."""
+class TestGetNextQueuedTask:
+    """Tests for TaskRepository.get_next_queued_task."""
 
-    async def test_start_pipeline_raises_at_limit(
-        self, db_session: AsyncSession, monkeypatch
+    async def test_returns_none_when_empty(self, db_session: AsyncSession):
+        repo = TaskRepository(db_session)
+        assert await repo.get_next_queued_task() is None
+
+    async def test_returns_oldest_queued(self, db_session: AsyncSession):
+        repo = TaskRepository(db_session)
+        t1 = await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
+        t2 = await repo.create_task(draft_id=2, pipeline_type="formation", total_steps=4)
+        await repo.update_task_status(t1.id, status=TaskStatus.QUEUED.value)
+        await repo.update_task_status(t2.id, status=TaskStatus.QUEUED.value)
+
+        # Should return the oldest (t1, smaller id = earlier created_at)
+        next_task = await repo.get_next_queued_task()
+        assert next_task is not None
+        assert next_task.id == t1.id
+
+    async def test_ignores_active_tasks(self, db_session: AsyncSession):
+        repo = TaskRepository(db_session)
+        t1 = await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
+        t2 = await repo.create_task(draft_id=2, pipeline_type="formation", total_steps=4)
+        await repo.update_task_status(t1.id, status=TaskStatus.QUEUED.value)
+        # t2 stays active
+
+        next_task = await repo.get_next_queued_task()
+        assert next_task is not None
+        assert next_task.id == t1.id
+
+    async def test_ignores_terminal_tasks(self, db_session: AsyncSession):
+        repo = TaskRepository(db_session)
+        t1 = await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
+        t2 = await repo.create_task(draft_id=2, pipeline_type="formation", total_steps=4)
+        await repo.update_task_status(t1.id, status=TaskStatus.QUEUED.value)
+        await repo.update_task_status(t2.id, status=TaskStatus.COMPLETED.value)
+
+        next_task = await repo.get_next_queued_task()
+        assert next_task is not None
+        assert next_task.id == t1.id
+
+
+@pytest.mark.asyncio
+class TestStartPipelineQueuing:
+    """Tests: start_pipeline queues when limit reached, dispatches when free."""
+
+    async def test_dispatches_when_slot_available(
+        self, db_session: AsyncSession
     ):
         repo = TaskRepository(db_session)
-        limit = settings.pipeline.MAX_CONCURRENT_TASKS
-        for i in range(limit):
-            await repo.create_task(
-                draft_id=i + 1, pipeline_type="formation", total_steps=4,
-            )
+        task = await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
 
         orchestrator = PipelineOrchestrator(db_session)
-        with pytest.raises(ConcurrentTaskLimitError):
-            await orchestrator.start_pipeline(
-                draft_id=999,
-                task_id=0,  # bogus — _check_concurrent_limit runs before task lookup
-                file_key="test.pdf",
-                mime_type="application/pdf",
-            )
+        result = await orchestrator.start_pipeline(
+            draft_id=1,
+            task_id=task.id,
+            file_key="test.pdf",
+            mime_type="application/pdf",
+        )
 
-    async def test_approve_draft_raises_at_limit(
+        # Should be active (slot was free)
+        assert result is True
+
+        # Verify task is active
+        await db_session.refresh(task)
+        assert task.status == TaskStatus.ACTIVE.value
+
+    async def test_queues_when_limit_reached(
         self, db_session: AsyncSession
     ):
         repo = TaskRepository(db_session)
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
+        # Fill up to the limit with active tasks
+        for i in range(limit):
+            await repo.create_task(
+                draft_id=i + 2, pipeline_type="formation", total_steps=4,
+            )
+
+        # Now try to start a new pipeline
+        task = await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
+
+        orchestrator = PipelineOrchestrator(db_session)
+        result = await orchestrator.start_pipeline(
+            draft_id=1,
+            task_id=task.id,
+            file_key="test.pdf",
+            mime_type="application/pdf",
+        )
+
+        # Should be queued (no free slot)
+        assert result is False
+
+        # Verify task is queued
+        await db_session.refresh(task)
+        assert task.status == TaskStatus.QUEUED.value
+
+    async def test_queue_then_drain_when_slot_frees(
+        self, db_session: AsyncSession
+    ):
+        repo = TaskRepository(db_session)
+        limit = settings.pipeline.MAX_CONCURRENT_TASKS
+
+        # Fill slots with active tasks
+        active_tasks = []
+        for i in range(limit):
+            t = await repo.create_task(
+                draft_id=i + 2, pipeline_type="formation", total_steps=4,
+            )
+            active_tasks.append(t)
+
+        # Create a task via start_pipeline to get proper upload step
+        task = await repo.create_task(
+            draft_id=1, pipeline_type="formation", total_steps=4,
+        )
+        orchestrator = PipelineOrchestrator(db_session)
+        await orchestrator.start_pipeline(
+            draft_id=1,
+            task_id=task.id,
+            file_key="test.pdf",
+            mime_type="application/pdf",
+        )
+        # Because limit is already reached, start_pipeline should have queued it
+        await db_session.refresh(task)
+        assert task.status == TaskStatus.QUEUED.value
+
+        # Complete one active task — frees a slot
+        await repo.update_task_status(active_tasks[0].id, status="completed")
+
+        # Drain queue
+        dequeued = await orchestrator._drain_queue()
+
+        # Verify the queued task was activated
+        assert dequeued == 1
+        await db_session.refresh(task)
+        assert task.status == TaskStatus.ACTIVE.value
+
+
+@pytest.mark.asyncio
+class TestApproveDraftQueuing:
+    """Tests: approve_draft queues when limit reached."""
+
+    async def test_approve_returns_queued_when_limit_reached(
+        self, db_session: AsyncSession
+    ):
+        repo = TaskRepository(db_session)
+        limit = settings.pipeline.MAX_CONCURRENT_TASKS
+
+        # Fill slots with active tasks
         for i in range(limit):
             await repo.create_task(
                 draft_id=i + 1, pipeline_type="formation", total_steps=4,
@@ -141,8 +306,90 @@ class TestConcurrentLimitInPipeline:
         )
 
         orchestrator = PipelineOrchestrator(db_session)
-        with pytest.raises(ConcurrentTaskLimitError):
-            await orchestrator.approve_draft(
-                draft_id=100,
-                task_id=task.id,
+        result = await orchestrator.approve_draft(
+            draft_id=100,
+            task_id=task.id,
+        )
+
+        # Should indicate queued
+        assert result.get("queued") is True
+
+        # Verify task is queued with FULL stage (approve creates doc+steps first)
+        await db_session.refresh(task)
+        assert task.status == TaskStatus.QUEUED.value
+        assert task.pipeline_stage == "full"
+
+
+@pytest.mark.asyncio
+class TestDrainQueue:
+    """Tests for _drain_queue FIFO processing."""
+
+    async def test_drain_none_when_empty(self, db_session: AsyncSession):
+        orchestrator = PipelineOrchestrator(db_session)
+        dequeued = await orchestrator._drain_queue()
+        assert dequeued == 0
+
+    async def test_drain_fifo_order(self, db_session: AsyncSession):
+        """Drain should activate tasks in FIFO order (oldest first)."""
+        limit = settings.pipeline.MAX_CONCURRENT_TASKS
+
+        # Create tasks via start_pipeline so they have upload steps
+        # First fill to limit with regular tasks (no steps needed, just active)
+        repo = TaskRepository(db_session)
+        filler_tasks = []
+        for i in range(limit):
+            t = await repo.create_task(
+                draft_id=i + 1, pipeline_type="formation", total_steps=4,
             )
+            filler_tasks.append(t)
+
+        # Create three tasks with proper upload steps
+        t1 = await _create_task_with_upload_step(db_session, 101, "t1.pdf")
+        t2 = await _create_task_with_upload_step(db_session, 102, "t2.pdf")
+        t3 = await _create_task_with_upload_step(db_session, 103, "t3.pdf")
+
+        # Set them all to queued
+        await repo.update_task_status(t1.id, status=TaskStatus.QUEUED.value)
+        await repo.update_task_status(t2.id, status=TaskStatus.QUEUED.value)
+        await repo.update_task_status(t3.id, status=TaskStatus.QUEUED.value)
+
+        # Free all slots
+        for t in filler_tasks:
+            await repo.update_task_status(t.id, status="completed")
+
+        orchestrator = PipelineOrchestrator(db_session)
+        dequeued = await orchestrator._drain_queue()
+
+        # Should drain up to limit tasks
+        assert dequeued > 0
+
+        await db_session.refresh(t1)
+        await db_session.refresh(t2)
+        await db_session.refresh(t3)
+
+        # t1 is oldest, should be active
+        assert t1.status == TaskStatus.ACTIVE.value
+
+    async def test_drain_respects_limit(self, db_session: AsyncSession):
+        """Drain should not exceed MAX_CONCURRENT_TASKS."""
+        repo = TaskRepository(db_session)
+        limit = settings.pipeline.MAX_CONCURRENT_TASKS
+
+        # Queue more than limit tasks with upload steps
+        queued_tasks = []
+        for i in range(limit + 2):
+            t = await _create_task_with_upload_step(
+                db_session, i + 1, f"test{i}.pdf",
+            )
+            await repo.update_task_status(t.id, status=TaskStatus.QUEUED.value)
+            queued_tasks.append(t)
+
+        orchestrator = PipelineOrchestrator(db_session)
+        dequeued = await orchestrator._drain_queue()
+
+        # Should only drain up to limit
+        assert dequeued <= limit
+
+        # Active count should be exactly what was dequeued
+        active_count = await repo.count_active_tasks()
+        assert active_count == dequeued

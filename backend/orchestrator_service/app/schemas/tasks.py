@@ -29,7 +29,7 @@ class TaskStatusResponse(BaseModel):
     draft_id: int = Field(..., description="ID черновика")
     document_id: Optional[int] = Field(None, description="ID документа (после approve)")
     version_id: Optional[int] = Field(None, description="ID версии документа")
-    status: str = Field(..., description="Статус задачи: active, completed, failed")
+    status: str = Field(..., description="Статус задачи: queued, active, completed, failed, partially_indexed")
     pipeline_stage: str = Field(..., description="Этап пайплайна")
     progress_percent: int = Field(0, description="Прогресс (0-100)")
     has_notifications: bool = Field(False, description="Есть уведомления о качестве")

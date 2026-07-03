@@ -69,6 +69,7 @@ class DraftFSM:
 class TaskStatus(str, Enum):
     """Status of a pipeline task."""
 
+    QUEUED = "queued"
     ACTIVE = "active"
     COMPLETED = "completed"
     PARTIALLY_INDEXED = "partially_indexed"

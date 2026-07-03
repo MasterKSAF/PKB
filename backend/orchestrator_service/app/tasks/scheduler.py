@@ -89,3 +89,22 @@ def integrity_check():
         return {"checked": checked, "failed": failed}
 
     return _run_async(_check())
+
+
+@celery_app.task(name="app.tasks.scheduler.drain_pipeline_queue")
+def drain_pipeline_queue():
+    """Periodic task: process queued pipeline tasks (safety net).
+
+    Если триггер завершения задачи не сработал, Beat scheduler
+    запускает ожидающие задачи в течение 2 минут.
+    """
+    logger.info("Running pipeline queue drain...")
+
+    async def _drain():
+        async with get_db_context() as db:
+            orchestrator = PipelineOrchestrator(db)
+            await orchestrator._drain_queue()
+
+    _run_async(_drain())
+    logger.info("Pipeline queue drain complete")
+    return {"drained": True}

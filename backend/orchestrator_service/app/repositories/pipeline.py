@@ -523,6 +523,24 @@ class TaskRepository:
         )
         return list(result.scalars().all())
 
+    async def get_next_queued_task(self) -> Optional[Task]:
+        """Find the oldest queued task (FIFO) with row-level lock.
+
+        Uses SELECT ... FOR UPDATE SKIP LOCKED to safely handle
+        concurrent dequeue attempts.
+        """
+        result = await self.db.execute(
+            select(Task)
+            .where(
+                Task.status == TaskStatus.QUEUED.value,
+                Task.deleted_at.is_(None),
+            )
+            .order_by(Task.created_at.asc())
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        return result.scalar_one_or_none()
+
     async def has_critical_notifications(self, task_id: int) -> bool:
         """Check if task has any critical notifications."""
         from app.models.pipeline import DraftNotification

@@ -68,6 +68,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.scheduler.cleanup_stale_jobs",
         "schedule": 300.0,  # every 5 minutes
     },
+    "drain-pipeline-queue": {
+        "task": "app.tasks.scheduler.drain_pipeline_queue",
+        "schedule": 120.0,  # every 2 minutes
+    },
 }
 
 if __name__ == "__main__":
