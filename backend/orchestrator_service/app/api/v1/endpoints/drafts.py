@@ -514,22 +514,8 @@ async def create_draft(
             },
         )
 
-    # --- Check concurrent task limit before creating a new task ---
-    orchestrator = PipelineOrchestrator(db)
-    try:
-        await orchestrator._check_concurrent_limit()
-    except ConcurrentTaskLimitError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                "error": {
-                    "code": "CONCURRENT_LIMIT",
-                    "message": str(exc),
-                }
-            },
-        )
-
     # --- Create Task in local DB ---
+    orchestrator = PipelineOrchestrator(db)
     try:
         task = await orchestrator.task_repo.create_task(
             draft_id=draft_id,
@@ -552,13 +538,24 @@ async def create_draft(
 
     # --- Start pipeline (preview phase) ---
     mime_type = file.content_type or "application/octet-stream"
-    await orchestrator.start_pipeline(
-        draft_id=draft_id,
-        task_id=task.id,
-        file_key=file_key,
-        mime_type=mime_type,
-        metadata_fields=metadata_fields if metadata_fields else None,
-    )
+    try:
+        await orchestrator.start_pipeline(
+            draft_id=draft_id,
+            task_id=task.id,
+            file_key=file_key,
+            mime_type=mime_type,
+            metadata_fields=metadata_fields if metadata_fields else None,
+        )
+    except ConcurrentTaskLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": {
+                    "code": "CONCURRENT_LIMIT",
+                    "message": str(exc),
+                }
+            },
+        )
 
     # --- Idempotency: update cache with task_id ---
     if idempotency_key and idempotency_key in _IDEMPOTENCY_CACHE:
@@ -841,12 +838,23 @@ async def start_preview(
 
     # Start pipeline with actual mime_type
     orchestrator = PipelineOrchestrator(db)
-    await orchestrator.start_pipeline(
-        draft_id=draft_id,
-        task_id=task.id,
-        file_key=file_key or "",
-        mime_type=mime_type,
-    )
+    try:
+        await orchestrator.start_pipeline(
+            draft_id=draft_id,
+            task_id=task.id,
+            file_key=file_key or "",
+            mime_type=mime_type,
+        )
+    except ConcurrentTaskLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": {
+                    "code": "CONCURRENT_LIMIT",
+                    "message": str(exc),
+                }
+            },
+        )
 
     # Cache for idempotency
     if idempotency_key:

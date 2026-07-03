@@ -636,6 +636,7 @@ services:
     ports:
       - "8080:8080"
     privileged: true
+    command: uvicorn gateway.main:app --host 0.0.0.0 --port 8080 --reload
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - .:/project:ro
