@@ -1,4 +1,4 @@
-﻿# convertor_validator_service_lama
+# convertor_validator_service_lama
 
 LAMA Document Parser service for the PKB convertor/validator pipeline.
 

@@ -1,4 +1,4 @@
-﻿from convertor_validator_service_lama.models.contracts import DryRunResponse, PipelineStep
+from convertor_validator_service_lama.models.contracts import DryRunResponse, ParseJobDryRunRequest, ParseJobDryRunResponse, PipelineStep
 
 
 def build_dry_run_response() -> DryRunResponse:
@@ -9,3 +9,7 @@ def build_dry_run_response() -> DryRunResponse:
         PipelineStep(name="python_validator_assembler", description="Build rich_document_package.json and apply corrections in Python.", uses_parse_job_id=True)
     ]
     return DryRunResponse(planned_steps=steps)
+
+
+def build_parse_job_dry_run_response(request: ParseJobDryRunRequest) -> ParseJobDryRunResponse:
+    return ParseJobDryRunResponse(source_pdf_path=request.source_pdf_path)
