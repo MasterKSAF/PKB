@@ -274,6 +274,125 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
         print(f"  Added {added_footer} missing lines (headers/footers)",
               file=sys.stderr, flush=True)
 
+    # --- Добавление подписей к рисункам (Рис.), пропущенных Docling ---
+    # Docling отфильтровывает короткий текст (Рис.X.X) рядом с изображениями.
+    # Ищем строки вида "Рис." длиной 7-30 символов, отсутствующие в Docling.
+    _doc2 = _fitz.open(pdf_path)
+    added_captions = 0
+    for pno in all_pages_in_doc:
+        if pno < 1 or pno > len(_doc2):
+            continue
+        page = _doc2[pno - 1]
+        blocks = page.get_text('dict')['blocks']
+        
+        page_doc_text = ' '.join(
+            k.get('content', '') for k in kids
+            if k.get('page number') == pno and k.get('content', '').strip()
+        )
+        page_doc_norm = __import__('re').sub(r'[\s\u00a0]+', ' ', page_doc_text).lower().strip()
+
+        for b in blocks:
+            if b['type'] != 0:
+                continue
+            for line in b['lines']:
+                ttext = ''.join(span['text'] for span in line['spans']).strip()
+                if not ttext:
+                    continue
+                # Только строки с "Рис." длиной от 7 до 30 символов
+                if 'рис' not in ttext.lower() or len(ttext) < 7 or len(ttext) > 30:
+                    continue
+                t_norm = __import__('re').sub(r'[\s\u00a0]+', ' ', ttext).lower().strip()
+                if t_norm in page_doc_norm:
+                    continue
+                tb = [round(line['bbox'][0], 1), round(line['bbox'][1], 1),
+                      round(line['bbox'][2], 1), round(line['bbox'][3], 1)]
+                kid = {
+                    'type': 'paragraph',
+                    'page number': pno,
+                    'bounding box': tb,
+                    'content': ttext,
+                }
+                kids.append(kid)
+                added_captions += 1
+    _doc2.close()
+    if added_captions:
+        print(f"  Added {added_captions} figure captions (Рис.)",
+              file=sys.stderr, flush=True)
+
+    # --- Дедупликация: удаляем параграфы, дублирующие содержимое таблиц ---
+    # Docling часто возвращает одно и то же содержимое и как table.rows, и как
+    # фрагментированные paragraph-блоки. Удаляем параграфы, слова которых
+    # >70% перекрываются с содержимым таблиц на той же странице.
+    deduped = 0
+    pages = sorted(set(k.get('page number', 0) for k in kids))
+    for pno in pages:
+        page_kids = [k for k in kids if k.get('page number') == pno]
+        # Собираем все слова из table.rows на этой странице
+        import re as _re
+        table_words = set()
+        for k in page_kids:
+            if k.get('type') == 'table':
+                for r in k.get('rows', []):
+                    for c in r.get('cells', []):
+                        for kid in c.get('kids', []):
+                            w = _re.findall(r'[а-яёa-z0-9]+', kid.get('content', '').lower())
+                            table_words.update(w)
+        if not table_words:
+            continue
+        # Помечаем параграфы на удаление, если их слова >70% в table_words
+        to_remove = []
+        for ki, k in enumerate(page_kids):
+            if k.get('type') != 'paragraph':
+                continue
+            ptext = k.get('content', '')
+            p_words = set(_re.findall(r'[а-яёa-z0-9]+', ptext.lower()))
+            if not p_words:
+                continue
+            overlap = len(p_words & table_words)
+            if overlap / len(p_words) > 0.7:
+                # Проверка: не удаляем, если параграф короче 15 символов
+                # (короткие строки могут быть номерами страниц, а не дублями)
+                if len(ptext.strip()) > 15:
+                    to_remove.append(ki)
+        # Удаляем в обратном порядке, чтобы не сбить индексы
+        global_indices = []
+        for ki in to_remove:
+            kid_ref = page_kids[ki]
+            # Находим его индекс в общем списке kids
+            for gi, gk in enumerate(kids):
+                if gk is kid_ref:
+                    global_indices.append(gi)
+                    break
+        for gi in sorted(global_indices, reverse=True):
+            kids.pop(gi)
+            deduped += 1
+
+    if deduped:
+        print(f"  Dedup: removed {deduped} paragraph blocks (duplicate of table rows)",
+              file=sys.stderr, flush=True)
+
+    # --- Заполняем table.content из rows, если content пустой ---
+    filled_tables = 0
+    for k in kids:
+        if k.get('type') == 'table':
+            if not k.get('content', '').strip() and k.get('rows'):
+                parts = []
+                for r in k['rows']:
+                    row_parts = []
+                    for c in r.get('cells', []):
+                        ct = ' '.join(cell_kid.get('content', '') for cell_kid in c.get('kids', []) if cell_kid.get('content', '').strip())
+                        if ct.strip():
+                            row_parts.append(ct.strip())
+                    if row_parts:
+                        parts.append(' | '.join(row_parts))
+                if parts:
+                    k['content'] = ' '.join(parts)
+                    filled_tables += 1
+
+    if filled_tables:
+        print(f"  Filled content for {filled_tables} tables from rows",
+              file=sys.stderr, flush=True)
+
     raw["kids"] = kids
     return raw
 
