@@ -1,4 +1,13 @@
-from convertor_validator_service_lama.models.contracts import DryRunResponse, ExtractPassPlanItem, ExtractPassPlanResponse, RichDocumentArtifactPlanItem, RichDocumentPackagePlanResponse, ParseJobDryRunRequest, ParseJobDryRunResponse, PipelineStep
+from convertor_validator_service_lama.models.contracts import (
+    DryRunResponse,
+    ExtractPassPlanItem,
+    ExtractPassPlanResponse,
+    ParseJobDryRunRequest,
+    ParseJobDryRunResponse,
+    PipelineStep,
+    RichDocumentArtifactPlanItem,
+    RichDocumentPackagePlanResponse,
+)
 
 
 def build_dry_run_response() -> DryRunResponse:
