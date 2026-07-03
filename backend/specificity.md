@@ -15,3 +15,9 @@
 - **registry_creation** шаг падает с 400 из-за несовпадения формата данных между конвертером и create_pipeline_document.
 - **Секции не сохраняются** → Orchestrator не может прочитать sections с ID → RAG Builder не получает данные для индексации.
 - Статус документа после approve остаётся "uploaded" (не доходит до "validating").
+
+## parser_docling
+
+- **Docling StandardPdfPipeline** падает с "Input document is not valid" для PDF с нестандартной структурой (например, 2-020101-174-1.pdf).
+  Fallback через DoclingPdfParser + docling-core работает.
+- **pypdfium2 engine** — быстрый, но даёт один блок на страницу без разбивки на строки.
