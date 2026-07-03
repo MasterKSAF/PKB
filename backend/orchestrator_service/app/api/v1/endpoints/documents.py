@@ -321,6 +321,7 @@ async def reprocess_document(
             total_steps=1,
         )
         task.document_id = int(doc_id) if doc_id.isdigit() else None
+        task.status = "active"
         await db.flush()
     except IntegrityError:
         raise HTTPException(

@@ -672,10 +672,17 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
                 metadata.get('normalized_title') or (title or '').strip().lower()
             )
             
-        # Check if duplicate document already exists
+        # Check if duplicate document already exists (by title_hash)
         existing = db.query(Document).filter(Document.title_hash_sha256 == title_hash).first()
         if existing:
             raise ValueError("DUPLICATE_DOCUMENT")
+            
+        # Check if duplicate by file_hash_sha256 (if hash is non-empty)
+        file_hash_raw = doc_data.get('source', {}).get('file_hash_sha256') if doc_data.get('source') else None
+        if file_hash_raw and file_hash_raw.strip():
+            existing_file = db.query(Document).filter(Document.file_hash_sha256 == file_hash_raw.strip()).first()
+            if existing_file:
+                raise ValueError("DUPLICATE_DOCUMENT")
             
         doc_kwargs = {
             'normalized_title': metadata.get('normalized_title'),
@@ -690,7 +697,7 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
             'status': metadata.get('status', 'uploaded'),
             'jurisdiction': metadata.get('jurisdiction'),
             'issuing_body': metadata.get('issuing_body'),
-            'file_hash_sha256': doc_data.get('source', {}).get('file_hash_sha256') if doc_data.get('source') else None,
+            'file_hash_sha256': file_hash_raw.strip() if file_hash_raw and file_hash_raw.strip() else None,
             'title_hash_sha256': title_hash,
             'created_at': datetime.now(timezone.utc),
             'updated_at': datetime.now(timezone.utc)

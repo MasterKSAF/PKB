@@ -26,12 +26,30 @@ class TaskRepository:
     # ------------------------------------------------------------------
 
     async def count_active_tasks(self) -> int:
-        """Count tasks that are currently active (not in terminal state)."""
+        """Count tasks that have pending/running steps (actually consuming services).
+
+        Tasks in decision stage (all steps completed, waiting for user)
+        do NOT count as active — they don't consume service capacity.
+        A task is considered active iff it has at least one step
+        in 'pending' or 'running' status.
+        """
+        # Subquery: task_ids with pending or running steps
+        active_step_subq = (
+            select(TaskStep.task_id)
+            .where(
+                and_(
+                    TaskStep.status.in_(["pending", "running"]),
+                    TaskStep.deleted_at.is_(None),
+                )
+            )
+        ).scalar_subquery()
+
         result = await self.db.execute(
             select(func.count(Task.id)).where(
                 and_(
                     Task.deleted_at.is_(None),
                     Task.status == TaskStatus.ACTIVE.value,
+                    Task.id.in_(active_step_subq),
                 )
             )
         )
@@ -48,7 +66,7 @@ class TaskRepository:
         task = Task(
             draft_id=draft_id,
             pipeline_type=pipeline_type,
-            status="active",
+            status=TaskStatus.QUEUED.value,
             pipeline_stage=TaskStage.UPLOAD.value,
             priority=priority,
             total_steps=total_steps,

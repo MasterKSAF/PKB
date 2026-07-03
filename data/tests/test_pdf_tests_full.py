@@ -210,12 +210,16 @@ def start_preview_single(pdf_name: str, headers: dict):
 
     try:
         r = requests.post(f"{GW}/drafts/{draft_id}/preview", headers=headers, timeout=30)
-        ok = r.status_code in (200, 202)
+        # 409 = preview already running/completed (auto-started after upload)
+        ok = r.status_code in (200, 202, 409)
         with file_lock:
             fd["stages"]["preview_start"] = "ok" if ok else f"HTTP {r.status_code}"
             fd["preview_started"] = ok
         status = "OK" if ok else f"HTTP {r.status_code}"
-        print(f"  [PreviewStart] {pdf_name:45s} {status}")
+        if r.status_code == 409:
+            print(f"  [PreviewStart] {pdf_name:45s} OK (already started, HTTP 409)")
+        else:
+            print(f"  [PreviewStart] {pdf_name:45s} {status}")
     except Exception as e:
         with file_lock:
             fd["stages"]["preview_start"] = f"error: {e}"

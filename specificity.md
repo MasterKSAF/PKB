@@ -102,21 +102,16 @@ query_service.pipeline.run_pipeline()
 
 **Статус:** не исправлено.
 
-### G8. Pipeline: RAG-индексация не завершается после registry_creation
+### G8. Pipeline: registry_creation падает с `compensations applied`
 
-**Симптом:** шаг `rag_index` висит `pending`, pipeline падает в `failed`.
+**Симптом:** `Pipeline failed at step registry_creation, compensations applied`. 
+6 из 7 PDF (тест `test_pdf_tests_full.py`) падают на этом шаге. Только 1 из 7 (`2-020101-174-19.pdf`) проходит.
 
-**Причина:** дублирующиеся шаги при создании в `approve_draft` (вызов дважды) или при retry/fallback в `on_step_failed`.
+**Причина:** `create_pipeline_document` вызывает `POST /api/v1/registry/documents` с неверным форматом данных — конвертер отдаёт поля не в той структуре, которую ожидает Registry (ожидает `document.metadata.title`, `document.metadata.doc_code`).
 
-**Фикс (27.06):**
-- `approve_draft` — проверка `existing_step_names` перед созданием шагов (не создавать если уже есть)
-- `on_step_failed` — guard: не создавать pending шаг если уже есть pending с тем же step_name
-- `_run_ocr_fallback` — guard: не создавать preview_ocr если уже есть pending
-- `_build_preview_status` — группировка шагов по step_name, взятие лучшего статуса
+**Где:** `backend/orchestrator_service/app/core/pipeline/orchestrator.py` — `_create_registry_document`.
 
-**Где:** `backend/orchestrator_service/app/core/pipeline/orchestrator.py`, `backend/orchestrator_service/app/api/v1/endpoints/drafts.py`.
-
-**Статус:** исправлено.
+**Статус:** не исправлено.
 
 ### G9. base_client.py — mock fallback при ConnectError удалён
 

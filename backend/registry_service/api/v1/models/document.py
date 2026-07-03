@@ -9,10 +9,10 @@ from .base import Base
 class Document(Base):
     __tablename__ = 'documents'
     __table_args__ = (
-        UniqueConstraint('doc_code', 'era', name='uq_documents_doc_code_era'),
-        UniqueConstraint('title_hash_sha256', name='uq_documents_title_hash_sha256'),
-        {'schema': 'registry'}
-    )
+            UniqueConstraint('title_hash_sha256', name='uq_documents_title_hash_sha256'),
+            UniqueConstraint('file_hash_sha256', name='uq_documents_file_hash_sha256'),
+            {'schema': 'registry'}
+        )
 
     id = Column('id', BigInteger, primary_key=True, autoincrement=True)
     doc_code = Column('doc_code', Text, nullable=False)
