@@ -47,6 +47,13 @@ Current endpoints build contracts and payload previews only.
 
 They do not call LlamaParse or LlamaExtract over the network yet.
 
+The service includes a LlamaCloud network boundary for future calls:
+
+- validates that `LAMA_CLOUD_API_KEY` exists before network calls
+- builds authorization headers
+- builds request previews
+- does not execute HTTP requests yet
+
 ## Local usage
 
 Install dependencies:
@@ -77,5 +84,5 @@ http://127.0.0.1:8000/docs
 
 Current local status:
 
-- 13 passed
+- 16 passed
 - 1 warning from FastAPI/TestClient dependency stack
