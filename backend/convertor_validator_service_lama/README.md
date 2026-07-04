@@ -34,6 +34,7 @@ Use `.env.example` as a template for local configuration:
 
 - GET /health
 - GET /dry-run
+- POST /parse-job
 - POST /parse-job/dry-run
 - POST /extract-pass/dry-run
 - POST /extract-passes/dry-run
@@ -41,18 +42,31 @@ Use `.env.example` as a template for local configuration:
 - POST /rich-document-package/dry-run
 - GET /rich-document-package/plan
 
+## LlamaParse REST scope
+
+`POST /parse-job` executes the LlamaParse REST upload/polling flow through `httpx`:
+
+- uploads the source PDF to LlamaCloud
+- starts a parse job
+- polls the parse job until completed, failed, cancelled, or timed out
+- returns the raw parse result artifacts
+
+It does not run LlamaExtract passes yet.
+It does not build `rich_document_package.json` yet.
+
+Normal unit tests use mocked `httpx` transports and do not call LlamaCloud.
+
 ## Dry-run scope
 
-Current endpoints build contracts and payload previews only.
+Dry-run endpoints build contracts and payload previews only.
 
-They do not call LlamaParse or LlamaExtract over the network yet.
+They do not call LlamaParse or LlamaExtract over the network.
 
-The service includes a LlamaCloud network boundary for future calls:
+The service uses a LlamaCloud network boundary for REST integration:
 
-- validates that `LAMA_CLOUD_API_KEY` exists before network calls
+- validates that `LAMA_CLOUD_API_KEY` exists before real network calls
 - builds authorization headers
-- builds request previews
-- does not execute HTTP requests yet
+- keeps request-preview helpers for dry-run/debug flows
 
 ## Local usage
 
@@ -84,5 +98,5 @@ http://127.0.0.1:8000/docs
 
 Current local status:
 
-- 16 passed
+- 29 passed
 - 1 warning from FastAPI/TestClient dependency stack
