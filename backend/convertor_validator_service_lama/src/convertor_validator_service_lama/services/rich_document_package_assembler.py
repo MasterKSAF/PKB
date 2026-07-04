@@ -1,8 +1,20 @@
+from typing import Any
+
 from convertor_validator_service_lama.models.rich_document_package import (
+    RichDocumentBoundary,
+    RichDocumentCrossReference,
+    RichDocumentFormula,
+    RichDocumentImage,
+    RichDocumentNestedDocument,
     RichDocumentPackage,
     RichDocumentPackageArtifact,
     RichDocumentPackageAssemblyRequest,
     RichDocumentPackageAssemblyResult,
+    RichDocumentSection,
+    RichDocumentStructure,
+    RichDocumentTable,
+    RichDocumentTableCell,
+    RichDocumentTableOfContentsItem,
 )
 
 
@@ -68,7 +80,13 @@ def assemble_rich_document_package(
 
     validation_result = request.extract_results.get("validation_critic")
     if validation_result:
-        quality_report = validation_result.result.get("quality_report")
+        validation_content = (
+            validation_result.result
+            if isinstance(validation_result.result, dict)
+            else {}
+        )
+
+        quality_report = validation_content.get("quality_report")
         if quality_report is not None:
             artifacts["quality_report"] = RichDocumentPackageArtifact(
                 artifact_key="quality_report",
@@ -78,7 +96,7 @@ def assemble_rich_document_package(
                 raw_response=validation_result.raw_response,
             )
 
-        correction_proposals = validation_result.result.get("correction_proposals")
+        correction_proposals = validation_content.get("correction_proposals")
         if correction_proposals is not None:
             artifacts["correction_proposals"] = RichDocumentPackageArtifact(
                 artifact_key="correction_proposals",
@@ -88,6 +106,8 @@ def assemble_rich_document_package(
                 raw_response=validation_result.raw_response,
             )
 
+    document_structure = build_document_structure_from_artifacts(artifacts)
+
     package = RichDocumentPackage(
         parse_job_id=parse_result.job_id,
         source_pdf_path=request.source_pdf_path,
@@ -95,9 +115,466 @@ def assemble_rich_document_package(
         parse_result=parse_result,
         extract_results=request.extract_results,
         artifacts=artifacts,
+        document_structure=document_structure,
     )
 
     return RichDocumentPackageAssemblyResult(
         package=package,
         artifact_count=len(artifacts),
     )
+
+
+def build_document_structure_from_artifacts(
+    artifacts: dict[str, RichDocumentPackageArtifact],
+) -> RichDocumentStructure:
+    return RichDocumentStructure(
+        document_boundaries=_build_document_boundaries(
+            artifacts.get("document_boundaries")
+        ),
+        table_of_contents=_build_table_of_contents(
+            artifacts.get("table_of_contents")
+        ),
+        nested_documents=_build_nested_documents(
+            artifacts.get("nested_documents")
+        ),
+        sections=_build_sections(artifacts.get("sections")),
+        tables=_build_tables(artifacts.get("tables")),
+        images=_build_images_from_artifact(artifacts.get("images")),
+        formulas=_build_formulas_from_artifact(artifacts.get("formulas")),
+        cross_references=_build_cross_references(
+            artifacts.get("cross_references")
+        ),
+        quality_report=_build_quality_report(artifacts.get("quality_report")),
+        correction_proposals=_build_correction_proposals(
+            artifacts.get("correction_proposals")
+        ),
+    )
+
+
+def _build_document_boundaries(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentBoundary]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("document_boundaries", "boundaries", "items", "data"),
+    )
+
+    boundaries: list[RichDocumentBoundary] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        boundaries.append(
+            RichDocumentBoundary(
+                boundary_id=_first_str(
+                    row.get("boundary_id"),
+                    row.get("id"),
+                    row.get("uid"),
+                ),
+                boundary_type=_first_str(
+                    row.get("boundary_type"),
+                    row.get("type"),
+                    row.get("kind"),
+                ),
+                title=_first_str(row.get("title"), row.get("name")),
+                page_start=_first_int(row.get("page_start"), row.get("page")),
+                page_end=_first_int(row.get("page_end"), row.get("page")),
+                raw=row,
+            )
+        )
+
+    return boundaries
+
+
+def _build_table_of_contents(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentTableOfContentsItem]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("table_of_contents", "toc", "items", "data"),
+    )
+
+    items: list[RichDocumentTableOfContentsItem] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        title = _first_str(row.get("title"), row.get("heading"), row.get("text"))
+        if title is None:
+            continue
+
+        items.append(
+            RichDocumentTableOfContentsItem(
+                item_id=_first_str(row.get("item_id"), row.get("id"), row.get("uid")),
+                title=title,
+                level=_first_int(row.get("level"), row.get("depth"), fallback=0) or 0,
+                page=_first_int(row.get("page")),
+                path=_first_str(row.get("path"), row.get("section_path")),
+                target_section_id=_first_str(
+                    row.get("target_section_id"),
+                    row.get("section_id"),
+                    row.get("target_id"),
+                ),
+                raw=row,
+            )
+        )
+
+    return items
+
+
+def _build_nested_documents(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentNestedDocument]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("nested_documents", "documents", "items", "data"),
+    )
+
+    documents: list[RichDocumentNestedDocument] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        documents.append(
+            RichDocumentNestedDocument(
+                nested_document_id=_first_str(
+                    row.get("nested_document_id"),
+                    row.get("document_id"),
+                    row.get("id"),
+                    row.get("uid"),
+                ),
+                document_code=_first_str(
+                    row.get("document_code"),
+                    row.get("doc_code"),
+                    row.get("code"),
+                ),
+                title=_first_str(row.get("title"), row.get("name")),
+                page_start=_first_int(row.get("page_start"), row.get("page")),
+                page_end=_first_int(row.get("page_end"), row.get("page")),
+                parent_boundary_id=_first_str(row.get("parent_boundary_id")),
+                raw=row,
+            )
+        )
+
+    return documents
+
+
+def _build_sections(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentSection]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("sections", "items", "data"),
+    )
+
+    sections: list[RichDocumentSection] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        sections.append(
+            RichDocumentSection(
+                section_id=_first_str(
+                    row.get("section_id"),
+                    row.get("id"),
+                    row.get("uid"),
+                    row.get("number"),
+                ),
+                parent_section_id=_first_str(
+                    row.get("parent_section_id"),
+                    row.get("parent_id"),
+                ),
+                clause=_first_str(row.get("clause"), row.get("number")),
+                title=_first_str(row.get("title"), row.get("heading")),
+                level=_first_int(row.get("level"), row.get("depth")),
+                path=_first_str(row.get("path"), row.get("section_path")),
+                page_start=_first_int(row.get("page_start"), row.get("page")),
+                page_end=_first_int(row.get("page_end"), row.get("page")),
+                bbox=_bbox(row.get("bbox")),
+                section_type=_first_str(row.get("section_type"), row.get("type")),
+                content=row.get("content", row.get("text")),
+                raw=row,
+            )
+        )
+
+    return sections
+
+
+def _build_tables(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentTable]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("tables", "items", "data"),
+    )
+
+    tables: list[RichDocumentTable] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        tables.append(
+            RichDocumentTable(
+                table_id=_first_str(row.get("table_id"), row.get("id"), row.get("uid")),
+                caption=_first_str(row.get("caption"), row.get("title")),
+                page=_first_int(row.get("page")),
+                bbox=_bbox(row.get("bbox")),
+                cells=_build_table_cells(row.get("cells")),
+                rows=_list_of_dicts(row.get("rows")),
+                raw=row,
+            )
+        )
+
+    return tables
+
+
+def _build_table_cells(value: Any) -> list[RichDocumentTableCell]:
+    cells: list[RichDocumentTableCell] = []
+
+    for fallback_index, row in enumerate(_list_from_value(value)):
+        if not isinstance(row, dict):
+            continue
+
+        cells.append(
+            RichDocumentTableCell(
+                row_index=_first_int(
+                    row.get("row_index"),
+                    row.get("row"),
+                    fallback=0,
+                ) or 0,
+                column_index=_first_int(
+                    row.get("column_index"),
+                    row.get("column"),
+                    fallback=fallback_index,
+                ) or fallback_index,
+                text=_first_str(row.get("text"), row.get("content")),
+                markdown=_first_str(row.get("markdown"), row.get("md")),
+                images=_build_images_from_rows(_list_from_value(row.get("images"))),
+                formulas=_build_formulas_from_rows(_list_from_value(row.get("formulas"))),
+                raw=row,
+            )
+        )
+
+    return cells
+
+
+def _build_images_from_artifact(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentImage]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("images", "figures", "items", "data"),
+    )
+
+    return _build_images_from_rows(rows)
+
+
+def _build_images_from_rows(rows: list[Any]) -> list[RichDocumentImage]:
+    images: list[RichDocumentImage] = []
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        images.append(
+            RichDocumentImage(
+                image_id=_first_str(
+                    row.get("image_id"),
+                    row.get("figure_id"),
+                    row.get("id"),
+                    row.get("uid"),
+                ),
+                caption=_first_str(row.get("caption"), row.get("title")),
+                alt_text=_first_str(row.get("alt_text"), row.get("description")),
+                page=_first_int(row.get("page")),
+                bbox=_bbox(row.get("bbox")),
+                storage_uri=_first_str(
+                    row.get("storage_uri"),
+                    row.get("uri"),
+                    row.get("url"),
+                ),
+                raw=row,
+            )
+        )
+
+    return images
+
+
+def _build_formulas_from_artifact(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentFormula]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("formulas", "items", "data"),
+    )
+
+    return _build_formulas_from_rows(rows)
+
+
+def _build_formulas_from_rows(rows: list[Any]) -> list[RichDocumentFormula]:
+    formulas: list[RichDocumentFormula] = []
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        formulas.append(
+            RichDocumentFormula(
+                formula_id=_first_str(
+                    row.get("formula_id"),
+                    row.get("id"),
+                    row.get("uid"),
+                ),
+                expression=_first_str(row.get("expression"), row.get("text")),
+                latex=_first_str(row.get("latex")),
+                page=_first_int(row.get("page")),
+                bbox=_bbox(row.get("bbox")),
+                parameters=_list_of_dicts(row.get("parameters")),
+                raw=row,
+            )
+        )
+
+    return formulas
+
+
+def _build_cross_references(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentCrossReference]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("cross_references", "references", "items", "data"),
+    )
+
+    references: list[RichDocumentCrossReference] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        references.append(
+            RichDocumentCrossReference(
+                reference_id=_first_str(row.get("reference_id"), row.get("id"), row.get("uid")),
+                source_id=_first_str(row.get("source_id"), row.get("source")),
+                target_id=_first_str(row.get("target_id"), row.get("target")),
+                target_document_code=_first_str(
+                    row.get("target_document_code"),
+                    row.get("target_doc_code"),
+                    row.get("doc_code"),
+                ),
+                reference_type=_first_str(
+                    row.get("reference_type"),
+                    row.get("type"),
+                    row.get("kind"),
+                ),
+                context=_first_str(row.get("context")),
+                note=_first_str(row.get("note")),
+                raw=row,
+            )
+        )
+
+    return references
+
+
+def _build_quality_report(
+    artifact: RichDocumentPackageArtifact | None,
+) -> dict[str, Any] | None:
+    if artifact is None:
+        return None
+
+    content = artifact.content
+    if isinstance(content, dict):
+        return content
+
+    return {"value": content}
+
+
+def _build_correction_proposals(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[dict[str, Any]]:
+    if artifact is None:
+        return []
+
+    content = artifact.content
+    if isinstance(content, list):
+        return [row for row in content if isinstance(row, dict)]
+
+    if isinstance(content, dict):
+        return [content]
+
+    return []
+
+
+def _artifact_content_as_list(
+    artifact: RichDocumentPackageArtifact | None,
+    preferred_keys: tuple[str, ...],
+) -> list[Any]:
+    if artifact is None:
+        return []
+
+    return _content_as_list(artifact.content, preferred_keys)
+
+
+def _content_as_list(
+    content: Any,
+    preferred_keys: tuple[str, ...],
+) -> list[Any]:
+    if isinstance(content, list):
+        return content
+
+    if isinstance(content, dict):
+        for key in preferred_keys:
+            value = content.get(key)
+            if isinstance(value, list):
+                return value
+
+    return []
+
+
+def _list_from_value(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+
+    return []
+
+
+def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
+    return [row for row in _list_from_value(value) if isinstance(row, dict)]
+
+
+def _bbox(value: Any) -> list[float] | None:
+    if not isinstance(value, list):
+        return None
+
+    result: list[float] = []
+    for item in value:
+        if isinstance(item, bool):
+            return None
+
+        if isinstance(item, (int, float)):
+            result.append(float(item))
+            continue
+
+        return None
+
+    return result
+
+
+def _first_str(*values: Any) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    return None
+
+
+def _first_int(*values: Any, fallback: int | None = None) -> int | None:
+    for value in values:
+        if isinstance(value, bool):
+            continue
+
+        if isinstance(value, int):
+            return value
+
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+
+    return fallback
