@@ -1,6 +1,10 @@
+from collections.abc import Sequence
+
 from convertor_validator_service_lama.clients.llama_extract_client import LlamaExtractClient
 from convertor_validator_service_lama.clients.llama_parse_client import LlamaParseClient
+from convertor_validator_service_lama.clients.llama_parse_rest_client import LlamaParseRestClient
 from convertor_validator_service_lama.core.settings import get_settings
+from convertor_validator_service_lama.models.parse_job import ParseJobPollingConfig, ParseJobResult
 from convertor_validator_service_lama.models.contracts import (
     DryRunResponse,
     ExtractPassPlanItem,
@@ -122,3 +126,24 @@ def build_rich_document_package_plan_response() -> RichDocumentPackagePlanRespon
         RichDocumentArtifactPlanItem(artifact_key="correction_proposals", produced_by="python_validator_critic", source="python_validator")
     ]
     return RichDocumentPackagePlanResponse(artifacts=artifacts)
+
+def run_parse_job_with_polling(
+    source_pdf_path: str,
+    expand: Sequence[str] | None = None,
+    polling_config: ParseJobPollingConfig | None = None,
+    client: LlamaParseRestClient | None = None,
+) -> ParseJobResult:
+    parse_client = client or LlamaParseRestClient(get_settings())
+    should_close_client = client is None
+
+    try:
+        file_id = parse_client.upload_file(source_pdf_path)
+        submit_response = parse_client.start_parse_job(file_id=file_id)
+        return parse_client.poll_parse_job(
+            job_id=submit_response.job_id,
+            expand=expand,
+            config=polling_config,
+        )
+    finally:
+        if should_close_client:
+            parse_client.close()

@@ -1,5 +1,12 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
+from convertor_validator_service_lama.clients.llama_cloud_boundary import MissingLlamaCloudApiKeyError
+from convertor_validator_service_lama.clients.llama_parse_rest_client import (
+    LlamaParseJobFailedError,
+    LlamaParsePollingTimeoutError,
+    LlamaParseResponseError,
+)
+from convertor_validator_service_lama.models.parse_job import ParseJobPollingConfig, ParseJobResult
 from convertor_validator_service_lama.models.contracts import (
     DryRunResponse,
     ExtractPassDryRunRequest,
@@ -10,6 +17,7 @@ from convertor_validator_service_lama.models.contracts import (
     HealthResponse,
     ParseJobDryRunRequest,
     ParseJobDryRunResponse,
+    ParseJobRequest,
     RichDocumentPackageDryRunRequest,
     RichDocumentPackageDryRunResponse,
     RichDocumentPackagePlanResponse,
@@ -22,6 +30,7 @@ from convertor_validator_service_lama.services.lama_validator_service import (
     build_parse_job_dry_run_response,
     build_rich_document_package_dry_run_response,
     build_rich_document_package_plan_response,
+    run_parse_job_with_polling,
 )
 
 
@@ -44,6 +53,31 @@ def dry_run() -> DryRunResponse:
 @app.post("/parse-job/dry-run", response_model=ParseJobDryRunResponse)
 def parse_job_dry_run(request: ParseJobDryRunRequest) -> ParseJobDryRunResponse:
     return build_parse_job_dry_run_response(request)
+
+
+@app.post("/parse-job", response_model=ParseJobResult)
+def parse_job(request: ParseJobRequest) -> ParseJobResult:
+    polling_config = ParseJobPollingConfig(
+        max_attempts=request.max_attempts,
+        interval_seconds=request.interval_seconds,
+    )
+
+    try:
+        return run_parse_job_with_polling(
+            source_pdf_path=request.source_pdf_path,
+            expand=request.expand,
+            polling_config=polling_config,
+        )
+    except MissingLlamaCloudApiKeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Source PDF was not found: {exc}") from exc
+    except LlamaParsePollingTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except LlamaParseJobFailedError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except LlamaParseResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/extract-pass/dry-run", response_model=ExtractPassDryRunResponse)

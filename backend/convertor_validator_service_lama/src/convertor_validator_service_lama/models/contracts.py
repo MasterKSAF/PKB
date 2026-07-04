@@ -37,6 +37,13 @@ class ParseJobDryRunResponse(BaseModel):
     parse_payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class ParseJobRequest(BaseModel):
+    source_pdf_path: str
+    expand: list[str] = Field(default_factory=lambda: ["markdown", "items", "metadata", "job_metadata"])
+    max_attempts: int = Field(default=60, ge=1)
+    interval_seconds: float = Field(default=2.0, ge=0.0)
+
+
 LlamaExtractPassName = Literal[
     "document_boundaries",
     "title_metadata",
