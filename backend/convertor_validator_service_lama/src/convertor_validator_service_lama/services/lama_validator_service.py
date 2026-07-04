@@ -13,6 +13,8 @@ from convertor_validator_service_lama.models.contracts import (
     ParseJobDryRunResponse,
     PipelineStep,
     RichDocumentArtifactPlanItem,
+    RichDocumentPackageDryRunRequest,
+    RichDocumentPackageDryRunResponse,
     RichDocumentPackagePlanResponse,
 )
 
@@ -82,6 +84,26 @@ def build_extract_pass_plan_response() -> ExtractPassPlanResponse:
         ExtractPassPlanItem(name="validation_critic", output_key="validation_critic")
     ]
     return ExtractPassPlanResponse(passes=passes)
+
+
+def build_rich_document_package_dry_run_response(
+    request: RichDocumentPackageDryRunRequest,
+) -> RichDocumentPackageDryRunResponse:
+    parse_request = ParseJobDryRunRequest(
+        source_pdf_path=request.source_pdf_path,
+        document_code=request.document_code,
+    )
+    parse_response = build_parse_job_dry_run_response(parse_request)
+    extract_request = ExtractPassesDryRunRequest(
+        parse_job_id=parse_response.expected_parse_job_id,
+    )
+    extract_response = build_extract_passes_dry_run_response(extract_request)
+    return RichDocumentPackageDryRunResponse(
+        source_pdf_path=request.source_pdf_path,
+        parse_job_id=parse_response.expected_parse_job_id,
+        parse_payload=parse_response.parse_payload,
+        extract_payloads=extract_response.extract_payloads,
+    )
 
 
 def build_rich_document_package_plan_response() -> RichDocumentPackagePlanResponse:

@@ -10,6 +10,8 @@ from convertor_validator_service_lama.models.contracts import (
     HealthResponse,
     ParseJobDryRunRequest,
     ParseJobDryRunResponse,
+    RichDocumentPackageDryRunRequest,
+    RichDocumentPackageDryRunResponse,
     RichDocumentPackagePlanResponse,
 )
 from convertor_validator_service_lama.services.lama_validator_service import (
@@ -18,6 +20,7 @@ from convertor_validator_service_lama.services.lama_validator_service import (
     build_extract_passes_dry_run_response,
     build_extract_pass_plan_response,
     build_parse_job_dry_run_response,
+    build_rich_document_package_dry_run_response,
     build_rich_document_package_plan_response,
 )
 
@@ -56,6 +59,11 @@ def extract_passes_dry_run(request: ExtractPassesDryRunRequest) -> ExtractPasses
 @app.get("/extract-passes/plan", response_model=ExtractPassPlanResponse)
 def extract_passes_plan() -> ExtractPassPlanResponse:
     return build_extract_pass_plan_response()
+
+
+@app.post("/rich-document-package/dry-run", response_model=RichDocumentPackageDryRunResponse)
+def rich_document_package_dry_run(request: RichDocumentPackageDryRunRequest) -> RichDocumentPackageDryRunResponse:
+    return build_rich_document_package_dry_run_response(request)
 
 
 @app.get("/rich-document-package/plan", response_model=RichDocumentPackagePlanResponse)

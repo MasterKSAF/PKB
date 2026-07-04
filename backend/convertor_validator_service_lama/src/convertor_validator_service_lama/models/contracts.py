@@ -87,6 +87,22 @@ class ExtractPassesDryRunResponse(BaseModel):
     extract_payloads: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class RichDocumentPackageDryRunRequest(BaseModel):
+    source_pdf_path: str
+    document_code: str | None = None
+
+
+class RichDocumentPackageDryRunResponse(BaseModel):
+    service: str = "convertor_validator_service_lama"
+    mode: Literal["rich_document_package_dry_run"] = "rich_document_package_dry_run"
+    package_name: str = "rich_document_package.json"
+    source_pdf_path: str
+    parse_job_id: str = "dry-run-parse-job-id"
+    parse_payload: dict[str, Any] = Field(default_factory=dict)
+    extract_payloads: list[dict[str, Any]] = Field(default_factory=list)
+    final_correction_policy: str = "python_validator_assembler_applies_final_corrections"
+
+
 class RichDocumentArtifactPlanItem(BaseModel):
     artifact_key: str
     produced_by: str

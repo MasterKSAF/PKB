@@ -108,6 +108,26 @@ def test_extract_passes_plan_uses_parse_job_id() -> None:
     assert all(item["uses_parse_job_id"] is True for item in data["passes"])
 
 
+def test_rich_document_package_dry_run_returns_package_preview() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/rich-document-package/dry-run",
+        json={"source_pdf_path": "D:/tmp/source.pdf", "document_code": "GOST-TEST"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mode"] == "rich_document_package_dry_run"
+    assert data["package_name"] == "rich_document_package.json"
+    assert data["source_pdf_path"] == "D:/tmp/source.pdf"
+    assert data["parse_job_id"] == "dry-run-parse-job-id"
+    assert data["parse_payload"]["source_pdf_path"] == "D:/tmp/source.pdf"
+    assert len(data["extract_payloads"]) == 9
+    assert data["extract_payloads"][0]["pass_name"] == "document_boundaries"
+    assert data["extract_payloads"][-1]["pass_name"] == "validation_critic"
+    assert data["final_correction_policy"] == "python_validator_assembler_applies_final_corrections"
+
+
 def test_rich_document_package_plan_keeps_final_corrections_in_python() -> None:
     client = TestClient(app)
     response = client.get("/rich-document-package/plan")
