@@ -78,11 +78,11 @@ def test_start_parse_job_posts_file_id_and_returns_job_id() -> None:
     }
 
 
-def test_get_parse_job_returns_completed_result_with_artifacts() -> None:
+def test_get_parse_job_returns_completed_result_with_v2_page_artifacts() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "GET"
         assert request.url.path == "/api/v2/parse/job-123"
-        assert request.url.params["expand"] == "markdown,items,metadata"
+        assert request.url.params["expand"] == "markdown,markdown_full,text,text_full,items,metadata,job_metadata"
         assert request.headers["Authorization"] == "Bearer test-key"
 
         return httpx.Response(
@@ -93,9 +93,30 @@ def test_get_parse_job_returns_completed_result_with_artifacts() -> None:
                     "status": "COMPLETED",
                 },
                 "markdown_full": "# Parsed document",
-                "items": [{"type": "text", "value": "Parsed document"}],
-                "metadata": {"page_count": 1},
-                "job_metadata": {"source": "test"},
+                "text_full": "Parsed document",
+                "items": {
+                    "pages": [
+                        {
+                            "page_number": 1,
+                            "page_width": 612,
+                            "page_height": 792,
+                            "items": [
+                                {
+                                    "type": "heading",
+                                    "md": "# Parsed document",
+                                    "value": "Parsed document",
+                                },
+                                {
+                                    "type": "text",
+                                    "md": "Body",
+                                    "value": "Body",
+                                },
+                            ],
+                        }
+                    ]
+                },
+                "metadata": {"pages": [{"page": 1}]},
+                "job_metadata": {"pdf-pages": 1},
             },
         )
 
@@ -104,15 +125,32 @@ def test_get_parse_job_returns_completed_result_with_artifacts() -> None:
 
     result = client.get_parse_job(
         job_id="job-123",
-        expand=["markdown", "items", "metadata"],
+        expand=["markdown", "markdown_full", "text", "text_full", "items", "metadata", "job_metadata"],
     )
 
     assert result.job_id == "job-123"
     assert result.status == ParseJobStatus.completed
     assert result.markdown == "# Parsed document"
-    assert result.items == [{"type": "text", "value": "Parsed document"}]
-    assert result.metadata == {"page_count": 1}
-    assert result.job_metadata == {"source": "test"}
+    assert result.items == [
+        {
+            "type": "heading",
+            "md": "# Parsed document",
+            "value": "Parsed document",
+            "page_number": 1,
+            "page_width": 612,
+            "page_height": 792,
+        },
+        {
+            "type": "text",
+            "md": "Body",
+            "value": "Body",
+            "page_number": 1,
+            "page_width": 612,
+            "page_height": 792,
+        },
+    ]
+    assert result.metadata == {"pages": [{"page": 1}]}
+    assert result.job_metadata == {"pdf-pages": 1}
 
 
 def test_poll_parse_job_waits_until_completed() -> None:
