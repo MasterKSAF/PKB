@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     cloud_api_key: str | None = None
     parse_base_url: str = "https://api.cloud.llamaindex.ai"
     extract_base_url: str = "https://api.cloud.llamaindex.ai"
+    extract_project_id: str | None = None
     parse_result_format: Literal["markdown", "json"] = "markdown"
 
     model_config = SettingsConfigDict(
