@@ -21,6 +21,7 @@ type Citation = {
   text: string;
   version: string;
   documentUrl?: string;
+  pagePreviewUrl?: string;
 };
 
 interface SourcePreviewDialogProps {
@@ -32,8 +33,11 @@ interface SourcePreviewDialogProps {
 export const SourcePreviewDialog: React.FC<SourcePreviewDialogProps> = ({ open, onClose, citation }) => {
   if (!citation) return null;
 
+  const hasImage = Boolean(citation.pagePreviewUrl);
+  const hasDocument = Boolean(citation.documentUrl);
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>Просмотр источника</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2}>
@@ -50,11 +54,53 @@ export const SourcePreviewDialog: React.FC<SourcePreviewDialogProps> = ({ open, 
             <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
               <Chip label={`Стр. ${citation.page}`} variant="outlined" />
               <Chip label={citation.version} variant="outlined" />
+              {hasDocument && <Chip label="PDF" variant="outlined" color="primary" size="small" />}
             </Stack>
           </Stack>
 
           <Divider />
 
+          {/* Изображение страницы (если доступно) */}
+          {hasImage && (
+            <Box
+              sx={{
+                borderRadius: 2,
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex',
+                justifyContent: 'center',
+                bgcolor: '#fff',
+                maxHeight: '65vh',
+              }}
+            >
+              <img
+                src={citation.pagePreviewUrl}
+                alt={`Страница ${citation.page} документа`}
+                style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain' }}
+              />
+            </Box>
+          )}
+
+          {/* PDF через iframe (если нет изображения, но есть URL документа) */}
+          {!hasImage && hasDocument && (
+            <Box
+              sx={{
+                borderRadius: 2,
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.08)',
+                bgcolor: '#fff',
+                height: '65vh',
+              }}
+            >
+              <iframe
+                src={citation.documentUrl}
+                title="PDF документ"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            </Box>
+          )}
+
+          {/* Текст (показываем всегда) */}
           <Box
             sx={{
               border: '1px solid',
@@ -68,7 +114,7 @@ export const SourcePreviewDialog: React.FC<SourcePreviewDialogProps> = ({ open, 
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <FileText size={18} />
                 <Typography variant="subtitle2" color="primary">
-                  Пример страницы источника
+                  {hasImage || hasDocument ? 'Текст фрагмента' : 'Пример страницы источника'}
                 </Typography>
               </Stack>
 
@@ -78,7 +124,7 @@ export const SourcePreviewDialog: React.FC<SourcePreviewDialogProps> = ({ open, 
                   border: '1px solid rgba(255,255,255,0.08)',
                   bgcolor: '#0f1217',
                   p: 3,
-                  minHeight: 280,
+                  minHeight: 160,
                 }}
               >
                 <Typography variant="caption" color="text.secondary">
@@ -101,18 +147,15 @@ export const SourcePreviewDialog: React.FC<SourcePreviewDialogProps> = ({ open, 
         <Button onClick={onClose}>Закрыть</Button>
         <Button
           variant="contained"
-          endIcon={<Externa          Открыть документ
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
-open(citation.documentUrl, '_blank', 'noopener,noreferrer');
+          endIcon={<ExternalLink size={16} />}
+          onClick={() => {
+            if (citation.documentUrl) {
+              window.open(citation.documentUrl, '_blank', 'noopener,noreferrer');
             }
           }}
           disabled={!citation.documentUrl}
         >
-          Открыть документ
+          Открыть PDF
         </Button>
       </DialogActions>
     </Dialog>

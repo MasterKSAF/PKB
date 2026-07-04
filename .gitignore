@@ -68,3 +68,7 @@ agent-manager.json
 kilo.jsonc
 /opencode.json
 /logs
+
+# Codegraph index (build artifact)
+.codegraph/
+**/.codegraph/

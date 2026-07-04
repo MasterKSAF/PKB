@@ -40,7 +40,13 @@ type SectionDocument = Document & {
 };
 type DocumentSort = 'updated_desc' | 'name_asc' | 'type_asc';
 type SearchScope = 'all' | 'current' | `section:${string}`;
-type PreviewPage = { title: string; lines: string[] };
+type PreviewPage = {
+  title: string;
+  lines: string[];
+  imageUrl?: string;
+  documentUrl?: string;
+  pageNumber?: number;
+};
 
 const PANEL_SX = {
   bgcolor: 'rgba(22, 23, 27, 0.72)',
@@ -95,8 +101,25 @@ const extractRegistrySectionLines = (payload?: any): string[] => {
     .filter(Boolean);
 };
 
-const buildDocumentPreviewText = (doc: Document, citation?: Citation | null, registrySectionLines: string[] = []) =>
-  [
+const buildDocumentPreviewText = (doc: Document, citation?: Citation | null, registrySectionLines: string[] = []) => {
+  // Если есть реальное содержимое документа от API — показываем его
+  const hasRealContent = Boolean(citation?.documentUrl && citation?.text && citation.text.length > 50);
+
+  if (hasRealContent) {
+    return [
+      doc.name,
+      `Источник: ${citation!.documentUrl}`,
+      '',
+      citation!.text,
+      '',
+      registrySectionLines.length ? `---\nСекции Registry:\n${registrySectionLines.join('\n\n')}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  // Fallback: метаданные (когда API не вернул содержимое)
+  return [
     doc.name,
     `ID: ${doc.id}`,
     `Тип: ${doc.type}`,
@@ -108,13 +131,71 @@ const buildDocumentPreviewText = (doc: Document, citation?: Citation | null, reg
     citation?.documentUrl ? `Ссылка на файл: ${citation.documentUrl}` : '',
     '',
     registrySectionLines.length ? `Секции Registry:\n${registrySectionLines.join('\n\n')}` : '',
-    registrySectionLines.length ? '' : '',
     citation?.text ?? 'Карточка документа отображается из UI, пока источник предпросмотра не получен.',
   ]
     .filter(Boolean)
     .join('\n');
+};
 
 const buildPreviewPages = (doc: Document, citation?: Citation | null, registrySectionLines: string[] = []): PreviewPage[] => {
+  // Если API вернул реальное содержимое — показываем документ
+  const hasRealContent = Boolean(citation?.documentUrl && citation?.text && citation.text.length > 50);
+
+  if (hasRealContent) {
+    const pages: PreviewPage[] = [];
+    let pageNum = 0;
+
+    // Страница 1: изображение страницы (если доступно)
+    if (citation!.pagePreviewUrl) {
+      pageNum++;
+      pages.push({
+        title: 'Изображение страницы',
+        lines: [],
+        imageUrl: citation!.pagePreviewUrl,
+        pageNumber: pageNum,
+      });
+    }
+
+    // Страницы текста: разбиваем на части по ~80 строк для удобной навигации
+    if (citation!.text) {
+      const textLines = citation!.text.split('\n');
+      const LINES_PER_PAGE = 80;
+      for (let i = 0; i < textLines.length; i += LINES_PER_PAGE) {
+        pageNum++;
+        const chunk = textLines.slice(i, i + LINES_PER_PAGE);
+        pages.push({
+          title: `Текст документа · часть ${Math.ceil((i + 1) / LINES_PER_PAGE)}`,
+          lines: chunk.filter(Boolean),
+          pageNumber: pageNum,
+        });
+      }
+    }
+
+    // Если URL на PDF — страница с ссылкой/iframe
+    if (citation!.documentUrl) {
+      pageNum++;
+      pages.push({
+        title: 'Исходный PDF',
+        lines: [`Исходный файл: ${citation!.documentUrl}`],
+        documentUrl: citation!.documentUrl,
+        pageNumber: pageNum,
+      });
+    }
+
+    // Секции Registry (если есть)
+    if (registrySectionLines.length) {
+      pageNum++;
+      pages.push({
+        title: 'Секции Registry',
+        lines: registrySectionLines,
+        pageNumber: pageNum,
+      });
+    }
+
+    return pages;
+  }
+
+  // Fallback: метаданные (когда нет данных от API)
   const pages: PreviewPage[] = [
     {
       title: 'Краткий срез',
@@ -472,16 +553,31 @@ export const KnowledgeBase: React.FC = () => {
     if (workMode !== 'prod') return;
 
     try {
+      // 1. Получаем данные документа (текст + file_key для PDF)
       const citation = await sourceApi.preview(baseCitation, 'document');
+
+      // 2. Дополнительно запрашиваем превью первой страницы (image_key для картинки)
+      let pagePreviewUrl: string | undefined;
+      try {
+        const pagePreview = await sourceApi.preview(
+          { ...baseCitation, page: 1, text: '' },
+          'source',
+        );
+        pagePreviewUrl = pagePreview.pagePreviewUrl;
+      } catch {
+        // Превью страницы может быть недоступно — не фатально
+      }
+
       setPreviewCitation({
         ...citation,
+        pagePreviewUrl: pagePreviewUrl || citation.pagePreviewUrl,
         text:
           initialCitation?.text && !citation.text.includes(initialCitation.text)
             ? `${initialCitation.text}\n\n${citation.text}`
             : citation.text,
       });
 
-      if (!citation.documentUrl) {
+      if (!citation.documentUrl && !pagePreviewUrl) {
         setPreviewError('Источник не вернул ссылку на файл. Показываем карточку документа из UI.');
       }
     } catch {
@@ -987,11 +1083,41 @@ export const KnowledgeBase: React.FC = () => {
                               {selectedDocument.name}
                             </Typography>
 
+                            {/* Показываем изображение страницы, если доступно */}
+                            {previewCitation?.pagePreviewUrl && (
+                              <Box
+                                sx={{
+                                  borderRadius: 1.5,
+                                  overflow: 'hidden',
+                                  border: '1px solid rgba(0,0,0,0.08)',
+                                  maxHeight: 400,
+                                  display: 'flex',
+                                  justifyContent: 'center',
+                                  bgcolor: '#fff',
+                                }}
+                              >
+                                <img
+                                  src={previewCitation.pagePreviewUrl}
+                                  alt="Предпросмотр страницы"
+                                  style={{ maxWidth: '100%', maxHeight: 400, objectFit: 'contain' }}
+                                />
+                              </Box>
+                            )}
+
                             <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
                               {renderHighlightedText(selectedDocumentPreviewText, previewDocumentSearch, isLight)}
                             </Typography>
 
-                            <Stack direction="row" sx={{ justifyContent: 'center', pt: 0.6 }}>
+                            <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', pt: 0.6, flexWrap: 'wrap' }}>
+                              {previewCitation?.documentUrl && (
+                                <Button
+                                  variant="contained"
+                                  startIcon={<FileText size={16} />}
+                                  onClick={() => window.open(previewCitation.documentUrl, '_blank', 'noopener,noreferrer')}
+                                >
+                                  Открыть PDF
+                                </Button>
+                              )}
                               <Button variant="outlined" startIcon={<Maximize2 size={16} />} onClick={() => setPreviewDialogOpen(true)}>
                                 Развернуть документ
                               </Button>
@@ -1204,9 +1330,52 @@ export const KnowledgeBase: React.FC = () => {
                         {selectedDocument?.name}
                       </Typography>
                     </Box>
-                    <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                      {renderHighlightedText(currentPreviewPage.lines.join('\n'), previewDocumentSearch, isLight)}
-                    </Typography>
+
+                    {/* Изображение страницы */}
+                    {currentPreviewPage.imageUrl && (
+                      <Box
+                        sx={{
+                          borderRadius: 1.5,
+                          overflow: 'hidden',
+                          border: '1px solid rgba(0,0,0,0.08)',
+                          display: 'flex',
+                          justifyContent: 'center',
+                          bgcolor: '#fff',
+                        }}
+                      >
+                        <img
+                          src={currentPreviewPage.imageUrl}
+                          alt={`Страница ${currentPreviewPage.pageNumber ?? ''}`}
+                          style={{ maxWidth: '100%', objectFit: 'contain' }}
+                        />
+                      </Box>
+                    )}
+
+                    {/* PDF через iframe */}
+                    {currentPreviewPage.documentUrl && !currentPreviewPage.imageUrl && (
+                      <Box
+                        sx={{
+                          borderRadius: 1.5,
+                          overflow: 'hidden',
+                          border: '1px solid rgba(0,0,0,0.08)',
+                          bgcolor: '#fff',
+                          height: '70vh',
+                        }}
+                      >
+                        <iframe
+                          src={currentPreviewPage.documentUrl}
+                          title="PDF документ"
+                          style={{ width: '100%', height: '100%', border: 'none' }}
+                        />
+                      </Box>
+                    )}
+
+                    {/* Текст */}
+                    {!currentPreviewPage.imageUrl && !currentPreviewPage.documentUrl && (
+                      <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
+                        {renderHighlightedText(currentPreviewPage.lines.join('\n'), previewDocumentSearch, isLight)}
+                      </Typography>
+                    )}
                   </Stack>
                 )}
               </Paper>
@@ -1224,9 +1393,16 @@ export const KnowledgeBase: React.FC = () => {
                 >
                   Назад
                 </Button>
-                <Typography variant="caption" color="text.secondary">
-                  Страница {previewPageIndex + 1} из {previewPages.length}
-                </Typography>
+                <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {currentPreviewPage?.imageUrl
+                      ? `Изображение страницы${previewPages.length > 1 ? ` · ${previewPageIndex + 1} из ${previewPages.length}` : ''}`
+                      : currentPreviewPage?.documentUrl
+                        ? 'Исходный PDF'
+                        : `Страница ${previewPageIndex + 1} из ${previewPages.length}`
+                    }
+                  </Typography>
+                </Stack>
                 <Button
                   variant="outlined"
                   endIcon={<ChevronRight size={16} />}
@@ -1240,12 +1416,21 @@ export const KnowledgeBase: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
+          {previewCitation?.documentUrl && (
+            <Button
+              variant="contained"
+              startIcon={<FileText size={16} />}
+              onClick={() => window.open(previewCitation.documentUrl, '_blank', 'noopener,noreferrer')}
+            >
+              Открыть PDF
+            </Button>
+          )}
           {selectedDocument && (
             <Button
               startIcon={<Download size={16} />}
               onClick={() => downloadPreviewFile(selectedDocument.name, selectedDocumentPreviewText, 'txt')}
             >
-              Скачать
+              Скачать текст
             </Button>
           )}
           <Button onClick={() => setPreviewDialogOpen(false)}>Закрыть</Button>
