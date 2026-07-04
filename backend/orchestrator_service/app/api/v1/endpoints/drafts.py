@@ -619,19 +619,18 @@ async def get_draft_preview(
         return DraftPreviewResponse(
             draft_id=draft_id,
             preview=PreviewMetadata(
-                doc_code=data.get("doc_code"),
                 title=data.get("title"),
-                document_type=data.get("document_type"),
+                doc_code=data.get("doc_code"),
                 source_type=data.get("source_type"),
                 year=data.get("year"),
-                revision=data.get("revision"),
                 era=data.get("era"),
                 jurisdiction=data.get("jurisdiction"),
-                mks_oks_code=data.get("mks_oks_code"),
-                okstu_code=data.get("okstu_code"),
                 issuing_body=data.get("issuing_body"),
-                udk_code=data.get("udk_code"),
             ),
+            preview_not_supported=data.get("preview_not_supported", True),
+            total_pages=data.get("total_pages", 0),
+            processed_pages=data.get("processed_pages", 0),
+            preview_md=data.get("preview_md"),
         )
     except HTTPException:
         raise

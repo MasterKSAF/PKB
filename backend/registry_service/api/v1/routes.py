@@ -2165,22 +2165,48 @@ def get_draft(draft_id: int, db: Session = Depends(get_db)):
 
 @routes.get('/registry/drafts/{draft_id}/preview')
 def get_draft_preview(draft_id: int, db: Session = Depends(get_db)):
-    """GET /registry/drafts/{draft_id}/preview - Preview-метаданные"""
+    """GET /registry/drafts/{draft_id}/preview - Preview: метаданные + первые 3 страницы в MD"""
     log_event('INFO', f'/registry/drafts/{draft_id}/preview', None, None)
     try:
         draft = draft_crud.get_draft_by_id(db, draft_id)
         if not draft:
             raise HTTPException(status_code=404, detail={'error': {'code': 'DRAFT_NOT_FOUND', 'message': 'Draft not found'}})
-        
-        data = DraftSchema.model_validate(draft).model_dump(mode='json', by_alias=True, exclude_none=True)
-        data.pop('raw_data', None)
-        data.pop('document_key', None)
-        data.pop('error_code', None)
-        data.pop('error_message', None)
-        data.pop('updated_by', None)
-        data.pop('updated_at', None)
-        data.pop('created_by', None)
-        
+
+        # Preview-метаданные (только читаемые пользователю)
+        pm = draft.preview_metadata or {}
+        total_pages = 0
+        preview_md = None
+        preview_not_supported = True
+
+        raw_data = draft.raw_data or {}
+        doc = raw_data.get('document', {})
+        pages_list = doc.get('pages', [])
+        total_pages = len(pages_list) or doc.get('source', {}).get('page_count', 0)
+
+        if raw_data and doc.get('block'):
+            preview_not_supported = False
+            # Берём блоки первых 3 страниц
+            all_blocks = doc.get('block', [])
+            preview_page_nums = sorted(set(b.get('page') for b in all_blocks if b.get('page')))[:3]
+            preview_blocks = [b for b in all_blocks if b.get('page') in preview_page_nums]
+            if preview_blocks:
+                preview_md = draft_crud.draft_blocks_to_markdown(preview_blocks)
+
+        data = {
+            'draft_id': draft.draft_id,
+            'title': pm.get('title') or draft.original_filename,
+            'doc_code': pm.get('doc_code'),
+            'source_type': pm.get('source_type'),
+            'year': pm.get('year'),
+            'era': pm.get('era'),
+            'jurisdiction': pm.get('jurisdiction'),
+            'issuing_body': pm.get('issuing_body'),
+            'preview_not_supported': preview_not_supported,
+            'total_pages': total_pages,
+            'processed_pages': min(total_pages, 3) if not preview_not_supported else 0,
+            'preview_md': preview_md,
+        }
+
         return {'data': data}
     except HTTPException:
         raise

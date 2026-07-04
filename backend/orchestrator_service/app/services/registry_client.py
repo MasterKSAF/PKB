@@ -818,21 +818,24 @@ class RegistryServiceClient(ServiceClient):
         )
 
     async def get_draft_preview(self, draft_id: int) -> dict:
-        """Get preview metadata for a draft."""
+        """Get preview metadata for a draft (with first 3 pages in MD)."""
         return await self.call(
             "GET",
             f"/api/v1/registry/drafts/{draft_id}/preview",
             mock_response={
                 "data": {
                     "draft_id": draft_id,
-                    "doc_code": "ГОСТ 20868-81",
                     "title": "Стойки установочные крепежные",
-                    "document_type": "normative",
+                    "doc_code": "ГОСТ 20868-81",
+                    "source_type": "GOST",
                     "year": "1981",
-                    "revision": None,
+                    "era": "USSR",
+                    "jurisdiction": "RU",
+                    "issuing_body": "Госстандарт СССР",
                     "preview_not_supported": False,
                     "total_pages": 3,
                     "processed_pages": 3,
+                    "preview_md": "# ГОСТ 20868-81\n\nНастоящий стандарт распространяется...\n\n| A1 | B1 |\n|---|----|\n| A2 | B2 |\n\n- Пункт 1\n- Пункт 2",
                 }
             },
         )

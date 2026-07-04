@@ -126,3 +126,125 @@ def delete_draft(db: Session, draft_id: int) -> bool:
     db.commit()
     return True
 
+
+def _extract_text(block: dict) -> str:
+    """Извлечь текст из блока любой вложенности."""
+    content = block.get('content') or ''
+    if content:
+        return str(content)
+    # Вложенные block (list, text_block)
+    children = block.get('block') or []
+    parts = []
+    for child in children:
+        parts.append(_extract_text(child))
+    return ' '.join(parts)
+
+
+def draft_blocks_to_markdown(blocks: list[dict], files_base_url: str = '/files') -> str:
+    """Конвертировать blocks из raw_data черновика в Markdown.
+
+    Поддерживаемые типы: heading, paragraph, image, table, list,
+    formula, caption, text_block.
+    """
+    md_parts = []
+    for b in blocks:
+        md = _block_to_md(b, files_base_url)
+        if md:
+            md_parts.append(md)
+    return '\n\n'.join(md_parts)
+
+
+def _block_to_md(b: dict, files_base_url: str) -> str:
+    btype = b.get('type', '')
+
+    if btype == 'heading':
+        level = b.get('heading_level', 1)
+        content = b.get('content') or ''
+        return f"{'#' * level} {content}"
+
+    if btype == 'paragraph':
+        return b.get('content') or ''
+
+    if btype == 'image':
+        image_key = b.get('image_key') or ''
+        if not image_key:
+            return ''
+        alt = b.get('content') or f"Страница {b.get('page', '')}"
+        return f"![{alt}]({files_base_url}/{image_key})"
+
+    if btype == 'table':
+        return _table_to_md(b)
+
+    if btype == 'list':
+        return _list_to_md(b)
+
+    if btype == 'formula':
+        latex = b.get('latex') or ''
+        if latex:
+            return f"$$\n{latex}\n$$"
+        image_key = b.get('image_key')
+        if image_key:
+            return f"![formula]({files_base_url}/{image_key})"
+        return ''
+
+    if btype == 'caption':
+        return f"> {b.get('content') or ''}"
+
+    if btype == 'text_block':
+        children = b.get('block') or []
+        return '\n'.join(_extract_text(c) for c in children if _extract_text(c))
+
+    # fallback
+    return b.get('content') or ''
+
+
+def _table_to_md(b: dict) -> str:
+    """Конвертировать table-блок в GFM pipe table."""
+    rows_data = b.get('rows') or []
+    if not rows_data:
+        return ''
+
+    # Собираем строки
+    md_rows = []
+    for row in rows_data:
+        cells = row.get('cells') or []
+        row_cells = []
+        for cell in cells:
+            cell_blocks = cell.get('block') or []
+            cell_text = ' '.join(
+                cb.get('content', '') for cb in cell_blocks if cb.get('content')
+            )
+            row_cells.append(cell_text)
+        md_rows.append('| ' + ' | '.join(row_cells) + ' |')
+
+    if not md_rows:
+        return ''
+
+    # Определяем количество колонок
+    num_cols = len(rows_data[0].get('cells') or [])
+    if num_cols == 0:
+        return md_rows[0]
+
+    # Разделитель
+    separator = '| ' + ' | '.join(['---'] * num_cols) + ' |'
+
+    result = [md_rows[0], separator]
+    result.extend(md_rows[1:])
+    return '\n'.join(result)
+
+
+def _list_to_md(b: dict) -> str:
+    """Конвертировать list-блок в маркированный/нумерованный список."""
+    style = b.get('numbering_style', 'bullet')
+    items = b.get('block') or []
+    md_lines = []
+    for i, item in enumerate(items, 1):
+        text = _extract_text(item)
+        if not text:
+            continue
+        if style == 'bullet':
+            md_lines.append(f"- {text}")
+        else:
+            md_lines.append(f"{i}. {text}")
+    return '\n'.join(md_lines)
+

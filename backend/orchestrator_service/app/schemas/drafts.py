@@ -48,20 +48,15 @@ class DraftCreateResponse(BaseModel):
 
 
 class PreviewMetadata(BaseModel):
-    """Preview metadata extracted during preview phase (12 полей)."""
+    """User-friendly preview metadata (читаемые пользователю поля)."""
 
-    doc_code: Optional[str] = Field(None, description="Обозначение документа")
     title: Optional[str] = Field(None, description="Название документа")
-    document_type: Optional[str] = Field(None, description="Тип документа")
-    source_type: Optional[str] = Field(None, description="Тип источника: GOST, GOST_R, OST, RD, TU, ISO, DNV, ASTM, OTHER")
+    doc_code: Optional[str] = Field(None, description="Обозначение документа")
+    source_type: Optional[str] = Field(None, description="Тип источника: ГОСТ, ГОСТ Р, ОСТ, РД, ТУ, ISO, DNV, ASTM, OTHER")
     year: Optional[str] = Field(None, description="Год издания")
-    revision: Optional[str] = Field(None, description="Номер редакции")
     era: Optional[str] = Field(None, description="Эпоха: USSR, CIS, RF, CURRENT")
     jurisdiction: Optional[str] = Field(None, description="Юрисдикция: RU, EU, US, NO, INTL")
-    mks_oks_code: Optional[str] = Field(None, description="Код МКС/ОКС")
-    okstu_code: Optional[str] = Field(None, description="Код ОКСТУ")
     issuing_body: Optional[str] = Field(None, description="Организация-издатель")
-    udk_code: Optional[str] = Field(None, description="Код УДК")
 
 
 class DraftPreviewResponse(BaseModel):
@@ -69,6 +64,10 @@ class DraftPreviewResponse(BaseModel):
 
     draft_id: int = Field(..., description="ID черновика")
     preview: PreviewMetadata = Field(default_factory=PreviewMetadata, description="Метаданные превью")
+    preview_not_supported: bool = Field(False, description="Preview недоступен (нет raw_data)")
+    total_pages: int = Field(0, description="Всего страниц в черновике")
+    processed_pages: int = Field(0, description="Страниц обработано в preview (макс 3)")
+    preview_md: Optional[str] = Field(None, description="Первые 3 страницы в Markdown")
 
 
 class DraftPreviewStatusResponse(BaseModel):
