@@ -29,6 +29,7 @@ Out of scope for this service:
 - POST /extract-pass/dry-run
 - POST /extract-passes/dry-run
 - GET /extract-passes/plan
+- POST /rich-document-package/dry-run
 - GET /rich-document-package/plan
 
 ## Dry-run scope
@@ -41,5 +42,5 @@ They do not call LlamaParse or LlamaExtract over the network yet.
 
 Current local status:
 
-- 11 passed
+- 12 passed
 - 1 warning from FastAPI/TestClient dependency stack
