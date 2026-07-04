@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Container,
@@ -30,6 +30,7 @@ import {
   ExternalLink,
   Bookmark,
   HelpCircle,
+  MessageSquare,
   ShieldCheck,
   X,
   FileText,
@@ -39,8 +40,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
-import { chatApi, sourceApi } from '../utils/http';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { chatApi, projectsApi, sourceApi, type GatewayChatProject } from '../utils/http';
 import { ChatMessage, Citation } from '../utils/mockData';
 import { Feedback } from './Feedback';
 import { useUIStore } from '../store/uiStore';
@@ -340,7 +341,19 @@ function renderInlineCitationText(
 }
 
 export const Chat: React.FC = () => {
-  const { appendChatMessages, chatMessages, currentGatewaySessionId, themeMode, workMode } = useUIStore();
+  const {
+    appendChatMessages,
+    chatMessages,
+    currentGatewaySessionId,
+    themeMode,
+    workMode,
+    activeProjectId,
+    setActiveProjectId,
+    setActiveThreadId,
+    setActiveTab,
+    setChatMessages,
+    setCurrentGatewaySessionId,
+  } = useUIStore();
   const isLight = themeMode === 'light';
   const assistantAccent = isLight ? '#0284c7' : '#98d9d8';
   const messages = chatMessages;
@@ -423,8 +436,79 @@ export const Chat: React.FC = () => {
       setExpandedCitations((prev) => ({ ...prev, [data.id]: false }));
     },
   });
+  const [guardActionLoading, setGuardActionLoading] = useState(false);
+  const projectsQuery = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectsApi.list(),
+    enabled: workMode === 'prod' && !currentGatewaySessionId,
+    staleTime: 30_000,
+  });
   const mustSelectGatewayChat = workMode === 'prod' && !currentGatewaySessionId;
-  const chatSessionGuardMessage = mustSelectGatewayChat ? 'Сначала создайте или выберите чат' : '';
+
+  /** Взять последний проект (по updatedAt) или создать новый, если нет проектов */
+  const resolveLastProject = useCallback(async (): Promise<GatewayChatProject> => {
+    let projects = projectsQuery.data ?? [];
+    if (projects.length === 0) {
+      const created = await projectsApi.create('Новый проект');
+      projects = [created];
+    }
+    // Сортируем по updatedAt (новые в конце), чтобы взять действительно последний
+    const sorted = [...projects].sort((a, b) => {
+      const aTime = a.chats?.[0]?.updatedAt ? new Date(a.chats[0].updatedAt).getTime() : 0;
+      const bTime = b.chats?.[0]?.updatedAt ? new Date(b.chats[0].updatedAt).getTime() : 0;
+      return aTime - bTime;
+    });
+    return sorted[sorted.length - 1] ?? projects[0];
+  }, [projectsQuery.data]);
+
+  const handleCreateChat = useCallback(async () => {
+    if (projectsQuery.isLoading) return;
+    setGuardActionLoading(true);
+    try {
+      const lastProject = await resolveLastProject();
+      setActiveProjectId(lastProject.id);
+      setActiveTab('chat');
+
+      const session = await chatApi.createSession('Новый чат', lastProject.id);
+      const gatewayChatId = String(session.session_id ?? session.id);
+      setCurrentGatewaySessionId(gatewayChatId);
+      setActiveThreadId(gatewayChatId);
+      setChatMessages([]);
+    } catch (error) {
+      console.error('Failed to create chat:', error);
+    } finally {
+      setGuardActionLoading(false);
+    }
+  }, [resolveLastProject, projectsQuery.isLoading, setActiveProjectId, setActiveThreadId, setActiveTab, setChatMessages, setCurrentGatewaySessionId]);
+
+  const handleLastChat = useCallback(async () => {
+    if (projectsQuery.isLoading) return;
+    setGuardActionLoading(true);
+    try {
+      const lastProject = await resolveLastProject();
+      setActiveProjectId(lastProject.id);
+      setActiveTab('chat');
+
+      // Последний чат в проекте (по порядку в массиве chats)
+      const lastChat = lastProject.chats?.[lastProject.chats.length - 1];
+      if (lastChat) {
+        const session = await chatApi.getSession(lastChat.id);
+        setCurrentGatewaySessionId(lastChat.id);
+        setActiveThreadId(lastChat.id);
+        setChatMessages(session.messages);
+      } else {
+        const session = await chatApi.createSession('Новый чат', lastProject.id);
+        const gatewayChatId = String(session.session_id ?? session.id);
+        setCurrentGatewaySessionId(gatewayChatId);
+        setActiveThreadId(gatewayChatId);
+        setChatMessages([]);
+      }
+    } catch (error) {
+      console.error('Failed to open last chat:', error);
+    } finally {
+      setGuardActionLoading(false);
+    }
+  }, [resolveLastProject, projectsQuery.isLoading, setActiveProjectId, setActiveThreadId, setActiveTab, setChatMessages, setCurrentGatewaySessionId]);
 
   const handleSend = () => {
     if (!input.trim() || chatMutation.isPending) return;
@@ -969,12 +1053,37 @@ export const Chat: React.FC = () => {
                   </Box>
                 </Box>
               )}
-              {chatSessionGuardMessage && (
-                <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2.2 }}>
-                  {chatSessionGuardMessage}
-                </Alert>
+              {mustSelectGatewayChat && !guardActionLoading && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 6 }}>
+                  <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                    Выберите или создайте чат
+                  </Typography>
+                  <Stack direction="row" spacing={2}>
+                    <Button
+                      variant="contained"
+                      size="large"
+                      startIcon={<HelpCircle size={18} />}
+                      onClick={handleCreateChat}
+                    >
+                      Создать чат
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      startIcon={<MessageSquare size={18} />}
+                      onClick={handleLastChat}
+                    >
+                      Последний чат
+                    </Button>
+                  </Stack>
+                </Box>
               )}
-              {chatMutation.isError && !chatSessionGuardMessage && (
+              {guardActionLoading && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              )}
+              {chatMutation.isError && !mustSelectGatewayChat && (
                 <Alert severity="error" variant="outlined" sx={{ borderRadius: 2.2 }}>
                   {getGatewayErrorMessage(chatMutation.error)}
                 </Alert>
@@ -1013,7 +1122,7 @@ export const Chat: React.FC = () => {
                   multiline
                   minRows={1}
                   maxRows={4}
-                  placeholder={mustSelectGatewayChat ? 'Сначала создайте или выберите чат' : 'Задайте вопрос ассистенту'}
+                  placeholder={mustSelectGatewayChat ? 'Создайте или выберите чат через меню' : 'Задайте вопрос ассистенту'}
                   variant="standard"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}

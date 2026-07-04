@@ -96,6 +96,7 @@ const getGatewayErrorMessage = (error: unknown) => {
 export const ModeSwitcher: React.FC = () => {
   const {
     activeProjectId,
+    activeThreadId,
     activeKnowledgeProcessingSection,
     activeTab,
     adminUsers,
@@ -103,6 +104,7 @@ export const ModeSwitcher: React.FC = () => {
     currentUserId,
     themeMode,
     setActiveProjectId,
+    setActiveThreadId,
     setActiveKnowledgeProcessingSection,
     setActiveTab,
     setChatMessages,
@@ -126,7 +128,7 @@ export const ModeSwitcher: React.FC = () => {
   const [chatProjects, setChatProjects] = React.useState<GatewayChatProject[]>(() =>
     workMode === 'prod' ? [] : DEMO_CHAT_PROJECTS,
   );
-  const [activeThreadId, setActiveThreadId] = React.useState(() => (workMode === 'prod' ? '' : 'chat-hull'));
+  // activeThreadId теперь в сторе (uiStore), доступен из Chat.tsx для подсветки дерева
   const [editingThreadId, setEditingThreadId] = React.useState<string | null>(null);
   const [draftTitle, setDraftTitle] = React.useState('');
   const [deleteCandidate, setDeleteCandidate] = React.useState<{ projectId: string; chatId: string; title: string } | null>(null);
@@ -185,6 +187,13 @@ export const ModeSwitcher: React.FC = () => {
       isMounted = false;
     };
   }, [setActiveProjectId, setChatMessages, setCurrentGatewaySessionId, workMode]);
+
+  // Раскрывать проект в дереве при установке activeProjectId (из Chat.tsx или дерева)
+  React.useEffect(() => {
+    if (activeProjectId) {
+      setExpandedProjects((prev) => ({ ...prev, [activeProjectId]: true }));
+    }
+  }, [activeProjectId]);
 
   const toggleProject = (projectId: string) => {
     setExpandedProjects((state) => ({ ...state, [projectId]: !state[projectId] }));

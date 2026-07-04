@@ -630,7 +630,16 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
   const itemSources = answerItems.flatMap((item: any) =>
     Array.isArray(item.sources) ? item.sources.map((source: any, index: number) => mapGatewaySource(source, index)) : [],
   );
-  const citations = itemSources.length ? itemSources : directSources.map((source: any, index: number) => mapGatewaySource(source, index));
+  const rawCitations = itemSources.length ? itemSources : directSources.map((source: any, index: number) => mapGatewaySource(source, index));
+  // Дедупликация цитат: если один и тот же document_id+section_id пришёл дважды (ошибка API),
+  // оставляем только первую — остальные дубликаты не показываем
+  const seenKeys = new Set<string>();
+  const citations = rawCitations.filter((c: Citation) => {
+    const key = `${c.documentId}-${c.sectionId}`;
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
+    return true;
+  });
 
   if (messagePayload.scenario === 'needs_clarification' || normalizedStatus === 'needs_clarification') {
     return {
@@ -729,7 +738,16 @@ function mapGatewaySessionMessages(session: any): ChatMessage[] {
     timestamp: toUiTimestamp(message.timestamp ?? message.created_at),
     status: message.role === 'assistant' ? mapGatewayStatus(message.status, message.scenario) : undefined,
     citations: Array.isArray(message.sources)
-      ? message.sources.map((source: any, sourceIndex: number) => mapGatewaySource(source, sourceIndex))
+      ? (() => {
+          const raw = message.sources.map((source: any, sourceIndex: number) => mapGatewaySource(source, sourceIndex));
+          const seenKeys = new Set<string>();
+          return raw.filter((c: Citation) => {
+            const key = `${c.documentId}-${c.sectionId}`;
+            if (seenKeys.has(key)) return false;
+            seenKeys.add(key);
+            return true;
+          });
+        })()
       : undefined,
   }));
 }
