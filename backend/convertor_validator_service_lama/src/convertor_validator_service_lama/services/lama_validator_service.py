@@ -1,9 +1,11 @@
 from collections.abc import Sequence
 
 from convertor_validator_service_lama.clients.llama_extract_client import LlamaExtractClient
+from convertor_validator_service_lama.clients.llama_extract_rest_client import LlamaExtractRestClient, MissingLlamaExtractProjectIdError
 from convertor_validator_service_lama.clients.llama_parse_client import LlamaParseClient
 from convertor_validator_service_lama.clients.llama_parse_rest_client import LlamaParseRestClient
 from convertor_validator_service_lama.core.settings import get_settings
+from convertor_validator_service_lama.models.extract_job import ExtractJobPollingConfig, ExtractJobResult, ExtractPassRequest
 from convertor_validator_service_lama.models.parse_job import ParseJobPollingConfig, ParseJobResult
 from convertor_validator_service_lama.models.contracts import (
     DryRunResponse,
@@ -147,3 +149,71 @@ def run_parse_job_with_polling(
     finally:
         if should_close_client:
             parse_client.close()
+
+def run_extract_pass_with_polling(
+    parse_job_id: str,
+    pass_name: LlamaExtractPassName,
+    extraction_schema: dict[str, object] | None = None,
+    instructions: str | None = None,
+    schema_name: str | None = None,
+    expand: Sequence[str] | None = None,
+    polling_config: ExtractJobPollingConfig | None = None,
+    client: LlamaExtractRestClient | None = None,
+) -> ExtractJobResult:
+    settings = get_settings()
+    project_id = settings.extract_project_id
+
+    if not project_id:
+        raise MissingLlamaExtractProjectIdError("LAMA_EXTRACT_PROJECT_ID is required for LlamaExtract network calls.")
+
+    extract_client = client or LlamaExtractRestClient(settings)
+    should_close_client = client is None
+
+    try:
+        request = ExtractPassRequest(
+            parse_job_id=parse_job_id,
+            pass_name=pass_name,
+            project_id=project_id,
+            schema_name=schema_name,
+            extraction_schema=extraction_schema or {},
+            instructions=instructions,
+        )
+        submit_response = extract_client.start_extract_job(request)
+        return extract_client.poll_extract_job(
+            job_id=submit_response.job_id,
+            pass_name=pass_name,
+            project_id=project_id,
+            expand=expand,
+            config=polling_config,
+        )
+    finally:
+        if should_close_client:
+            extract_client.close()
+
+def run_all_extract_passes_with_polling(
+    parse_job_id: str,
+    extraction_schemas: dict[str, dict[str, object]] | None = None,
+    instructions_by_pass: dict[str, str] | None = None,
+    schema_names_by_pass: dict[str, str] | None = None,
+    expand: Sequence[str] | None = None,
+    polling_config: ExtractJobPollingConfig | None = None,
+    client: LlamaExtractRestClient | None = None,
+) -> dict[str, ExtractJobResult]:
+    results: dict[str, ExtractJobResult] = {}
+    pass_plan = build_extract_pass_plan_response()
+
+    for pass_item in pass_plan.passes:
+        pass_name = pass_item.name
+        result = run_extract_pass_with_polling(
+            parse_job_id=parse_job_id,
+            pass_name=pass_name,
+            extraction_schema=(extraction_schemas or {}).get(pass_name),
+            instructions=(instructions_by_pass or {}).get(pass_name),
+            schema_name=(schema_names_by_pass or {}).get(pass_name),
+            expand=expand,
+            polling_config=polling_config,
+            client=client,
+        )
+        results[pass_name] = result
+
+    return results
