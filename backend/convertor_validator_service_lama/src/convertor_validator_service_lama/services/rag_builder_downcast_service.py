@@ -65,16 +65,35 @@ def downcast_rich_package_to_rag_builder(
 
 
 def _artifacts_by_name(
-    artifacts: list[RichDocumentPackageArtifact],
+    artifacts: Any,
 ) -> dict[str, RichDocumentPackageArtifact]:
     result: dict[str, RichDocumentPackageArtifact] = {}
-    for artifact in artifacts:
-        key = _first_str(
-            getattr(artifact, "artifact_key", None),
-            getattr(artifact, "name", None),
-        )
-        if key is not None:
-            result[key] = artifact
+
+    if isinstance(artifacts, dict):
+        for fallback_key, artifact in artifacts.items():
+            if not isinstance(artifact, RichDocumentPackageArtifact):
+                continue
+
+            key = _first_str(
+                getattr(artifact, "artifact_key", None),
+                fallback_key if isinstance(fallback_key, str) else None,
+            )
+            if key is not None:
+                result[key] = artifact
+
+        return result
+
+    if isinstance(artifacts, list):
+        for artifact in artifacts:
+            if not isinstance(artifact, RichDocumentPackageArtifact):
+                continue
+
+            key = _first_str(
+                getattr(artifact, "artifact_key", None),
+                getattr(artifact, "name", None),
+            )
+            if key is not None:
+                result[key] = artifact
 
     return result
 
