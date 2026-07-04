@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from convertor_validator_service_lama.models.parse_job import ParseJobPollingConfig, ParseJobResult
 from convertor_validator_service_lama.models.contracts import (
     DryRunResponse,
     ExtractPassDryRunRequest,
@@ -10,6 +11,7 @@ from convertor_validator_service_lama.models.contracts import (
     HealthResponse,
     ParseJobDryRunRequest,
     ParseJobDryRunResponse,
+    ParseJobRequest,
     RichDocumentPackageDryRunRequest,
     RichDocumentPackageDryRunResponse,
     RichDocumentPackagePlanResponse,
@@ -22,6 +24,7 @@ from convertor_validator_service_lama.services.lama_validator_service import (
     build_parse_job_dry_run_response,
     build_rich_document_package_dry_run_response,
     build_rich_document_package_plan_response,
+    run_parse_job_with_polling,
 )
 
 
@@ -44,6 +47,19 @@ def dry_run() -> DryRunResponse:
 @app.post("/parse-job/dry-run", response_model=ParseJobDryRunResponse)
 def parse_job_dry_run(request: ParseJobDryRunRequest) -> ParseJobDryRunResponse:
     return build_parse_job_dry_run_response(request)
+
+
+@app.post("/parse-job", response_model=ParseJobResult)
+def parse_job(request: ParseJobRequest) -> ParseJobResult:
+    polling_config = ParseJobPollingConfig(
+        max_attempts=request.max_attempts,
+        interval_seconds=request.interval_seconds,
+    )
+    return run_parse_job_with_polling(
+        source_pdf_path=request.source_pdf_path,
+        expand=request.expand,
+        polling_config=polling_config,
+    )
 
 
 @app.post("/extract-pass/dry-run", response_model=ExtractPassDryRunResponse)
