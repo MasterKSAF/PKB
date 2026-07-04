@@ -31,6 +31,8 @@ import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
 import { type Document } from '../utils/mockData';
 import { apiClient, documentsApi } from '../utils/http';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type DocumentVersionSummary = {
   id: string;
@@ -676,7 +678,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
     queryFn: async () => {
       const [previewResult, textResult] = await Promise.allSettled([
         documentsApi.pagePreview(selectedDocument!.id, selectedGatewayPage!.pageNumber),
-        documentsApi.pageText(selectedDocument!.id, selectedGatewayPage!.pageNumber),
+        documentsApi.pageContentMd(selectedDocument!.id, selectedGatewayPage!.pageNumber),
       ]);
 
       if (previewResult.status === 'rejected' && textResult.status === 'rejected') {
@@ -1193,9 +1195,11 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                               />
                             )}
                             {currentPreviewText ? (
-                              <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.7, fontFamily: 'inherit' }}>
-                                {renderHighlightedText(currentPreviewText, previewSearch.trim(), isLight)}
-                              </Typography>
+                              <Box sx={{ m: 0, lineHeight: 1.7, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' } }}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {currentPreviewText}
+                                </ReactMarkdown>
+                              </Box>
                             ) : (
                               <Typography color="text.secondary">
                                 Страница существует, но сервер не передал доступное изображение или текстовый слой.
@@ -1559,9 +1563,11 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                     />
                   )}
                   {currentPreviewText ? (
-                    <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                      {renderHighlightedText(currentPreviewText, previewSearch.trim(), isLight)}
-                    </Typography>
+                    <Box sx={{ m: 0, lineHeight: 1.75, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' } }}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {currentPreviewText}
+                      </ReactMarkdown>
+                    </Box>
                   ) : (
                     <Typography color="text.secondary">
                       Страница существует, но сервер не передал доступное изображение или текстовый слой.

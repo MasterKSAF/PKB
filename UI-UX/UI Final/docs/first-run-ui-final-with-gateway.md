@@ -89,7 +89,7 @@ http://127.0.0.1:3300
 - Поиск: `POST /text/search`.
 - Черновики: `POST /drafts`, `GET /drafts`, `GET /drafts/{id}`, `GET /drafts/{id}/preview`, `POST /drafts/{id}/preview`, `GET /drafts/{id}/preview/status`, `PATCH /drafts/{id}/decide`, `DELETE /drafts/{id}`.
 - Документы: `GET /documents`, `GET /documents/queue`, `POST /documents/{id}/reprocess`.
-- Источники: `GET /documents/{id}/file`, `GET /documents/{id}/pages/{page}/preview`, `GET /documents/{id}/pages/{page}/text`.
+- Источники: `GET /documents/{id}/file`, `GET /documents/{id}/pages/{page}/preview`, `GET /documents/{id}/pages/{page}/content_md`.
 - Registry: `GET /registry/documents`, `GET /registry/documents/{doc_id}`, `GET /registry/documents/{doc_id}/sections`, `GET /registry/classifiers/tree`.
 - История: `GET /chat/sessions`, fallback `GET /chat/history`.
 - QA: `GET /monitor/metrics`.

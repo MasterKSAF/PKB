@@ -1318,6 +1318,23 @@ async def page_text(doc_id: int, page_num: int):
     return {"page": page_num, "full_text": " ".join(b["text"] for b in blocks), "blocks": blocks}
 
 
+@router.get("/api/v1/documents/{doc_id}/pages/{page_num}/content_md")
+async def page_content_md(doc_id: int, page_num: int):
+    """Возвращает контент страницы в формате Markdown."""
+    _get_document(doc_id)
+    blocks = _get_page_block(doc_id, page_num)["blocks"]
+    md_lines = []
+    for b in blocks:
+        if b["type"] == "table":
+            md_lines.append("| Колонка 1 | Колонка 2 |")
+            md_lines.append("|---|---|")
+            md_lines.append(f"| {b['text']} | ... |")
+        else:
+            md_lines.append(b["text"])
+        md_lines.append("")
+    return {"page": page_num, "full_text": "\n".join(md_lines).strip(), "blocks": blocks}
+
+
 @router.get("/api/v1/documents/{doc_id}/pages/{page_num}/preview")
 async def page_preview(doc_id: int, page_num: int):
     doc = _get_document(doc_id)

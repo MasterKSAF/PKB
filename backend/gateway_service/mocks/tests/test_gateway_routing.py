@@ -125,6 +125,7 @@ class TestDocumentSubResourcesToRegistry:
         "/api/v1/documents/123/pages/1",
         "/api/v1/documents/123/pages/1/text",
         "/api/v1/documents/123/pages/1/preview",
+                "/api/v1/documents/123/pages/1/content_md",
         "/api/v1/documents/123/file",
         "/api/v1/documents/123/history",
         "/api/v1/documents/123/parameters",

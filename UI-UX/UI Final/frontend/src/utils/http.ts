@@ -2043,6 +2043,10 @@ export const documentsApi = {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/pages/${pageNumber}/text`));
     return response.data?.data ?? response.data;
   },
+  pageContentMd: async (documentId: string, pageNumber: number) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/pages/${pageNumber}/content_md`));
+    return response.data?.data ?? response.data;
+  },
   file: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/file`));
     return response.data?.data ?? response.data;
@@ -2529,7 +2533,7 @@ export const sourceApi = {
 
       const [previewResponse, textResponse] = await Promise.allSettled([
         gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/preview`)),
-        gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/text`)),
+        gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/content_md`)),
       ]);
 
       if (previewResponse.status !== 'fulfilled' && textResponse.status !== 'fulfilled') {
