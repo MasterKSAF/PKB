@@ -28,6 +28,7 @@ Use `.env.example` as a template for local configuration:
 - `LAMA_CLOUD_API_KEY`
 - `LAMA_PARSE_BASE_URL`
 - `LAMA_EXTRACT_BASE_URL`
+- `LAMA_EXTRACT_PROJECT_ID`
 - `LAMA_PARSE_RESULT_FORMAT`
 
 ## Current API
@@ -36,6 +37,8 @@ Use `.env.example` as a template for local configuration:
 - GET /dry-run
 - POST /parse-job
 - POST /parse-job/dry-run
+- POST /extract-pass
+- POST /extract-passes
 - POST /extract-pass/dry-run
 - POST /extract-passes/dry-run
 - GET /extract-passes/plan
@@ -60,6 +63,33 @@ Normal unit tests use mocked `httpx` transports and do not call LlamaCloud.
 
 - missing `LAMA_CLOUD_API_KEY` -> 400
 - missing source PDF -> 404
+- LlamaCloud response/job failure -> 502
+- polling timeout -> 504
+
+## LlamaExtract REST scope
+
+`POST /extract-pass` executes one LlamaExtract REST pass by `parse_job_id`.
+
+`POST /extract-passes` executes all planned LlamaExtract passes by `parse_job_id`:
+
+- document_boundaries
+- title_metadata
+- table_of_contents
+- sections
+- tables
+- images
+- formulas
+- cross_references
+- validation_critic
+
+Both endpoints use `httpx`, require `LAMA_CLOUD_API_KEY` and `LAMA_EXTRACT_PROJECT_ID`, and return raw extract artifacts.
+
+They do not build `rich_document_package.json` yet.
+They do not implement downcast to RAG Builder-compatible JSON.
+
+Expected failures are mapped to HTTP responses:
+
+- missing API key or extract project id -> 400
 - LlamaCloud response/job failure -> 502
 - polling timeout -> 504
 
@@ -105,5 +135,5 @@ http://127.0.0.1:8000/docs
 
 Current local status:
 
-- 34 passed
+- 60 passed
 - 1 warning from FastAPI/TestClient dependency stack
