@@ -21,6 +21,15 @@ Out of scope for this service:
 - RAG indexing
 - search
 
+## Configuration
+
+Use `.env.example` as a template for local configuration:
+
+- `LAMA_CLOUD_API_KEY`
+- `LAMA_PARSE_BASE_URL`
+- `LAMA_EXTRACT_BASE_URL`
+- `LAMA_PARSE_RESULT_FORMAT`
+
 ## Current API
 
 - GET /health
