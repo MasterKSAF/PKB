@@ -1,5 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
+from convertor_validator_service_lama.clients.llama_cloud_boundary import MissingLlamaCloudApiKeyError
+from convertor_validator_service_lama.clients.llama_parse_rest_client import (
+    LlamaParseJobFailedError,
+    LlamaParsePollingTimeoutError,
+    LlamaParseResponseError,
+)
 from convertor_validator_service_lama.models.parse_job import ParseJobPollingConfig, ParseJobResult
 from convertor_validator_service_lama.models.contracts import (
     DryRunResponse,
@@ -55,11 +61,23 @@ def parse_job(request: ParseJobRequest) -> ParseJobResult:
         max_attempts=request.max_attempts,
         interval_seconds=request.interval_seconds,
     )
-    return run_parse_job_with_polling(
-        source_pdf_path=request.source_pdf_path,
-        expand=request.expand,
-        polling_config=polling_config,
-    )
+
+    try:
+        return run_parse_job_with_polling(
+            source_pdf_path=request.source_pdf_path,
+            expand=request.expand,
+            polling_config=polling_config,
+        )
+    except MissingLlamaCloudApiKeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Source PDF was not found: {exc}") from exc
+    except LlamaParsePollingTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except LlamaParseJobFailedError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except LlamaParseResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/extract-pass/dry-run", response_model=ExtractPassDryRunResponse)
