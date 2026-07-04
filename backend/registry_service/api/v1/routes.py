@@ -444,7 +444,7 @@ def get_document_pages_endpoint(
                 "width": 595.0,
                 "height": 842.0,
                 "ocr_status": "completed",
-                "confidence": 0.95,
+                "confidence": 0,
                 "has_text_layer": True
             })
             
@@ -492,7 +492,7 @@ def get_document_page_endpoint(
                 status_code=404,
                 detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
             )
-        blocks = document_crud.get_page_blocks(db, document.id, page_num)
+        blocks = document_crud.get_page_blocks_raw(db, document.id, page_num)
         return {
             'data': {
                 'document_id': document.id,
@@ -568,7 +568,7 @@ def get_document_page_preview_endpoint(
                 status_code=404,
                 detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
             )
-        blocks = document_crud.get_page_blocks(db, document.id, page_num)
+        blocks = document_crud.get_page_blocks_md(db, document.id, page_num)
         text_layer = "\n".join([b["content"] for b in blocks if b["content"]])
         return {
             'data': {
@@ -2216,6 +2216,69 @@ def save_draft_snapshot_endpoint(draft_id: int, payload: DraftSnapshotCreate, db
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
+@routes.get('/registry/drafts/{draft_id}/pages')
+def get_draft_pages_endpoint(
+    draft_id: int,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/drafts/{draft_id}/pages - Список страниц черновика из raw_data"""
+    log_event('INFO', f'/registry/drafts/{draft_id}/pages', None, None)
+    try:
+        draft = draft_crud.get_draft_by_id(db, draft_id)
+        if not draft:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DRAFT_NOT_FOUND', 'message': 'Draft not found'}},
+            )
+        pages = draft_crud.get_draft_pages_from_raw(draft)
+        return {
+            'data': {
+                'draft_id': draft.draft_id,
+                'pages_total': len(pages),
+                'pages': pages,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/drafts/{draft_id}/pages', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/drafts/{draft_id}/pages/{page_num}')
+def get_draft_page_endpoint(
+    draft_id: int,
+    page_num: int,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/drafts/{draft_id}/pages/{page_num} - Блоки указанной страницы черновика"""
+    log_event('INFO', f'/registry/drafts/{draft_id}/pages/{page_num}', None, None)
+    try:
+        draft = draft_crud.get_draft_by_id(db, draft_id)
+        if not draft:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DRAFT_NOT_FOUND', 'message': 'Draft not found'}},
+            )
+        pages = draft_crud.get_draft_pages_from_raw(draft)
+        if page_num < 1 or page_num > len(pages):
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {len(pages)}'}},
+            )
+        blocks = draft_crud.get_draft_page_blocks(draft, page_num)
+        return {
+            'data': {
+                'draft_id': draft.draft_id,
+                'page': page_num,
+                'blocks': blocks,
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/drafts/{draft_id}/pages/{page_num}', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
 # ============================================================================

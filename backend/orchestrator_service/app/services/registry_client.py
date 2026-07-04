@@ -949,3 +949,42 @@ class RegistryServiceClient(ServiceClient):
             },
             json={"preview_metadata": metadata},
         )
+
+    async def get_draft_pages(self, draft_id: int) -> dict:
+        """Get pages list for a draft from raw_data."""
+        return await self.call(
+            "GET",
+            f"/api/v1/registry/drafts/{draft_id}/pages",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "pages_total": 3,
+                    "pages": [
+                        {"page": 1, "width": 595, "height": 842},
+                        {"page": 2, "width": 595, "height": 842},
+                        {"page": 3, "width": 595, "height": 842},
+                    ],
+                }
+            },
+        )
+
+    async def get_draft_page(self, draft_id: int, page_num: int) -> dict:
+        """Get blocks for a specific draft page from raw_data."""
+        return await self.call(
+            "GET",
+            f"/api/v1/registry/drafts/{draft_id}/pages/{page_num}",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "page": page_num,
+                    "blocks": [
+                        {
+                            "number": 1,
+                            "type": "paragraph",
+                            "page": page_num,
+                            "content": f"Mock content for draft {draft_id} page {page_num}",
+                        }
+                    ],
+                }
+            },
+        )

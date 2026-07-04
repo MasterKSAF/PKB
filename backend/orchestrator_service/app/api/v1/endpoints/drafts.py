@@ -1589,6 +1589,97 @@ async def delete_draft(
 
 
 # ---------------------------------------------------------------------------
+#  GET /drafts/{draft_id}/pages  — List pages for a draft
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{draft_id}/pages",
+    responses={404: {"description": "Черновик не найден"}},
+)
+async def get_draft_pages(
+    draft_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Get pages list for a draft (proxies to Registry)."""
+    registry = RegistryServiceClient()
+    try:
+        result = await registry.get_draft_pages(draft_id)
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Черновик {draft_id} не найден",
+                    }
+                },
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Черновик {draft_id} не найден",
+                    "details": {"original_error": str(exc)},
+                }
+            },
+        )
+    finally:
+        await registry.close()
+
+
+# ---------------------------------------------------------------------------
+#  GET /drafts/{draft_id}/pages/{page_num}  — Get page blocks
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{draft_id}/pages/{page_num}",
+    responses={404: {"description": "Черновик или страница не найдены"}},
+)
+async def get_draft_page(
+    draft_id: int,
+    page_num: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Get blocks for a specific draft page (proxies to Registry)."""
+    registry = RegistryServiceClient()
+    try:
+        result = await registry.get_draft_page(draft_id, page_num)
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Страница {page_num} черновика {draft_id} не найдена",
+                    }
+                },
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Страница {page_num} черновика {draft_id} не найдена",
+                    "details": {"original_error": str(exc)},
+                }
+            },
+        )
+    finally:
+        await registry.close()
+
+
+# ---------------------------------------------------------------------------
 #  GET /drafts/{draft_id}/tasks  — List tasks for a draft
 # ---------------------------------------------------------------------------
 

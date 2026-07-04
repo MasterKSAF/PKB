@@ -728,6 +728,53 @@ async def delete_draft(draft_id: int):
     return {"draft_id": draft["draft_id"], "deleted_at": now}
 
 
+# ── Drafts Pages Preview ───────────────────────────────────────────────────────
+
+
+@router.get("/api/v1/drafts/{draft_id}/pages")
+async def get_draft_pages(draft_id: int):
+    """Get pages list for a draft from raw_data."""
+    draft = _get_draft(draft_id)
+    raw_data = draft.get("raw_data") or {}
+    doc = raw_data.get("document", {})
+    pages = doc.get("pages", [])
+    if not pages:
+        # Если pages нет в raw_data, генерируем из page_count или возвращаем заглушку
+        page_count = doc.get("source", {}).get("page_count", 0)
+        if page_count > 0:
+            pages = [{"page": i, "width": 595, "height": 842} for i in range(1, page_count + 1)]
+    return {
+        "data": {
+            "draft_id": draft["draft_id"],
+            "pages_total": len(pages),
+            "pages": pages,
+        }
+    }
+
+
+@router.get("/api/v1/drafts/{draft_id}/pages/{page_num}")
+async def get_draft_page(draft_id: int, page_num: int):
+    """Get blocks for a specific draft page from raw_data."""
+    draft = _get_draft(draft_id)
+    raw_data = draft.get("raw_data") or {}
+    doc = raw_data.get("document", {})
+    pages = doc.get("pages", [])
+    if page_num < 1 or (pages and page_num > len(pages)):
+        raise HTTPException(status_code=404, detail=error_response(
+            "PAGE_NOT_FOUND",
+            f"Page {page_num} not found",
+        ))
+    blocks = doc.get("block", [])
+    page_blocks = [b for b in blocks if b.get("page") == page_num]
+    return {
+        "data": {
+            "draft_id": draft["draft_id"],
+            "page": page_num,
+            "blocks": page_blocks,
+        }
+    }
+
+
 # ===========================================================================
 # TASKS
 # ===========================================================================

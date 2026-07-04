@@ -1296,6 +1296,46 @@ async def delete_draft(draft_id: int):
     return {"data": {"id": draft_id, "deleted_at": utcnow()}}
 
 
+@router.get("/drafts/{draft_id}/pages")
+async def get_draft_pages(draft_id: int):
+    """Get pages list for a draft from raw_data."""
+    draft = _registry_drafts.get(draft_id)
+    if not draft:
+        raise HTTPException(404, detail=error_response("DRAFT_NOT_FOUND", "Черновик не найден"))
+    raw_data = draft.get("raw_data") or {}
+    doc = raw_data.get("document", {})
+    pages = doc.get("pages", [])
+    return {
+        "data": {
+            "draft_id": draft["id"],
+            "pages_total": len(pages),
+            "pages": pages,
+        }
+    }
+
+
+@router.get("/drafts/{draft_id}/pages/{page_num}")
+async def get_draft_page(draft_id: int, page_num: int):
+    """Get blocks for a specific draft page from raw_data."""
+    draft = _registry_drafts.get(draft_id)
+    if not draft:
+        raise HTTPException(404, detail=error_response("DRAFT_NOT_FOUND", "Черновик не найден"))
+    raw_data = draft.get("raw_data") or {}
+    doc = raw_data.get("document", {})
+    pages = doc.get("pages", [])
+    if page_num < 1 or (pages and page_num > len(pages)):
+        raise HTTPException(404, detail=error_response("PAGE_NOT_FOUND", f"Page {page_num} not found"))
+    blocks = doc.get("block", [])
+    page_blocks = [b for b in blocks if b.get("page") == page_num]
+    return {
+        "data": {
+            "draft_id": draft["id"],
+            "page": page_num,
+            "blocks": page_blocks,
+        }
+    }
+
+
 # ── 6. Categories ──
 
 class CategoryCreate(BaseModel):

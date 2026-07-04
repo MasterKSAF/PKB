@@ -103,6 +103,21 @@ def save_draft_snapshot(db: Session, draft_id: int, preview_metadata: dict) -> O
     db.refresh(draft)
     return draft
 
+def get_draft_pages_from_raw(draft: Draft) -> list[dict]:
+    """Извлечь список страниц из raw_data черновика."""
+    raw = draft.raw_data or {}
+    doc = raw.get("document", {})
+    return doc.get("pages", [])
+
+
+def get_draft_page_blocks(draft: Draft, page_num: int) -> list[dict]:
+    """Извлечь блоки для указанной страницы из raw_data черновика."""
+    raw = draft.raw_data or {}
+    doc = raw.get("document", {})
+    blocks = doc.get("block", [])
+    return [b for b in blocks if b.get("page") == page_num]
+
+
 def delete_draft(db: Session, draft_id: int) -> bool:
     draft = get_draft_by_id(db, draft_id)
     if not draft:
