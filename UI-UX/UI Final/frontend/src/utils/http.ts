@@ -2047,6 +2047,11 @@ export const documentsApi = {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/pages/${pageNumber}/content_md`));
     return response.data?.data ?? response.data;
   },
+  /** Возвращает весь документ одной Markdown-строкой с встроенными ссылками на изображения */
+  contentMd: async (documentId: string) => {
+    const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/content_md`));
+    return response.data?.data ?? response.data;
+  },
   file: async (documentId: string) => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${documentId}/file`));
     return response.data?.data ?? response.data;
@@ -2550,12 +2555,15 @@ export const sourceApi = {
       const innerPreview = previewData?.data ?? previewData;
       const innerText = textData?.data ?? textData;
 
-      // Собираем полный текст страницы из blocks
+      // Используем готовый markdown из сервера (с image_key → image links)
+      const pageMarkdown = innerText?.markdown || '';
+
+      // Fallback: собираем текст из blocks вручную
       const blocksText =
         Array.isArray(innerText?.blocks) && innerText.blocks.length > 0
           ? innerText.blocks.map((b: any) => b.content ?? '').filter(Boolean).join('\n')
           : undefined;
-      const fullPageText = blocksText || innerText?.full_text || innerText?.text || '';
+      const fullPageText = pageMarkdown || blocksText || innerText?.full_text || innerText?.text || '';
 
       if (!fullPageText.trim() && !innerPreview?.image_key && !innerPreview?.file_key) {
         return {
@@ -2567,6 +2575,7 @@ export const sourceApi = {
       return {
         ...citation,
         text: fullPageText || citation.text,
+        pageMarkdown: pageMarkdown || undefined,
         pagePreviewUrl: innerPreview?.image_key
           ? `${BASE_URL.replace(/\/+$/, '')}/files/${innerPreview.image_key}`
           : citation.pagePreviewUrl,

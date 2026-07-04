@@ -592,7 +592,11 @@ def get_document_page_markdown_endpoint(
     page_num: int,
     db: Session = Depends(get_db),
 ):
-    """GET /registry/documents/{document_id}/pages/{page_num}/content_md - Страница в формате Markdown"""
+    """GET /registry/documents/{document_id}/pages/{page_num}/content_md - Страница в формате Markdown
+
+    Returns blocks + pre-built `markdown` string.
+    Image blocks already have `![alt](/api/v1/files/{key})` embedded in `content`.
+    """
     log_event('INFO', f'/registry/documents/{document_id}/pages/{page_num}/content_md', None, None)
     try:
         document = document_crud.get_document_by_id(db, document_id)
@@ -608,13 +612,20 @@ def get_document_page_markdown_endpoint(
                 detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
             )
         blocks = document_crud.get_page_blocks_md(db, document.id, page_num)
+
+        # Build combined markdown — content уже содержит ![alt](/api/v1/files/{key}) для image-блоков
+        markdown = '\n\n'.join(
+            b['content'] for b in blocks if b.get('content', '').strip()
+        )
+
         return {
             'data': {
                 'document_id': document.id,
                 'page': page_num,
                 'width': 595.0,
                 'height': 842.0,
-                'blocks': blocks
+                'blocks': blocks,
+                'markdown': markdown
             }
         }
     except HTTPException:
@@ -659,6 +670,58 @@ def get_document_page_html_endpoint(
         raise
     except Exception as e:
         log_event('ERROR', f'/registry/documents/{document_id}/pages/{page_num}/content_html', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/documents/{document_id}/content_md')
+def get_document_markdown_endpoint(
+    document_id: str,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/documents/{document_id}/content_md - Все страницы документа в формате Markdown
+
+    Returns the full document as a single markdown string with embedded image references.
+    Content of image blocks already includes `![alt](/api/v1/files/{key})`.
+    """
+    log_event('INFO', f'/registry/documents/{document_id}/content_md', None, None)
+    try:
+        document = document_crud.get_document_by_id(db, document_id)
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
+            )
+        pages_total = document_crud.get_document_pages_count(db, document.id)
+
+        all_md_parts = []
+        for page_num in range(1, pages_total + 1):
+            blocks = document_crud.get_page_blocks_md(db, document.id, page_num)
+
+            page_md_parts = [f'---\n## Страница {page_num}\n']
+
+            # Собираем content блоков — для image-блоков там уже `![alt](/api/v1/files/{key})`
+            for block in blocks:
+                content = block.get('content', '').strip()
+                if content:
+                    page_md_parts.append(content)
+
+            all_md_parts.append('\n\n'.join(page_md_parts))
+
+        markdown = '\n\n'.join(all_md_parts)
+
+        return {
+            'data': {
+                'document_id': document.id,
+                'title': document.title,
+                'doc_code': document.doc_code,
+                'pages_total': pages_total,
+                'markdown': markdown
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/content_md', None, None, str(e))
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 

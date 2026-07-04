@@ -46,6 +46,8 @@ import { ChatMessage, Citation } from '../utils/mockData';
 import { Feedback } from './Feedback';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   getCitationDisplayIndex,
   parseInlineCitationMarkers,
@@ -1557,9 +1559,29 @@ export const Chat: React.FC = () => {
                     </Alert>
                   )}
 
-                  {activeCitation.previewKind === 'source' ? (
+                  {activeCitation.previewKind === 'source' && activeCitation.pageMarkdown ? (
+                    <Box
+                      sx={{
+                        borderRadius: 1.5,
+                        border: '1px solid rgba(0,0,0,0.08)',
+                        bgcolor: '#f4f1e8',
+                        p: 2,
+                        color: '#202020',
+                        fontFamily: 'Georgia, serif',
+                        '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } },
+                        '& th': { bgcolor: 'action.hover' },
+                        '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' },
+                        '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' },
+                        '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 1 },
+                      }}
+                    >
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {activeCitation.pageMarkdown}
+                      </ReactMarkdown>
+                    </Box>
+                  ) : activeCitation.previewKind === 'source' ? (
                     <>
-                      {/* Изображение страницы — если доступно */}
+                      {/* Изображение страницы — если доступно (fallback) */}
                       {activeCitation.pagePreviewUrl && (
                         <Box
                           sx={{

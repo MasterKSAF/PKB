@@ -12,6 +12,10 @@ export interface Citation {
   pagePreviewUrl?: string;
   documentUrl?: string;
   contentType?: string;
+  /** Combined markdown with embedded image references (from content_md endpoint) */
+  pageMarkdown?: string;
+  /** Error description if preview loading failed */
+  previewError?: string;
 }
 
 export type AnswerStatus =

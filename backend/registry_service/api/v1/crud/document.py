@@ -990,7 +990,11 @@ def get_page_blocks(db: Session, document_id: int, page_num: int) -> List[Dict[s
 
 
 def get_page_blocks_md(db: Session, document_id: int, page_num: int) -> List[Dict[str, Any]]:
-    """Retrieve and map document sections on a specific page as blocks with Markdown content."""
+    """Retrieve and map document sections on a specific page as blocks with Markdown content.
+
+    For image-type blocks, generates markdown image syntax directly in `content`:
+      ![alt](/api/v1/files/{image_key})
+    """
     sections = (
         db.query(DocumentSection)
         .filter(DocumentSection.document_id == document_id, DocumentSection.page == page_num)
@@ -1002,6 +1006,11 @@ def get_page_blocks_md(db: Session, document_id: int, page_num: int) -> List[Dic
         md_content = ""
         if isinstance(sec.content, dict):
             md_content = sec.content.get("markdown") or sec.content.get("text") or sec.content.get("latex") or ""
+            image_key = sec.content.get("image_key")
+            # Для image-блоков вставляем markdown-ссылку на картинку
+            if image_key and not md_content:
+                alt = sec.type_ or "image"
+                md_content = f"![{alt}](/api/v1/files/{image_key})"
         else:
             md_content = str(sec.content or "")
 
@@ -1010,7 +1019,7 @@ def get_page_blocks_md(db: Session, document_id: int, page_num: int) -> List[Dic
             "type": sec.type_,
             "bbox": sec.bbox,
             "content": md_content,
-            "confidence": 0.95
+            "confidence": 0
         })
     return blocks
 
@@ -1084,11 +1093,27 @@ def get_page_blocks_html(db: Session, document_id: int, page_num: int) -> List[D
             "type": sec.type_,
             "bbox": sec.bbox,
             "content": html_content,
-            "confidence": 0.95
+            "confidence": 0
         })
     return blocks
 
 
-
-
+def get_page_blocks_raw(db: Session, document_id: int, page_num: int) -> List[Dict[str, Any]]:
+    """Retrieve and map document sections on a specific page as blocks with raw JSONB content."""
+    sections = (
+        db.query(DocumentSection)
+        .filter(DocumentSection.document_id == document_id, DocumentSection.page == page_num)
+        .order_by(DocumentSection.id.asc())
+        .all()
+    )
+    blocks = []
+    for idx, sec in enumerate(sections, 1):
+        blocks.append({
+            "number": idx,
+            "type": sec.type_,
+            "bbox": sec.bbox,
+            "content": sec.content,
+            "confidence": 0
+        })
+    return blocks
 

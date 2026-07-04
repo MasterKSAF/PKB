@@ -148,6 +148,10 @@ ROUTE_TABLE: List[RouteEntry] = [
         transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
     ),
     RouteEntry(
+        {"GET"}, r"^/api/v1/documents/\d+/content_md$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
         {"GET"}, r"^/api/v1/documents/\d+/succession$", "registry",
         transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
     ),

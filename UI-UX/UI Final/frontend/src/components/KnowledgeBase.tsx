@@ -31,6 +31,9 @@ import { useUIStore } from '../store/uiStore';
 import { MOCK_DOCUMENTS, MOCK_KNOWLEDGE_SECTIONS, type Citation, type Document, type KnowledgeSection } from '../utils/mockData';
 import { documentsApi, registryApi, searchApi, sourceApi } from '../utils/http';
 import { downloadPreviewFile } from '../utils/downloadPreview';
+import { buildMarkdownFromBlocks } from '../utils/markdownBuilder';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type SectionDocument = Document & {
   sectionId?: string;
@@ -46,6 +49,8 @@ type PreviewPage = {
   imageUrl?: string;
   documentUrl?: string;
   pageNumber?: number;
+  /** Combined markdown with embedded image references */
+  pageMarkdown?: string;
 };
 
 const PANEL_SX = {
@@ -138,7 +143,21 @@ const buildDocumentPreviewText = (doc: Document, citation?: Citation | null, reg
 };
 
 const buildPreviewPages = (doc: Document, citation?: Citation | null, registrySectionLines: string[] = []): PreviewPage[] => {
-  // Если API вернул реальное содержимое — показываем документ
+  // Если API вернул markdown с картинками — показываем его
+  if (citation?.pageMarkdown) {
+    return [
+      {
+        title: 'Содержимое документа',
+        lines: [citation.pageMarkdown],
+        imageUrl: citation.pagePreviewUrl,
+        documentUrl: citation.documentUrl,
+        pageNumber: 1,
+        pageMarkdown: citation.pageMarkdown,
+      },
+    ];
+  }
+
+  // Если API вернул реальное содержимое — показываем документ (legacy fallback)
   const hasRealContent = Boolean(citation?.documentUrl && citation?.text && citation.text.length > 50);
 
   if (hasRealContent) {
@@ -1083,30 +1102,41 @@ export const KnowledgeBase: React.FC = () => {
                               {selectedDocument.name}
                             </Typography>
 
-                            {/* Показываем изображение страницы, если доступно */}
-                            {previewCitation?.pagePreviewUrl && (
-                              <Box
-                                sx={{
-                                  borderRadius: 1.5,
-                                  overflow: 'hidden',
-                                  border: '1px solid rgba(0,0,0,0.08)',
-                                  maxHeight: 400,
-                                  display: 'flex',
-                                  justifyContent: 'center',
-                                  bgcolor: '#fff',
-                                }}
-                              >
-                                <img
-                                  src={previewCitation.pagePreviewUrl}
-                                  alt="Предпросмотр страницы"
-                                  style={{ maxWidth: '100%', maxHeight: 400, objectFit: 'contain' }}
-                                />
+                            {/* Продвинутый MD с картинками — если доступен */}
+                            {previewCitation?.pageMarkdown ? (
+                              <Box sx={{ m: 0, lineHeight: 1.75, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' }, '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 1 } }}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {previewCitation.pageMarkdown}
+                                </ReactMarkdown>
                               </Box>
-                            )}
+                            ) : (
+                              <>
+                                {/* Показываем изображение страницы, если доступно (fallback) */}
+                                {previewCitation?.pagePreviewUrl && (
+                                  <Box
+                                    sx={{
+                                      borderRadius: 1.5,
+                                      overflow: 'hidden',
+                                      border: '1px solid rgba(0,0,0,0.08)',
+                                      maxHeight: 400,
+                                      display: 'flex',
+                                      justifyContent: 'center',
+                                      bgcolor: '#fff',
+                                    }}
+                                  >
+                                    <img
+                                      src={previewCitation.pagePreviewUrl}
+                                      alt="Предпросмотр страницы"
+                                      style={{ maxWidth: '100%', maxHeight: 400, objectFit: 'contain' }}
+                                    />
+                                  </Box>
+                                )}
 
-                            <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                              {renderHighlightedText(selectedDocumentPreviewText, previewDocumentSearch, isLight)}
-                            </Typography>
+                                <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
+                                  {renderHighlightedText(selectedDocumentPreviewText, previewDocumentSearch, isLight)}
+                                </Typography>
+                              </>
+                            )}
 
                             <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', pt: 0.6, flexWrap: 'wrap' }}>
                               {previewCitation?.documentUrl && (
@@ -1331,50 +1361,61 @@ export const KnowledgeBase: React.FC = () => {
                       </Typography>
                     </Box>
 
-                    {/* Изображение страницы */}
-                    {currentPreviewPage.imageUrl && (
-                      <Box
-                        sx={{
-                          borderRadius: 1.5,
-                          overflow: 'hidden',
-                          border: '1px solid rgba(0,0,0,0.08)',
-                          display: 'flex',
-                          justifyContent: 'center',
-                          bgcolor: '#fff',
-                        }}
-                      >
-                        <img
-                          src={currentPreviewPage.imageUrl}
-                          alt={`Страница ${currentPreviewPage.pageNumber ?? ''}`}
-                          style={{ maxWidth: '100%', objectFit: 'contain' }}
-                        />
+                    {/* Продвинутый MD с картинками (основной режим) */}
+                    {currentPreviewPage.pageMarkdown ? (
+                      <Box sx={{ m: 0, lineHeight: 1.75, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' }, '& img': { maxWidth: '100%', objectFit: 'contain' } }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {currentPreviewPage.pageMarkdown}
+                        </ReactMarkdown>
                       </Box>
-                    )}
+                    ) : (
+                      <>
+                        {/* Изображение страницы (fallback) */}
+                        {currentPreviewPage.imageUrl && (
+                          <Box
+                            sx={{
+                              borderRadius: 1.5,
+                              overflow: 'hidden',
+                              border: '1px solid rgba(0,0,0,0.08)',
+                              display: 'flex',
+                              justifyContent: 'center',
+                              bgcolor: '#fff',
+                            }}
+                          >
+                            <img
+                              src={currentPreviewPage.imageUrl}
+                              alt={`Страница ${currentPreviewPage.pageNumber ?? ''}`}
+                              style={{ maxWidth: '100%', objectFit: 'contain' }}
+                            />
+                          </Box>
+                        )}
 
-                    {/* PDF через iframe */}
-                    {currentPreviewPage.documentUrl && !currentPreviewPage.imageUrl && (
-                      <Box
-                        sx={{
-                          borderRadius: 1.5,
-                          overflow: 'hidden',
-                          border: '1px solid rgba(0,0,0,0.08)',
-                          bgcolor: '#fff',
-                          height: '70vh',
-                        }}
-                      >
-                        <iframe
-                          src={currentPreviewPage.documentUrl}
-                          title="PDF документ"
-                          style={{ width: '100%', height: '100%', border: 'none' }}
-                        />
-                      </Box>
-                    )}
+                        {/* PDF через iframe */}
+                        {currentPreviewPage.documentUrl && !currentPreviewPage.imageUrl && (
+                          <Box
+                            sx={{
+                              borderRadius: 1.5,
+                              overflow: 'hidden',
+                              border: '1px solid rgba(0,0,0,0.08)',
+                              bgcolor: '#fff',
+                              height: '70vh',
+                            }}
+                          >
+                            <iframe
+                              src={currentPreviewPage.documentUrl}
+                              title="PDF документ"
+                              style={{ width: '100%', height: '100%', border: 'none' }}
+                            />
+                          </Box>
+                        )}
 
-                    {/* Текст */}
-                    {!currentPreviewPage.imageUrl && !currentPreviewPage.documentUrl && (
-                      <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                        {renderHighlightedText(currentPreviewPage.lines.join('\n'), previewDocumentSearch, isLight)}
-                      </Typography>
+                        {/* Текст (fallback) */}
+                        {!currentPreviewPage.imageUrl && !currentPreviewPage.documentUrl && (
+                          <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
+                            {renderHighlightedText(currentPreviewPage.lines.join('\n'), previewDocumentSearch, isLight)}
+                          </Typography>
+                        )}
+                      </>
                     )}
                   </Stack>
                 )}

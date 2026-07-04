@@ -31,6 +31,7 @@ import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
 import { type Document } from '../utils/mockData';
 import { apiClient, documentsApi } from '../utils/http';
+import { buildMarkdownFromBlocks } from '../utils/markdownBuilder';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -685,9 +686,16 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
         throw new Error('Сервер не вернул предпросмотр страницы.');
       }
 
+      const textData = textResult.status === 'fulfilled' ? textResult.value : null;
+
+      // Используем готовый markdown с сервера, либо собираем из blocks
+      const pageMarkdown = textData?.markdown
+        || (Array.isArray(textData?.blocks) ? buildMarkdownFromBlocks(textData.blocks) : '');
+
       return {
         preview: previewResult.status === 'fulfilled' ? previewResult.value : null,
-        text: textResult.status === 'fulfilled' ? textResult.value : null,
+        text: textData,
+        pageMarkdown,
       };
     },
     enabled:
@@ -711,9 +719,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
 
       if (!selectedGatewayPage || !pageContentQuery.data) return gatewayPages;
 
-      const pageText =
-        extractPageText(pageContentQuery.data.text) ||
-        extractPageText(pageContentQuery.data.preview);
+      const pageMarkdown = pageContentQuery.data.pageMarkdown || '';
       const imageUrl =
         pageContentQuery.data.preview?.image_key
           ? `${GATEWAY_API_BASE_URL.replace(/\/+$/, '')}/files/${pageContentQuery.data.preview.image_key}`
@@ -723,7 +729,8 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
         page.pageNumber === selectedGatewayPage.pageNumber
           ? {
               ...page,
-              lines: pageText ? pageText.split(/\r?\n/).filter(Boolean) : page.lines,
+              // Используем объединённый markdown вместо сырых lines
+              lines: pageMarkdown ? [pageMarkdown] : page.lines,
               imageUrl: imageUrl || page.imageUrl,
             }
           : page,
@@ -1185,27 +1192,19 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                         }}
                       >
                         {selectedPreviewPage ? (
-                          <Stack spacing={1}>
-                            {selectedPreviewPage.imageUrl && (
-                              <Box
-                                component="img"
-                                src={selectedPreviewPage.imageUrl}
-                                alt={`${selectedDocument.name}, страница ${selectedPreviewPage.pageNumber}`}
-                                sx={{ width: '100%', height: 'auto', display: 'block' }}
-                              />
-                            )}
-                            {currentPreviewText ? (
-                              <Box sx={{ m: 0, lineHeight: 1.7, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' } }}>
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                  {currentPreviewText}
-                                </ReactMarkdown>
-                              </Box>
-                            ) : (
-                              <Typography color="text.secondary">
-                                Страница существует, но сервер не передал доступное изображение или текстовый слой.
-                              </Typography>
-                            )}
-                          </Stack>
+                            <Stack spacing={1}>
+                              {currentPreviewText ? (
+                                <Box sx={{ m: 0, lineHeight: 1.7, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' }, '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 1 } }}>
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    {currentPreviewText}
+                                  </ReactMarkdown>
+                                </Box>
+                              ) : (
+                                <Typography color="text.secondary">
+                                  Страница существует, но сервер не передал доступное изображение или текстовый слой.
+                                </Typography>
+                              )}
+                            </Stack>
                         ) : (
                           <Typography color="text.secondary">
                             Сервер не передал список страниц документа.
@@ -1554,16 +1553,8 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                       {selectedDocument?.name}
                     </Typography>
                   </Box>
-                  {selectedPreviewPage.imageUrl && (
-                    <Box
-                      component="img"
-                      src={selectedPreviewPage.imageUrl}
-                      alt={`${selectedDocument?.name ?? 'Документ'}, страница ${selectedPreviewPage.pageNumber}`}
-                      sx={{ width: '100%', height: 'auto', display: 'block' }}
-                    />
-                  )}
                   {currentPreviewText ? (
-                    <Box sx={{ m: 0, lineHeight: 1.75, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' } }}>
+                    <Box sx={{ m: 0, lineHeight: 1.75, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' }, '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 1 } }}>
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {currentPreviewText}
                       </ReactMarkdown>

@@ -1,22 +1,22 @@
-# Замена /text → /content_md ✅
+# Переход на продвинутый MD с картинками для просмотра документов
 
-## Бэкенд (registry_service)
-- [x] Endpoint `content_md` уже существует
-- [x] Endpoint `/text` остаётся для обратной совместимости
+## Финальный обзор перед коммитом
 
-## Gateway
-- [x] Mock handler `GET /api/v1/documents/{doc_id}/pages/{page_num}/content_md` добавлен в `orch_routes.py`
-- [x] Production routing не требует изменений (catch-all `pages(?:/.*)?$` уже покрывает)
-- [x] Тест роутинга `content_md` добавлен в `test_gateway_routing.py`
+### Backend
+- [x] `get_page_blocks_md()` — image_key в content как `![alt](/api/v1/files/{key})`
+- [x] `/documents/{id}/pages/{n}/content_md` — markdown из content блоков
+- [x] `/documents/{id}/content_md` — весь документ одной MD-строкой
+- [x] Gateway route для `/documents/{id}/content_md`
 
-## Фронтенд
-- [x] Установлены `react-markdown` + `remark-gfm`
-- [x] `http.ts`: добавлен метод `pageContentMd()`
-- [x] `http.ts`: превью цитат переведено на `/content_md`
-- [x] `DocumentRegistryPanel.tsx`: вызов `pageText()` → `pageContentMd()`
-- [x] `DocumentRegistryPanel.tsx`: рендеринг страницы через `ReactMarkdown` + `remarkGfm` (с поддержкой таблиц)
+### Frontend
+- [x] `utils/markdownBuilder.ts` — сборка content блоков
+- [x] `sourceApi.preview()` — использует markdown из сервера
+- [x] `DocumentRegistryPanel.tsx` — ReactMarkdown с картинками
+- [x] `KnowledgeBase.tsx` — ReactMarkdown + fallback
+- [x] `Chat.tsx` — ReactMarkdown в превью
+- [x] `SourcePreviewDialog.tsx` — ReactMarkdown с картинками
+- [x] `draft/preview` — не требует изменений (только метаданные, нет контента)
 
-## Документация
-- [x] frontend/README.md
-- [x] first-run-ui-final-with-gateway.md
-- [x] ui-final-gateway-current-status-2026-06-03.md
+### Валидация
+- [x] TypeScript: `tsc --noEmit` — чисто
+- [x] Python: `ast.parse()` — синтаксис корректен
