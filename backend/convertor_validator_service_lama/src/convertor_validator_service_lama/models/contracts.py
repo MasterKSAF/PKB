@@ -76,6 +76,17 @@ class ExtractPassDryRunResponse(BaseModel):
     extract_payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class ExtractPassesDryRunRequest(BaseModel):
+    parse_job_id: str
+
+
+class ExtractPassesDryRunResponse(BaseModel):
+    service: str = "convertor_validator_service_lama"
+    mode: Literal["extract_passes_dry_run"] = "extract_passes_dry_run"
+    parse_job_id: str
+    extract_payloads: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class RichDocumentArtifactPlanItem(BaseModel):
     artifact_key: str
     produced_by: str

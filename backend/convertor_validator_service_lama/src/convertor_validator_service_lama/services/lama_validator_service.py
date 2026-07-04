@@ -7,6 +7,8 @@ from convertor_validator_service_lama.models.contracts import (
     ExtractPassPlanResponse,
     ExtractPassDryRunRequest,
     ExtractPassDryRunResponse,
+    ExtractPassesDryRunRequest,
+    ExtractPassesDryRunResponse,
     ParseJobDryRunRequest,
     ParseJobDryRunResponse,
     PipelineStep,
@@ -46,6 +48,24 @@ def build_extract_pass_dry_run_response(
         parse_job_id=request.parse_job_id,
         pass_name=request.pass_name,
         extract_payload=extract_payload,
+    )
+
+
+def build_extract_passes_dry_run_response(
+    request: ExtractPassesDryRunRequest,
+) -> ExtractPassesDryRunResponse:
+    client = LlamaExtractClient(get_settings())
+    pass_plan = build_extract_pass_plan_response()
+    extract_payloads = [
+        client.build_extract_payload(
+            parse_job_id=request.parse_job_id,
+            pass_name=item.name,
+        )
+        for item in pass_plan.passes
+    ]
+    return ExtractPassesDryRunResponse(
+        parse_job_id=request.parse_job_id,
+        extract_payloads=extract_payloads,
     )
 
 

@@ -4,6 +4,8 @@ from convertor_validator_service_lama.models.contracts import (
     DryRunResponse,
     ExtractPassDryRunRequest,
     ExtractPassDryRunResponse,
+    ExtractPassesDryRunRequest,
+    ExtractPassesDryRunResponse,
     ExtractPassPlanResponse,
     HealthResponse,
     ParseJobDryRunRequest,
@@ -13,6 +15,7 @@ from convertor_validator_service_lama.models.contracts import (
 from convertor_validator_service_lama.services.lama_validator_service import (
     build_dry_run_response,
     build_extract_pass_dry_run_response,
+    build_extract_passes_dry_run_response,
     build_extract_pass_plan_response,
     build_parse_job_dry_run_response,
     build_rich_document_package_plan_response,
@@ -43,6 +46,11 @@ def parse_job_dry_run(request: ParseJobDryRunRequest) -> ParseJobDryRunResponse:
 @app.post("/extract-pass/dry-run", response_model=ExtractPassDryRunResponse)
 def extract_pass_dry_run(request: ExtractPassDryRunRequest) -> ExtractPassDryRunResponse:
     return build_extract_pass_dry_run_response(request)
+
+
+@app.post("/extract-passes/dry-run", response_model=ExtractPassesDryRunResponse)
+def extract_passes_dry_run(request: ExtractPassesDryRunRequest) -> ExtractPassesDryRunResponse:
+    return build_extract_passes_dry_run_response(request)
 
 
 @app.get("/extract-passes/plan", response_model=ExtractPassPlanResponse)
