@@ -56,6 +56,13 @@ It does not build `rich_document_package.json` yet.
 
 Normal unit tests use mocked `httpx` transports and do not call LlamaCloud.
 
+`POST /parse-job` maps expected failures to HTTP responses:
+
+- missing `LAMA_CLOUD_API_KEY` -> 400
+- missing source PDF -> 404
+- LlamaCloud response/job failure -> 502
+- polling timeout -> 504
+
 ## Dry-run scope
 
 Dry-run endpoints build contracts and payload previews only.
@@ -98,5 +105,5 @@ http://127.0.0.1:8000/docs
 
 Current local status:
 
-- 29 passed
+- 34 passed
 - 1 warning from FastAPI/TestClient dependency stack
