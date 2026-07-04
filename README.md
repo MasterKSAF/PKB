@@ -5,56 +5,69 @@
 ## Структура проекта
 
 ```
-PKB_neuroassistant/
+PKB_neuroassistant_develop/
 ├── README.md                    # ← Точка входа (этот файл)
-├── todo.md                      # Текущие задачи агента
+├── guide.md                     # Архитектурные решения и стиль
+├── specificity.md               # Журнал аномалий и расхождений
+├── todo.md                      # Текущие задачи
 ├── opencode.json                # Конфигурация OpenCode
 │
 ├── docs/                        # Основная документация системы
 │   ├── README.md                #   Навигация по документации
 │   ├── glossary.md              #   Глоссарий терминов
-│   ├── specificity.md           #   Журнал аномалий и расхождений
-│   ├── guide.md                 #   Архитектурные решения и стиль
 │   ├── description_view.md      #   Архитектура просмотра документов (UI + backend)
-│   ├── api/                     #   API-спецификации микросервисов (13 сервисов)
+│   ├── api/                     #   API-спецификации микросервисов
 │   ├── architecture/            #   Архитектурные схемы и описание зависимостей
 │   ├── checks/                  #   Проверки целостности документации
 │   │   └── scripts/             #     Скрипты проверок (check_consistency.py)
 │   ├── database/                #   Модели БД, диаграммы, DDL-миграции
-│   ├── pipelines/               #   Пайплайны обработки документов (3 пайплайна)
+│   ├── pipelines/               #   Пайплайны обработки документов
 │   ├── schema/                  #   JSON-схемы контрактов
-│   └── specifications/          #   Технические спецификации (конвертер, парсинг, классификаторы и др.)
+│   └── specifications/          #   Технические спецификации
 │
-├── docs_plans/                  # Планы, обсуждения, исследования, методологии
-│   ├── plans/                   #   Планы спринтов, дорожные карты, задачи разработчикам
-│   ├── features/                #   Feature-спеки (RAG, хранение черновиков, спринты)
-│   ├── methodology/             #   Методологии экспериментов (RAG evaluation, эксперименты)
+├── docs_plans/                  # Планы, обсуждения, исследования
+│   ├── plans/                   #   Планы спринтов, дорожные карты, задачи
+│   ├── features/                #   Feature-спеки
+│   ├── methodology/             #   Методологии экспериментов
 │   ├── discussions/             #   Протоколы встреч и обсуждений
-│   ├── research/                #   Исследования (Phase 2)
+│   ├── research/                #   Исследования
 │   │   ├── notebooks/           #     Jupyter-ноутбуки
 │   │   └── results/             #     Результаты экспериментов
-│   ├── audit/                   #   Аудиты (API, БД, схемы, UI-Gateway синхронизация)
-│   ├── errors/                  #   Журнал ошибок запуска сервисов
-│   ├── docs_ui.md               #   UI-документация
-│   ├── docs_ui_compare.md       #   Сравнение UI-решений
-│   └── pipeline1-formation_discussion.md  #   Обсуждение pipeline 1
+│   ├── audit/                   #   Аудиты (API, БД, схемы, UI-Gateway)
+│   └── errors/                  #   Журнал ошибок запуска сервисов
 │
-├── backend/                     # Микросервисы (в репозитории кода)
-│   ├── <service_name>/          #   Каждый сервис в своей папке
-│   └── ...
+├── backend/                     # Микросервисы
+│   ├── auth_service/            #   Аутентификация и авторизация
+│   ├── gateway_service/         #   API Gateway (единая точка входа)
+│   ├── orchestrator_service/    #   Оркестратор пайплайнов
+│   ├── registry_service/        #   Реестр документов
+│   ├── converter_validator_service/  #   Конвертер-валидатор
+│   ├── parser_service/          #   Парсер PDF
+│   ├── parser_docling/          #   Парсер Docling
+│   ├── rag_search_service/      #   RAG Search
+│   ├── rag_builder_service/     #   RAG Builder
+│   ├── rag_search_service_spd/  #   RAG Search (СПД)
+│   ├── rag_builder_service_spd/ #   RAG Builder (СПД)
+│   ├── query_service/           #   Сервис поиска/чата
+│   ├── integration_service/     #   Интеграционный сервис
+│   ├── diagnostics/             #   Модуль диагностики
+│   ├── monitoring_service/      #   Мониторинг
+│   ├── service_checker/         #   Проверка сервисов и Docker-сборка
+│   └── shared/                  #   Общие модули (pdf_text_quality, storage)
 │
-├── Abzalov_Igor/                # Личные папки участников
-├── Benuni_George/               #   (перемещаются в backend/ по готовности)
-├── Eugene_Rizov/
-│   └── ingestion_mvp/           #   MVP ingestion app
-├── Fakhrutdinov_Roman/
-├── Osipenko_Dmitrii/
-├── Vitalyy_Novozhilov/
-├── start_web.bat                # Запуск backend + web UI одной командой
-├── reset_web.bat                 # Сброс БД и Redis, перезапуск сервисов
-├── UI-UX/                       # Актуальный UI Final и материалы UI/UX-команды
+├── data/                        # Данные для тестирования
+│   ├── pdf/                     #   PDF-файлы
+│   └── tests/                   #   Тестовые скрипты
 │
-├── Documents_Pipeline/          # Наработки по пайплайну документов
+├── UI-UX/                       # Актуальный UI Final и материалы UI/UX
+│
+├── logs/                        # Логи
+│
+├── deploy.sh                    # Деплой на сервер
+├── deploy_reset.sh              # Деплой со сбросом данных
+├── reset_web_mini.bat           # Сброс БД и Redis, перезапуск сервисов
+├── docker-compose.yml           # Основной compose-файл
+├── .rules/                      # Правила агента
 └── .gitignore
 ```
 
@@ -63,8 +76,10 @@ PKB_neuroassistant/
 - **Начать здесь**: [`docs/README.md`](docs/README.md) — навигация по всей документации
 - **Глоссарий**: [`docs/glossary.md`](docs/glossary.md)
 - **Актуальный UI Final**: [`UI-UX/UI Final/README.md`](UI-UX/UI%20Final/README.md)
-- **План спринта**: [`docs/plans/sprint1_04_06_10_06.md`](docs/plans/sprint1_04_06_10_06.md)
-- **Сводный план реализации**: [`docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md`](docs/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md)
+- **Архитектурные решения**: [`guide.md`](guide.md)
+- **Аномалии**: [`specificity.md`](specificity.md)
+- **Планы спринтов**: [`docs_plans/features/sprint1_04_06_10_06.md`](docs_plans/features/sprint1_04_06_10_06.md), [`sprint2_11_06_17_06.md`](docs_plans/features/sprint2_11_06_17_06.md)
+- **Сводный план реализации**: [`docs_plans/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md`](docs_plans/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md)
 
 ## Diagnostics — диагностика через Gateway
 
@@ -95,23 +110,6 @@ Gateway проверяет собственный конфиг и health-check �
 
 ## Batch-файлы (Windows)
 
-В корне проекта и в `backend/` находятся bat-файлы для управления системой.
-
-### Корневые (главные)
-
-| Файл | Назначение | Детали |
-|------|-----------|--------|
-| [`start_web.bat`](start_web.bat) | Полный запуск backend + Web UI | Проверка Docker → создание .env → сборка base-образа → загрузка TEI-модели → `docker compose -f docker-compose-web.yml up -d --build` → ожидание supervisord → открытие UI и health |
-| [`start_web_real.bat`](start_web_real.bat) | Запуск production-стека (корневой compose) | Проверка Docker → `docker compose up -d --build` → ожидание Gateway → статус. Frontend запускается отдельно |
-| [`reset_web.bat`](reset_web.bat) | Сброс данных + перезапуск | Дропает БД, сбрасывает Redis, пересоздаёт контейнеры app и frontend без пересборки образов |
-
-### Вспомогательные (backend)
-
-| Файл | Назначение |
-|------|-----------|
-| [`backend/check.bat`](backend/check.bat) | Быстрый прогон recheck — делегирует `service_checker/docker/recheck.bat` |
-| [`backend/check_spd.bat`](backend/check_spd.bat) | Быстрый прогон recheck для SPD — делегирует `service_checker/docker/recheck_spd.bat` |
-
 ### Docker-утилиты (backend/service_checker/docker)
 
 | Файл | Назначение |
@@ -120,6 +118,14 @@ Gateway проверяет собственный конфиг и health-check �
 | [`prepare.bat`](backend/service_checker/docker/prepare.bat) | Полная инициализация с нуля (после git clone): очистка volumes, сборка образа, запуск, full-report |
 | [`recheck.bat`](backend/service_checker/docker/recheck.bat) | Чистый перезапуск + отчёт (health, coverage, pipelines). Поддерживает фильтрацию по сервисам и пайплайнам |
 | [`recheck_spd.bat`](backend/service_checker/docker/recheck_spd.bat) | То же, что recheck, но для RAG Builder SPD (`docker-compose.spd.yml`) |
+| [`reset_web_mini.bat`](reset_web_mini.bat) | Сброс данных + перезапуск |
+
+### Вспомогательные (backend)
+
+| Файл | Назначение |
+|------|-----------|
+| [`backend/check.bat`](backend/check.bat) | Быстрый прогон recheck — делегирует `service_checker/docker/recheck.bat` |
+| [`backend/check_spd.bat`](backend/check_spd.bat) | Быстрый прогон recheck для SPD — делегирует `service_checker/docker/recheck_spd.bat` |
 
 ## Разработка — обновление сервисов в Docker
 
@@ -155,18 +161,13 @@ docker compose build frontend && docker compose up -d --no-deps frontend
 
 | Скрипт | Команда | Описание |
 |--------|---------|---------|
-| [`deploy.sh`](deploy.sh) | `./deploy.sh` | **Основной деплой:** `git fetch` + `git checkout origin/develop -- .`, затем `docker compose up -d --build`. Локальные изменения перезаписываются версией из репозитория |
-
-Деплой просто заменяет файлы из репозитория, без мержа и reset.
+| [`deploy.sh`](deploy.sh) | `./deploy.sh` | **Основной деплой:** `git fetch` + `git checkout origin/develop -- .`, затем `docker compose up -d --build`. Локальные изменения перезаписываются версией из репозитория. Без мержа и reset. |
 | [`deploy_reset.sh`](deploy_reset.sh) | `./deploy_reset.sh` | **Деплой со сбросом данных:** останавливает сервисы, удаляет volumes БД и MinIO, затем вызывает `deploy.sh`. **Осторожно — удаляет все данные!** |
 
 ### docker-compose.yml — конфигурация сервера
 
-[`docker-compose.yml`](docker-compose.yml) — единственный источник истины для развёртывания:
-- Все сервисы (postgres, redis, minio, infinity, auth, registry, parser, converter-validator, rag-builder, rag-search, query, orchestrator, gateway)
-- Переменные окружения для каждого сервиса
-- Версии образов, порты, volumes, healthcheck'и
-- Сети (`pkb-net`, `signoz-net`)
+[`docker-compose.yml`](docker-compose.yml) — единственный источник истины для развёртывания.
+Содержит все сервисы, переменные окружения, версии образов, порты, volumes, healthcheck'и и сети.
 
 ### Управление сервером
 
@@ -196,14 +197,8 @@ docker compose up -d --build gateway
 
 ## Docker (All-in-One контейнер)
 
-Всё в одном контейнере: **PostgreSQL 16 + pgvector, Redis, MinIO** и **все 8 backend-сервисов**.
+Всё в одном контейнере: **PostgreSQL 16 + pgvector, Redis, MinIO** и **все backend-сервисы**.
 Управление процессами — supervisord. Единая установка, одна команда.
-- **Архитектурные решения**: [`docs/guide.md`](docs/guide.md)
-- **План спринта 1**: [`docs_plans/features/sprint1_04_06_10_06.md`](docs_plans/features/sprint1_04_06_10_06.md)
-- **План спринта 2**: [`docs_plans/features/sprint2_11_06_17_06.md`](docs_plans/features/sprint2_11_06_17_06.md)
-- **Задачи разработчикам**: [`docs_plans/plans/6.dev_tasks_17_06.md`](docs_plans/plans/6.dev_tasks_17_06.md)
-- **Сводный план реализации**: [`docs_plans/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md`](docs_plans/plans/СВОДНЫЙ_ПЛАН_РЕАЛИЗАЦИИ.md)
-- **Аномалии**: [`docs/specificity.md`](docs/specificity.md)
 
 ```bash
 # Сборка и запуск (backend + инфраструктура)
@@ -223,7 +218,6 @@ docker compose ps
 - **PostgreSQL:** `localhost:15432`
 - **Redis:** `localhost:16379`
 - **MinIO Console:** `http://localhost:19001`
-- **TEI:** `http://localhost:18092`
 
 > **Gateway URL для фронтенда:** Фронтенд обращается к Gateway на порту **8080** (не 8081).
 > Маршруты аутентификации (`POST /auth/token`, `GET /auth/me` и др.) находятся в Gateway, а не в Orchestrator.
@@ -231,7 +225,6 @@ docker compose ps
 > Env-переменная: `VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1`.
 
 Подробнее:
-- [`backend/README.Docker.md`](backend/README.Docker.md) — Docker-сборка
 - [`UI-UX/UI Final/README.md`](UI-UX/UI%20Final/README.md) — Web UI
 
 ## RAG Builder SPD
@@ -260,12 +253,6 @@ nsi.images
 nsi.extracted_tables
 nsi.formulas
 nsi.formula_parameters
-```
-
-Проверка:
-
-```text
-18 passed
 ```
 
 Подробнее: [`backend/rag_builder_service_spd/README.md`](backend/rag_builder_service_spd/README.md)
