@@ -576,6 +576,82 @@ def get_document_page_preview_endpoint(
         raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
 
 
+@routes.get('/registry/documents/{document_id}/pages/{page_num}/content_md')
+def get_document_page_markdown_endpoint(
+    document_id: str,
+    page_num: int,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/documents/{document_id}/pages/{page_num}/content_md - Страница в формате Markdown"""
+    log_event('INFO', f'/registry/documents/{document_id}/pages/{page_num}/content_md', None, None)
+    try:
+        document = document_crud.get_document_by_id(db, document_id)
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
+            )
+        pages_total = document_crud.get_document_pages_count(db, document.id)
+        if page_num < 1 or page_num > pages_total:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
+            )
+        blocks = document_crud.get_page_blocks_md(db, document.id, page_num)
+        return {
+            'data': {
+                'document_id': document.id,
+                'page': page_num,
+                'width': 595.0,
+                'height': 842.0,
+                'blocks': blocks
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/pages/{page_num}/content_md', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
+@routes.get('/registry/documents/{document_id}/pages/{page_num}/content_html')
+def get_document_page_html_endpoint(
+    document_id: str,
+    page_num: int,
+    db: Session = Depends(get_db),
+):
+    """GET /registry/documents/{document_id}/pages/{page_num}/content_html - Страница в формате HTML"""
+    log_event('INFO', f'/registry/documents/{document_id}/pages/{page_num}/content_html', None, None)
+    try:
+        document = document_crud.get_document_by_id(db, document_id)
+        if not document:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'DOCUMENT_NOT_FOUND', 'message': 'Document not found'}},
+            )
+        pages_total = document_crud.get_document_pages_count(db, document.id)
+        if page_num < 1 or page_num > pages_total:
+            raise HTTPException(
+                status_code=404,
+                detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
+            )
+        blocks = document_crud.get_page_blocks_html(db, document.id, page_num)
+        return {
+            'data': {
+                'document_id': document.id,
+                'page': page_num,
+                'width': 595.0,
+                'height': 842.0,
+                'blocks': blocks
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_event('ERROR', f'/registry/documents/{document_id}/pages/{page_num}/content_html', None, None, str(e))
+        raise HTTPException(status_code=500, detail={'error': {'code': 'INTERNAL_ERROR', 'message': str(e)}})
+
+
 @routes.post('/registry/documents')
 
 def create_document(

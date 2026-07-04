@@ -104,6 +104,8 @@ DB_DATABASE=<database_name>
 | GET    | /registry/documents/{document_id}/pages     | Список страниц документа                 | Реализовано |                      |
 | GET    | /registry/documents/{document_id}/pages/{page_num} | Конкретная страница (блоки)             | Реализовано |                      |
 | GET    | /registry/documents/{document_id}/pages/{page_num}/text | Текст конкретной страницы              | Реализовано |                      |
+| GET    | /registry/documents/{document_id}/pages/{page_num}/content_md | Страница в формате Markdown           | Реализовано |                      |
+| GET    | /registry/documents/{document_id}/pages/{page_num}/content_html | Страница в формате HTML              | Реализовано |                      |
 | GET    | /registry/documents/{document_id}/pages/{page_num}/preview | Превью конкретной страницы             | Реализовано |                      |
 | GET    | /registry/documents/{document_id}/parameters | Извлечённые параметры документа          | Реализовано |                      |
 | GET    | /registry/search                            | Полнотекстовый поиск (BM25)              | Реализовано |                      |

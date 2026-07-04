@@ -61,3 +61,6 @@ nul
 gigaide.properties
 agent-manager.json
 kilo.jsonc
+
+# Local TODO lists
+todo.md
