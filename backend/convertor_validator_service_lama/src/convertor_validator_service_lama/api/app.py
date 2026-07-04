@@ -21,6 +21,7 @@ from convertor_validator_service_lama.models.contracts import (
     ExtractPassRunRequest,
     ExtractPassesDryRunRequest,
     ExtractPassesDryRunResponse,
+    ExtractPassesRunRequest,
     ExtractPassPlanResponse,
     HealthResponse,
     ParseJobDryRunRequest,
@@ -38,6 +39,7 @@ from convertor_validator_service_lama.services.lama_validator_service import (
     build_parse_job_dry_run_response,
     build_rich_document_package_dry_run_response,
     build_rich_document_package_plan_response,
+    run_all_extract_passes_with_polling,
     run_extract_pass_with_polling,
     run_parse_job_with_polling,
 )
@@ -121,6 +123,33 @@ def extract_pass(request: ExtractPassRunRequest) -> ExtractJobResult:
 def extract_pass_dry_run(request: ExtractPassDryRunRequest) -> ExtractPassDryRunResponse:
     return build_extract_pass_dry_run_response(request)
 
+
+
+
+@app.post("/extract-passes", response_model=dict[str, ExtractJobResult])
+def extract_passes(request: ExtractPassesRunRequest) -> dict[str, ExtractJobResult]:
+    polling_config = ExtractJobPollingConfig(
+        max_attempts=request.max_attempts,
+        interval_seconds=request.interval_seconds,
+    )
+
+    try:
+        return run_all_extract_passes_with_polling(
+            parse_job_id=request.parse_job_id,
+            extraction_schemas=request.extraction_schemas,
+            instructions_by_pass=request.instructions_by_pass,
+            schema_names_by_pass=request.schema_names_by_pass,
+            expand=request.expand,
+            polling_config=polling_config,
+        )
+    except (MissingLlamaCloudApiKeyError, MissingLlamaExtractProjectIdError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LlamaExtractPollingTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except LlamaExtractJobFailedError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except LlamaExtractResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 @app.post("/extract-passes/dry-run", response_model=ExtractPassesDryRunResponse)
 def extract_passes_dry_run(request: ExtractPassesDryRunRequest) -> ExtractPassesDryRunResponse:

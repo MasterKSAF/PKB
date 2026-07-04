@@ -105,6 +105,16 @@ class ExtractPassesDryRunResponse(BaseModel):
     extract_payloads: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class ExtractPassesRunRequest(BaseModel):
+    parse_job_id: str = Field(min_length=1)
+    extraction_schemas: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    instructions_by_pass: dict[str, str] = Field(default_factory=dict)
+    schema_names_by_pass: dict[str, str] = Field(default_factory=dict)
+    expand: list[str] = Field(default_factory=lambda: ["extract_result"])
+    max_attempts: int = Field(default=60, ge=1)
+    interval_seconds: float = Field(default=2.0, ge=0.0)
+
+
 class RichDocumentPackageDryRunRequest(BaseModel):
     source_pdf_path: str
     document_code: str | None = None
