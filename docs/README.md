@@ -581,6 +581,7 @@ curl -X POST http://127.0.0.1:8080/api/v1/text/search \
 | Спецификация парсинга для разработчиков | [`docs/specifications/parsing_specifications.md`](specifications/parsing_specifications.md) |
 | **Справочники** | |
 | Глоссарий терминов и сокращений | [`docs/glossary.md`](glossary.md) |
+| Архитектура просмотра документов (UI + backend) | [`docs/description_view.md`](description_view.md) |
 | Журнал аномалий и трудных моментов | [`docs/specificity.md`](specificity.md) (D44) |
 | **Модели базы данных** | |
 | ER-диаграмма и типы данных | [`docs/database/db_diagrams.md`](database/db_diagrams.md) (D47) |
