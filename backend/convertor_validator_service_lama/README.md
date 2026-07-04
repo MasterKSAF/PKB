@@ -20,3 +20,26 @@ Out of scope for this service:
 - downcast to RAG Builder JSON
 - RAG indexing
 - search
+
+## Current API
+
+- GET /health
+- GET /dry-run
+- POST /parse-job/dry-run
+- POST /extract-pass/dry-run
+- POST /extract-passes/dry-run
+- GET /extract-passes/plan
+- GET /rich-document-package/plan
+
+## Dry-run scope
+
+Current endpoints build contracts and payload previews only.
+
+They do not call LlamaParse or LlamaExtract over the network yet.
+
+## Tests
+
+Current local status:
+
+- 11 passed
+- 1 warning from FastAPI/TestClient dependency stack
