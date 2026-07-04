@@ -566,9 +566,32 @@ function mapGatewayDocumentIndexStatus(status?: string): Document['indexStatus']
   return 'Ожидание';
 }
 
+/** Взять первое непустое осмысленное значение (не число, не пустая строка) */
+function firstMeaningfulValue(source: any, ...fields: string[]): string | undefined {
+  for (const field of fields) {
+    const val = source[field];
+    if (val != null && String(val).trim().length > 0 && !/^\d+$/.test(String(val).trim())) {
+      return String(val).trim();
+    }
+  }
+  return undefined;
+}
+
 function mapGatewaySource(source: any, index = 0): Citation {
   const rawCitationIndex = source.index ?? source.citation_index;
   const citationIndex = rawCitationIndex === undefined || rawCitationIndex === null ? undefined : Number(rawCitationIndex);
+
+  const excerpt = source.excerpt ?? source.content ?? source.text ?? '';
+  const meaningfulDocTitle = source.document_title?.trim() || source.document?.trim() || undefined;
+  const documentName = meaningfulDocTitle || `Документ №${source.document_id}`;
+
+  const meaningfulSection =
+    source.clause?.trim() ||
+    source.section?.trim() ||
+    source.section_title?.trim() ||
+    firstMeaningfulValue(source, 'excerpt', 'content', 'text') ||
+    undefined;
+  const sectionName = meaningfulSection || `Фрагмент (стр. ${source.page ?? 1})`;
 
   return {
     id: toGatewayStringId(
@@ -578,10 +601,10 @@ function mapGatewaySource(source: any, index = 0): Citation {
     index: Number.isFinite(citationIndex) ? citationIndex : undefined,
     documentId: toGatewayStringId(source.document_id ?? source.doc_id),
     sectionId: toGatewayStringId(source.section_id ?? source.chunk_id),
-    document: source.document_title ?? source.document ?? source.document_id ?? 'Документ базы знаний',
-    section: source.clause ?? source.section ?? source.section_id ?? 'Фрагмент источника',
+    document: documentName,
+    section: sectionName,
     page: Number(source.page ?? source.page_num ?? 1),
-    text: source.excerpt ?? source.content ?? source.text ?? '',
+    text: excerpt,
     version: source.version ?? 'Актуальная версия',
     confidence: typeof source.score === 'number' ? source.score : undefined,
     pagePreviewUrl: source.image_key
@@ -2485,16 +2508,27 @@ export const sourceApi = {
     const previewData = previewResponse.status === 'fulfilled' ? previewResponse.value.data : {};
     const textData = textResponse.status === 'fulfilled' ? textResponse.value.data : {};
 
+    // Registry оборачивает ответ в {data: {...}}, распаковываем
+    const innerPreview = previewData?.data ?? previewData;
+    const innerText = textData?.data ?? textData;
+
+    // Собираем полный текст страницы из blocks
+    const blocksText =
+      Array.isArray(innerText?.blocks) && innerText.blocks.length > 0
+        ? innerText.blocks.map((b: any) => b.content ?? '').filter(Boolean).join('\n')
+        : undefined;
+    const fullPageText = blocksText || innerText?.full_text || innerText?.text || citation.text;
+
     return {
       ...citation,
-      text: textData?.full_text ?? textData?.text ?? previewData?.text ?? previewData?.content ?? citation.text,
-      pagePreviewUrl: previewData?.image_key
-        ? `${BASE_URL.replace(/\/+$/, '')}/files/${previewData.image_key}`
+      text: fullPageText,
+      pagePreviewUrl: innerPreview?.image_key
+        ? `${BASE_URL.replace(/\/+$/, '')}/files/${innerPreview.image_key}`
         : citation.pagePreviewUrl,
-      documentUrl: previewData?.file_key
-        ? `${BASE_URL.replace(/\/+$/, '')}/files/${previewData.file_key}`
+      documentUrl: innerPreview?.file_key
+        ? `${BASE_URL.replace(/\/+$/, '')}/files/${innerPreview.file_key}`
         : citation.documentUrl,
-      contentType: previewData?.content_type ?? textData?.content_type ?? citation.contentType,
+      contentType: innerPreview?.content_type ?? innerText?.content_type ?? citation.contentType,
     };
   },
 };

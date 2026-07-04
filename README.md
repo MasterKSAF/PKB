@@ -121,6 +121,32 @@ Gateway проверяет собственный конфиг и health-check �
 | [`recheck.bat`](backend/service_checker/docker/recheck.bat) | Чистый перезапуск + отчёт (health, coverage, pipelines). Поддерживает фильтрацию по сервисам и пайплайнам |
 | [`recheck_spd.bat`](backend/service_checker/docker/recheck_spd.bat) | То же, что recheck, но для RAG Builder SPD (`docker-compose.spd.yml`) |
 
+## Разработка — обновление сервисов в Docker
+
+Правило: **фронтенд → build+up, бэкенд → restart (без build)**.
+
+| Что изменили | Команда |
+|---|---|
+| Фронтенд (TS/JSX/CSS) | `docker compose build frontend && docker compose up -d --no-deps frontend` |
+| Python-сервис (gateway, registry, query и др.) | `docker restart pkb-<service>` или `docker compose restart <service>` |
+| Dockerfile / package.json / requirements.txt | `docker compose build <service> && docker compose up -d --no-deps <service>` |
+
+**Почему:** у всех Python-сервисов исходники смонтированы через `volumes:`
+в docker-compose.yml, а uvicorn запущен с флагом `--reload`. Изменения в `.py`
+файлах подхватываются без пересборки — нужен только рестарт контейнера.
+Фронтенд — статика в nginx, изменения TypeScript требуют компиляции → build.
+
+```bash
+# Пример: обновить gateway после правки Python-кода
+docker restart pkb-gateway
+
+# Пример: обновить registry
+docker restart pkb-registry
+
+# Пример: обновить фронтенд после правки TS/React
+docker compose build frontend && docker compose up -d --no-deps frontend
+```
+
 ## Деплой на сервер
 
 ### Скрипты деплоя

@@ -1,5 +1,23 @@
 # Guide — архитектурные решения и стиль
 
+## Docker — обновление сервисов при разработке
+
+**Правило:** фронтенд → build + up, бэкенд → restart (без build)
+
+| Тип изменений | Команда |
+|---|---|
+| Фронтенд (TS/JSX/CSS) | `docker compose build frontend && docker compose up -d --no-deps frontend` |
+| Python-сервисы (gateway, registry, query и др.) | `docker restart pkb-<service>` или `docker compose restart <service>` |
+| Dockerfile / package.json / requirements.txt | `docker compose build <service> && docker compose up -d --no-deps <service>` |
+
+У всех Python-сервисов исходники смонтированы через volumes + `--reload`,
+поэтому пересборка не требуется — только рестарт контейнера.
+Фронтенд — статика в nginx, нужна компиляция → build образа.
+
+---
+
+## Правила диагностики серверных ошибок
+
 ## Правила диагностики серверных ошибок
 
 При жалобе «сервер не работает / ошибка» — не гадать, а собирать диагностику системно:
