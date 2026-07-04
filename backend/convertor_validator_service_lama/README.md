@@ -51,5 +51,5 @@ They do not call LlamaParse or LlamaExtract over the network yet.
 
 Current local status:
 
-- 12 passed
+- 13 passed
 - 1 warning from FastAPI/TestClient dependency stack
