@@ -42,6 +42,7 @@ Use `.env.example` as a template for local configuration:
 - POST /extract-pass/dry-run
 - POST /extract-passes/dry-run
 - GET /extract-passes/plan
+- POST /rich-document-package
 - POST /rich-document-package/dry-run
 - GET /rich-document-package/plan
 
@@ -93,6 +94,22 @@ Expected failures are mapped to HTTP responses:
 - LlamaCloud response/job failure -> 502
 - polling timeout -> 504
 
+## Rich document package assembly scope
+
+`POST /rich-document-package` assembles a local `rich_document_package.json` structure from already available artifacts:
+
+- LlamaParse `parse_result`
+- LlamaExtract `extract_results`
+- parse markdown/items/metadata/job_metadata
+- extract pass results
+- `quality_report` and `correction_proposals` from `validation_critic`, when available
+
+This endpoint does not call LlamaCloud.
+It does not run LlamaParse or LlamaExtract jobs.
+It does not implement downcast to RAG Builder-compatible JSON.
+
+Final corrections are still owned by the Python validator/assembler policy: `python_validator_assembler_applies_final_corrections`.
+
 ## Dry-run scope
 
 Dry-run endpoints build contracts and payload previews only.
@@ -135,5 +152,5 @@ http://127.0.0.1:8000/docs
 
 Current local status:
 
-- 60 passed
+- 71 passed
 - 1 warning from FastAPI/TestClient dependency stack

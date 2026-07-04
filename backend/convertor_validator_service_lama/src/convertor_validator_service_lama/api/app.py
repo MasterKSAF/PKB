@@ -45,6 +45,15 @@ from convertor_validator_service_lama.services.lama_validator_service import (
 )
 
 
+from convertor_validator_service_lama.models.rich_document_package import (
+    RichDocumentPackageAssemblyRequest,
+    RichDocumentPackageAssemblyResult,
+)
+from convertor_validator_service_lama.services.rich_document_package_assembler import (
+    assemble_rich_document_package,
+)
+
+
 app = FastAPI(
     title="convertor_validator_service_lama",
     version="0.1.0",
@@ -159,6 +168,14 @@ def extract_passes_dry_run(request: ExtractPassesDryRunRequest) -> ExtractPasses
 @app.get("/extract-passes/plan", response_model=ExtractPassPlanResponse)
 def extract_passes_plan() -> ExtractPassPlanResponse:
     return build_extract_pass_plan_response()
+
+
+
+@app.post("/rich-document-package", response_model=RichDocumentPackageAssemblyResult)
+def rich_document_package(
+    request: RichDocumentPackageAssemblyRequest,
+) -> RichDocumentPackageAssemblyResult:
+    return assemble_rich_document_package(request)
 
 
 @app.post("/rich-document-package/dry-run", response_model=RichDocumentPackageDryRunResponse)
