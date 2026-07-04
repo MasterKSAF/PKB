@@ -63,8 +63,10 @@ PKB_neuroassistant_develop/
 │
 ├── logs/                        # Логи
 │
-├── deploy.sh                    # Деплой на сервер
-├── deploy_reset.sh              # Деплой со сбросом данных
+├── deploy.sh                    # Деплой на сервер (Linux)
+├── deploy.bat                    # Деплой на сервер (Windows)
+├── deploy_reset.sh              # Деплой со сбросом данных (Linux)
+├── deploy_reset.bat              # Деплой со сбросом данных (Windows)
 ├── reset_web_mini.bat           # Сброс БД и Redis, перезапуск сервисов
 ├── docker-compose.yml           # Основной compose-файл
 ├── .rules/                      # Правила агента
@@ -163,6 +165,8 @@ docker compose build frontend && docker compose up -d --no-deps frontend
 |--------|---------|---------|
 | [`deploy.sh`](deploy.sh) | `./deploy.sh` | **Основной деплой:** `git fetch` + `git checkout origin/develop -- .`, затем `docker compose up -d --build`. Локальные изменения перезаписываются версией из репозитория. Без мержа и reset. |
 | [`deploy_reset.sh`](deploy_reset.sh) | `./deploy_reset.sh` | **Деплой со сбросом данных:** останавливает сервисы, удаляет volumes БД и MinIO, затем вызывает `deploy.sh`. **Осторожно — удаляет все данные!** |
+| [`deploy.bat`](deploy.bat) | `deploy.bat` | **Основной деплой (Windows):** аналог `deploy.sh`. `git pull` + `docker compose up -d --build`. |
+| [`deploy_reset.bat`](deploy_reset.bat) | `deploy_reset.bat` | **Деплой со сбросом данных (Windows):** аналог `deploy_reset.sh`. Останавливает сервисы, удаляет volumes БД и MinIO, вызывает `deploy.bat`. |
 
 ### docker-compose.yml — конфигурация сервера
 
@@ -177,6 +181,15 @@ docker compose build frontend && docker compose up -d --no-deps frontend
 
 # Обновление и перезапуск со сбросом БД
 ./deploy_reset.sh
+```
+
+```batch
+# Обновление и перезапуск (Windows)
+call deploy.bat
+
+# Обновление и перезапуск со сбросом БД (Windows)
+call deploy_reset.bat
+```
 
 # Просмотр логов всех сервисов
 docker compose logs -f
