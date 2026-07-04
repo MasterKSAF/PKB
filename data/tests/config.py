@@ -47,23 +47,48 @@ def _subp(cmd, cwd, timeout=120):
         return -2, "", "docker command not found"
 
 
+def cleanup_enabled() -> bool:
+    """Проверка флага очистки тестовых данных.
+
+    Приоритет:
+      1. TEST_CLEANUP=true/false — явный флаг
+      2. TEST_SKIP_REBUILD=true (обратная совместимость) — false (не чистить)
+      3. По умолчанию — true (чистить)
+
+    Returns:
+        bool: True если очистка разрешена.
+    """
+    cleanup = os.environ.get("TEST_CLEANUP")
+    if cleanup:
+        return cleanup.lower() in ("1", "true", "yes")
+    # Обратная совместимость: TEST_SKIP_REBUILD=true отключает очистку
+    skip = os.environ.get("TEST_SKIP_REBUILD", "").lower() in ("1", "true", "yes")
+    return not skip
+
+
 def ensure_services(service_set: str = "all"):
-    """Очистить тестовые данные перед запуском.
+    """Проверить доступность сервисов и очистить тестовые данные (опционально).
 
     Не трогает контейнеры — код подхватывается через volume-монтирование.
     Если нужно пересоздать контейнеры (например, после изменений в compose):
       docker compose up -d --force-recreate <service>
 
-    Пропускается если:
+    Очистка данных управляется:
+      - TEST_CLEANUP=true  (по умолч.) — очищает БД и Minio
+      - TEST_CLEANUP=false — не очищает (для проверки на существующих данных)
+      - TEST_SKIP_REBUILD=true (обратная совместимость) — то же что TEST_CLEANUP=false
+
+    Пропускается полностью если:
       - TEST_API_URL указывает на внешний сервер (не localhost)
-      - TEST_SKIP_REBUILD=true (для быстрых итераций)
     """
     import sys
 
     if not is_local():
         return
-    if os.environ.get("TEST_SKIP_REBUILD", "").lower() in ("1", "true", "yes"):
-        print("  [SKIP] DATA CLEANUP (TEST_SKIP_REBUILD=true)")
+
+    if not cleanup_enabled():
+        print("  [SKIP] DATA CLEANUP (TEST_CLEANUP=false)")
+        sys.stdout.flush()
         return
 
     print(f"\n  >>> CLEANUP TEST DATA")

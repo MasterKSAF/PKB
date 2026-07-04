@@ -13,6 +13,9 @@ def create_draft(
     raw_data: Optional[dict],
     created_by: str,
     original_filename: Optional[str] = None,
+    file_hash_sha256: Optional[str] = None,
+    title_hash_sha256: Optional[str] = None,
+    title_key: Optional[str] = None,
 ) -> Draft:
     draft = Draft(
         file_key=file_key,
@@ -21,6 +24,9 @@ def create_draft(
         status=status,
         raw_data=raw_data,
         created_by=created_by,
+        file_hash_sha256=file_hash_sha256,
+        title_hash_sha256=title_hash_sha256,
+        title_key=title_key,
         created_at=func.now(),
         updated_at=func.now()
     )

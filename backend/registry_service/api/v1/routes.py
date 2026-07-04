@@ -2052,6 +2052,9 @@ def create_draft(
             raw_data=payload.raw_data,
             created_by=payload.created_by,
             original_filename=payload.original_filename,
+            file_hash_sha256=payload.file_hash_sha256,
+            title_hash_sha256=payload.title_hash_sha256,
+            title_key=payload.title_key,
         )
         return JSONResponse(status_code=201, content={'data': DraftSchema.model_validate(draft).model_dump(mode='json', by_alias=True, exclude_none=True)})
     except HTTPException:

@@ -249,10 +249,20 @@ registry_creation completed → enqueue rag_index`
 
 **Важно:** Для PDF с CID-шрифтами/закодированным текстом конвертер не создаёт секции. Тест корректно отражает это — верификация невозможна, т.к. текст не извлекается ни самим конвертером, ни OCR.
 
-### D1. Детекция дублей — ИСПРАВЛЕНО (01.07)
+### D1. Детекция дублей — ЧАСТИЧНО (01.07)
 
-Дубли детектятся: HTTP 409 с `DUPLICATE_FILE` на повторную загрузку.
+**Upload-уровень:** HTTP 409 с `DUPLICATE_IN_PROGRESS` на повторную загрузку — РАБОТАЕТ.
 Подтверждено на `2-020101-004.pdf` и `gost_22786-77.pdf`.
+
+**Registry-уровень (документы):** НЕ РАБОТАЕТ — все `file_hash_sha256` пустые(NULL).
+- `approve_draft()` не передаёт `file_hash_sha256` в `registry.create_document(doc_payload)`
+- В `registry.drafts` нет колонки `file_hash_sha256` (хотя RegistryServiceClient.create_draft() принимает параметр)
+- PostgreSQL UNIQUE constraint на `file_hash_sha256` пропускает множественные NULL
+- **Следствие:** каждый approve создаёт новый document, дубли множатся
+
+**Где чинить:**
+1. `backend/orchestrator_service/app/core/pipeline/orchestrator.py` — `approve_draft()`: добавить `file_hash_sha256` в `doc_payload`
+2. `backend/orchestrator_service/app/services/registry_client.py` — `create_draft()`: убедиться что `file_hash_sha256` сохраняется в черновике
 
 ### — ✂ УДАЛЕНО: R6, R5. ИСПРАВЛЕНО 01.07 —
 

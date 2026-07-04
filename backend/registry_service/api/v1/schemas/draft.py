@@ -15,6 +15,9 @@ class DraftSchema(BaseModel):
     raw_data: Optional[Any] = None
     error_code: Optional[str] = None
     error_message: Optional[str] = None
+    file_hash_sha256: Optional[str] = None
+    title_hash_sha256: Optional[str] = None
+    title_key: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     created_by: Optional[str] = None
@@ -44,6 +47,9 @@ class DraftCreate(BaseModel):
     status: str
     raw_data: Optional[dict] = None
     created_by: str
+    file_hash_sha256: Optional[str] = None
+    title_hash_sha256: Optional[str] = None
+    title_key: Optional[str] = None
 
 class DraftUpdateStatus(BaseModel):
     status: str

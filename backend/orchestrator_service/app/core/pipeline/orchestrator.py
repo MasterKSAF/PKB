@@ -1261,6 +1261,8 @@ class PipelineOrchestrator:
                 )
 
         # Build document payload from draft + preview + overrides
+        # file_hash_sha256 берём из draft_data (Registry сохранил при create_draft)
+        file_hash_sha256 = draft_data.get("file_hash_sha256")
         doc_payload = {
             "title": preview_data.get("title") or draft_data.get("title_key", f"Draft {draft_id}"),
             "doc_code": preview_data.get("doc_code") or draft_data.get("document_key", f"DRAFT-{draft_id}"),
@@ -1274,6 +1276,13 @@ class PipelineOrchestrator:
             "draft_id": draft_id,
             "status": "uploaded",
         }
+        # Передаём file_hash_sha256 из Registry черновика для детекции дублей
+        if file_hash_sha256:
+            logger.info(
+                f"Including file_hash_sha256 from draft data in doc_payload",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+            doc_payload["file_hash_sha256"] = file_hash_sha256
         # Apply user overrides on top
         if metadata_overrides:
             doc_payload.update(metadata_overrides)

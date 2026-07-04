@@ -87,6 +87,8 @@ type ChatPreview = Citation & {
   previewKind: 'source' | 'document';
   /** Исходный фрагмент цитирования — сохраняем отдельно от full_text страницы */
   originalFragment?: string;
+  /** Ошибка загрузки (404, таймаут и т.д.) */
+  previewError?: string;
 };
 
 function getGatewayErrorMessage(error: unknown) {
@@ -1548,6 +1550,12 @@ export const Chat: React.FC = () => {
                       ? `${activeCitation.document} · стр. ${activeCitation.page}`
                       : `Страница ${activeCitation.page}`}
                   </Typography>
+
+                  {activeCitation.previewError && (
+                    <Alert severity="warning" variant="outlined" sx={{ mt: 2, mb: 2 }}>
+                      {activeCitation.previewError}
+                    </Alert>
+                  )}
 
                   {activeCitation.previewKind === 'source' ? (
                     <>

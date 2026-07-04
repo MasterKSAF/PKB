@@ -375,6 +375,8 @@ async def create_draft(
     if original_filename:
         metadata_fields["original_filename"] = original_filename
         metadata_fields["display_name"] = original_filename
+    # file_hash_sha256 сохраняется в registry.drafts (колонка добавлена)
+    # и при approve будет передан в registry.documents через draft_data
 
     # --- Check duplicates via Registry ---
     registry = RegistryServiceClient()
@@ -415,6 +417,22 @@ async def create_draft(
                     "details": {
                         "file_hash_sha256": file_hash,
                         "existing_draft_id": existing_draft_id,
+                    },
+                }
+            },
+        )
+
+    # --- DUPLICATE_DOCUMENT: блокировка, если документ с таким hash уже существует ---
+    if is_duplicate_document:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "error": {
+                    "code": "DUPLICATE_DOCUMENT",
+                    "message": "Документ с таким файлом уже существует",
+                    "details": {
+                        "file_hash_sha256": file_hash,
+                        "existing_document_id": existing_document_id,
                     },
                 }
             },
@@ -670,6 +688,7 @@ async def get_draft(
             "status": data.get("status"),
             "document_key": data.get("document_key"),
             "file_key": data.get("file_key"),
+            "file_hash_sha256": data.get("file_hash_sha256"),
             "preview_metadata": data.get("preview_metadata") or {},
             "created_at": data.get("created_at"),
             "updated_at": data.get("updated_at"),

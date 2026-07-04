@@ -1,19 +1,33 @@
-# Сессия: проверка pdf_check + фикс дублей file_hash_sha256
+# Сессия: фикс дублей file_hash_sha256 ✅
 
 ## Сделано
-- [x] `data/tests/config.py` — `cleanup_enabled()` через `TEST_CLEANUP`, обратная совместимость с `TEST_SKIP_REBUILD`
-- [x] `data/tests/test_pdf_tests_full.py` — параметризуемая директория (pdf_check/pdf_tests/pdf), auto-approve
-- [x] **Фикс дублей**: orchestrator `create_draft` → сохраняет `file_hash_sha256` в `metadata_fields`
-- [x] **Фикс дублей**: orchestrator `approve_draft` → передаёт `file_hash_sha256` в `doc_payload`
-- [x] **Фикс дублей**: registry_service → модель Draft + CRUD + endpoint сохраняют `file_hash_sha256`, колонки добавлены в БД
-- [x] `data/tests/test_file_hash_dedup.py` — E2E тест: file_hash_sha256 propagation + dedup
-- [x] `specificity.md` — D1 обновлён
 
-## Результаты тестов
-- `test_file_hash_dedup.py`: **6/9 PASS** — file_hash сохранён, дубли блокируются (409). 3 fail — очередь забита (16 queued), не баг фикса
-- `test_pdf_tests_full.py data/pdf_check`: 20/20 upload + auto-approve, pipeline частично (8/20 registry)
+### Проблема: почему были дубли
+1. **`approve_draft`** не передавал `file_hash_sha256` в `doc_payload` → NULL в БД
+2. **PostgreSQL** UNIQUE constraint не работает на NULL → дубли множились
+3. **`create_draft`** проверял только `is_duplicate_file` (активные черновики), не `is_duplicate_document`
+4. **`registry.drafts`** не имел колонки `file_hash_sha256` — хэш терялся после создания черновика
+5. **`base_client.py`** — `ConnectError` и `CircuitBreakerError` маскировались mock-response вместо re-raise
 
-## Причина дублей (исправлена)
-1. `approve_draft` не передавал `file_hash_sha256` в `doc_payload` → `registry.documents.file_hash_sha256 = NULL`
-2. PostgreSQL UNIQUE constraint на NULL не срабатывает → каждый approve создаёт новый document
-3. В `registry.drafts` не было колонки `file_hash_sha256` — хэш терялся
+### Исправления
+
+| Файл | Изменение |
+|------|-----------|
+| `orchestrator/.../base_client.py` | `ConnectError` и `CircuitBreakerError` → **raise**, а не fallback к моку |
+| `orchestrator/.../drafts.py` | Проверка `is_duplicate_document` → 409 `DUPLICATE_DOCUMENT` |
+| `orchestrator/.../drafts.py:683` | `get_draft` возвращает `file_hash_sha256` |
+| `orchestrator/.../orchestrator.py:1295` | `doc_payload["file_hash_sha256"]` из `draft_data` (Registry) |
+| `registry/.../models/draft.py` | Колонки `file_hash_sha256`, `title_hash_sha256`, `title_key` |
+| `registry/.../crud/draft.py` | Сохранение `file_hash_sha256` при create_draft |
+| `registry/.../schemas/draft.py` | `file_hash_sha256` в DraftSchema |
+| `registry/.../routes.py` | Передача полей в CRUD |
+| `data/tests/test_file_hash_dedup.py` | **Новый** E2E тест (9/9 PASS) |
+| `data/tests/config.py` | `TEST_CLEANUP` / `cleanup_enabled()` |
+| `data/tests/test_pdf_tests_full.py` | Параметризация директории, auto-approve |
+
+### Миграция БД
+```sql
+ALTER TABLE registry.drafts ADD COLUMN file_hash_sha256 TEXT;
+ALTER TABLE registry.drafts ADD COLUMN title_hash_sha256 TEXT;
+ALTER TABLE registry.drafts ADD COLUMN title_key TEXT;
+```

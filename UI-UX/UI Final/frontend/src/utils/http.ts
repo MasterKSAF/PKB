@@ -2496,58 +2496,97 @@ export const adminApi = {
 
 export const sourceApi = {
   preview: async (citation: Citation, previewKind: 'source' | 'document') => {
-    if (!citation.documentId) return citation;
+    if (!citation.documentId) {
+      return { ...citation, previewError: 'Документ не указан (documentId отсутствует в ответе сервиса).' };
+    }
 
-    if (previewKind === 'document') {
-      const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/file`));
+    try {
+      if (previewKind === 'document') {
+        const response = await gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/file`));
 
-      const fileKey = response.data?.file_key ?? response.data?.key ?? null;
-      const documentUrl = fileKey
-        ? `${BASE_URL.replace(/\/+$/, '')}/files/${fileKey}`
-        : citation.documentUrl;
+        const fileKey = response.data?.file_key ?? response.data?.key ?? null;
+        const documentUrl = fileKey
+          ? `${BASE_URL.replace(/\/+$/, '')}/files/${fileKey}`
+          : citation.documentUrl;
+
+        const text = response.data?.text ?? response.data?.content ?? '';
+        if (!text.trim()) {
+          return {
+            ...citation,
+            previewError: 'Текст документа не найден (сервис Registry не вернул содержимое). Возможно, документ удалён или не прошёл обработку.',
+            documentUrl,
+            contentType: response.data?.content_type ?? citation.contentType,
+          };
+        }
+
+        return {
+          ...citation,
+          text,
+          documentUrl,
+          contentType: response.data?.content_type ?? citation.contentType,
+        };
+      }
+
+      const [previewResponse, textResponse] = await Promise.allSettled([
+        gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/preview`)),
+        gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/text`)),
+      ]);
+
+      if (previewResponse.status !== 'fulfilled' && textResponse.status !== 'fulfilled') {
+        return {
+          ...citation,
+          previewError: 'Сервис предпросмотра недоступен. Возможно, документ удалён или не прошёл обработку.',
+        };
+      }
+
+      const previewData = previewResponse.status === 'fulfilled' ? previewResponse.value.data : {};
+      const textData = textResponse.status === 'fulfilled' ? textResponse.value.data : {};
+
+      // Registry оборачивает ответ в {data: {...}}, распаковываем
+      const innerPreview = previewData?.data ?? previewData;
+      const innerText = textData?.data ?? textData;
+
+      // Собираем полный текст страницы из blocks
+      const blocksText =
+        Array.isArray(innerText?.blocks) && innerText.blocks.length > 0
+          ? innerText.blocks.map((b: any) => b.content ?? '').filter(Boolean).join('\n')
+          : undefined;
+      const fullPageText = blocksText || innerText?.full_text || innerText?.text || '';
+
+      if (!fullPageText.trim() && !innerPreview?.image_key && !innerPreview?.file_key) {
+        return {
+          ...citation,
+          previewError: 'Текст страницы не найден. Возможно, документ удалён или не прошёл обработку.',
+        };
+      }
 
       return {
         ...citation,
-        text: response.data?.text ?? response.data?.content ?? citation.text,
-        documentUrl,
-        contentType: response.data?.content_type ?? citation.contentType,
+        text: fullPageText || citation.text,
+        pagePreviewUrl: innerPreview?.image_key
+          ? `${BASE_URL.replace(/\/+$/, '')}/files/${innerPreview.image_key}`
+          : citation.pagePreviewUrl,
+        documentUrl: innerPreview?.file_key
+          ? `${BASE_URL.replace(/\/+$/, '')}/files/${innerPreview.file_key}`
+          : citation.documentUrl,
+        contentType: innerPreview?.content_type ?? innerText?.content_type ?? citation.contentType,
+      };
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const message = error?.response?.data?.error?.message || error?.message || '';
+
+      if (status === 404) {
+        return {
+          ...citation,
+          previewError: `Документ №${citation.documentId} не найден (404). Возможно, он был удалён из базы знаний.`,
+        };
+      }
+
+      return {
+        ...citation,
+        previewError: `Ошибка загрузки документа: ${message || 'неизвестная ошибка'}.`,
       };
     }
-
-    const [previewResponse, textResponse] = await Promise.allSettled([
-      gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/preview`)),
-      gatewayRequest<any>(() => apiClient.get(`/documents/${citation.documentId}/pages/${citation.page}/text`)),
-    ]);
-
-    if (previewResponse.status !== 'fulfilled' && textResponse.status !== 'fulfilled') {
-      throw new Error('Gateway preview is unavailable');
-    }
-
-    const previewData = previewResponse.status === 'fulfilled' ? previewResponse.value.data : {};
-    const textData = textResponse.status === 'fulfilled' ? textResponse.value.data : {};
-
-    // Registry оборачивает ответ в {data: {...}}, распаковываем
-    const innerPreview = previewData?.data ?? previewData;
-    const innerText = textData?.data ?? textData;
-
-    // Собираем полный текст страницы из blocks
-    const blocksText =
-      Array.isArray(innerText?.blocks) && innerText.blocks.length > 0
-        ? innerText.blocks.map((b: any) => b.content ?? '').filter(Boolean).join('\n')
-        : undefined;
-    const fullPageText = blocksText || innerText?.full_text || innerText?.text || citation.text;
-
-    return {
-      ...citation,
-      text: fullPageText,
-      pagePreviewUrl: innerPreview?.image_key
-        ? `${BASE_URL.replace(/\/+$/, '')}/files/${innerPreview.image_key}`
-        : citation.pagePreviewUrl,
-      documentUrl: innerPreview?.file_key
-        ? `${BASE_URL.replace(/\/+$/, '')}/files/${innerPreview.file_key}`
-        : citation.documentUrl,
-      contentType: innerPreview?.content_type ?? innerText?.content_type ?? citation.contentType,
-    };
   },
 };
 

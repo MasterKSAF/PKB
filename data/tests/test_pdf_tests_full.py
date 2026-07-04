@@ -1,17 +1,26 @@
 """
-Concurrent PDF pipeline test — загрузка ВСЕХ PDF из data/pdf_tests через корневой docker-compose.
+Concurrent PDF pipeline test — загрузка ВСЕХ PDF из указанной директории через корневой docker-compose.
 
 Фазы (все — истинно конкурентные через threads):
-  1. CONCURRENT UPLOAD     — все 7 PDF одновременно
+  1. CONCURRENT UPLOAD     — все PDF одновременно
   2. CONCURRENT PREVIEW    — старт preview для всех draft одновременно
   3. CONCURRENT PREVIEW    — polling всех preview параллельно до завершения
-  4. CONCURRENT APPROVE    — approve всех draft одновременно
+  4. CONCURRENT APPROVE    — approve всех draft одновременно (если не auto-approve)
   5. CONCURRENT PIPELINE   — polling всех pipeline параллельно до завершения
   6. CONCURRENT SEARCH     — поиск для каждого документа
   7. ORDER VERIFICATION    — per-file: upload → preview → approve → pipeline → search
 
 Использует только корневой docker-compose (порт 8080), без service_checker.
-ensure_services() только перезапускает контейнеры и чистит данные.
+ensure_services() только чистит данные (управляется TEST_CLEANUP / TEST_SKIP_REBUILD).
+
+Usage:
+    python data/tests/test_pdf_tests_full.py [pdf_dir]
+
+    По умолчанию — data/pdf_tests/
+    Для проверки pdf_check: python data/tests/test_pdf_tests_full.py data/pdf_check/
+
+    Очистка данных:
+        TEST_CLEANUP=false python data/tests/test_pdf_tests_full.py
 """
 import io, os, sys, json, time, uuid, hashlib, threading
 from pathlib import Path
@@ -26,13 +35,23 @@ except ImportError:
 
 from config import get_api_url, ensure_services
 
+# Директория с PDF: первый аргумент или data/pdf_tests (по умолчанию)
+if len(sys.argv) > 1:
+    PDF_DIR = Path(sys.argv[1]).resolve()
+else:
+    SCRIPT_DIR = Path(__file__).resolve().parent
+    PDF_DIR = SCRIPT_DIR.parent / "pdf_tests"
+
+if not PDF_DIR.is_dir():
+    print(f"[FAIL] Directory not found: {PDF_DIR}")
+    sys.exit(1)
+
+TEST_PDFS = sorted(PDF_DIR.glob("*.pdf"))
+
 ensure_services("all")
-time.sleep(5)  # ждём пока сервисы станут healthy после пересоздания
+time.sleep(2)  # пауза для стабилизации после (возможной) очистки
 
 GW = get_api_url()
-SCRIPT_DIR = Path(__file__).resolve().parent
-PDF_DIR = SCRIPT_DIR.parent / "pdf_tests"
-TEST_PDFS = sorted(PDF_DIR.glob("*.pdf"))
 
 # ── Results tracking ────────────────────────────────────────────────────────
 results = {
@@ -288,6 +307,7 @@ def approve_single(pdf_name: str, headers: dict):
     with file_lock:
         fd = file_data[pdf_name]
         draft_id = fd["draft_id"]
+        task_id = fd.get("task_id")
         preview_ok = fd.get("preview_poll_result") == "ok"
 
     if not draft_id or not preview_ok:
@@ -296,6 +316,27 @@ def approve_single(pdf_name: str, headers: dict):
             fd["approved"] = False
         return
 
+    # Check if already auto-approved — look at task status
+    if task_id:
+        try:
+            r_check = requests.get(f"{GW}/tasks/{task_id}/status", headers=headers, timeout=10)
+            if r_check.status_code == 200:
+                task_status = r_check.json().get("status", "")
+                pipeline_stage = r_check.json().get("pipeline_stage", "")
+                # Already in full pipeline = auto-approved
+                if task_status in ("active", "completed") and pipeline_stage in ("full", "registry", "indexation"):
+                    with file_lock:
+                        fd["stages"]["approve"] = "ok (auto)"
+                        fd["approved"] = True
+                        # Extract document_id from task if present
+                        doc_id = r_check.json().get("document_id")
+                        if doc_id:
+                            fd["document_id"] = doc_id
+                    print(f"  [Approve] {pdf_name:45s} AUTO-APPROVED (task already in full pipeline)")
+                    return
+        except Exception:
+            pass
+
     try:
         r = requests.patch(
             f"{GW}/drafts/{draft_id}/decide",
@@ -303,15 +344,23 @@ def approve_single(pdf_name: str, headers: dict):
             headers={**headers, "Content-Type": "application/json"},
             timeout=30,
         )
-        ok = r.status_code in (200, 202)
+        ok = r.status_code in (200, 202, 409)
         with file_lock:
-            fd["stages"]["approve"] = "ok" if ok else f"HTTP {r.status_code}"
-            fd["approved"] = ok
-            if ok:
+            if r.status_code == 409:
+                fd["stages"]["approve"] = "ok (already decided)"
+                fd["approved"] = True
+                print(f"  [Approve] {pdf_name:45s} OK (already decided, HTTP 409)")
+            elif ok:
+                fd["stages"]["approve"] = "ok"
+                fd["approved"] = True
                 decide_data = r.json()
                 fd["document_id"] = decide_data.get("document_id")
                 fd["task_id"] = decide_data.get("task_id") or fd["task_id"]
-        print(f"  [Approve] {pdf_name:45s} HTTP {r.status_code}")
+                print(f"  [Approve] {pdf_name:45s} HTTP {r.status_code}")
+            else:
+                fd["stages"]["approve"] = f"HTTP {r.status_code}"
+                fd["approved"] = False
+                print(f"  [Approve] {pdf_name:45s} FAILED HTTP {r.status_code}: {r.text[:150]}")
     except Exception as e:
         with file_lock:
             fd["stages"]["approve"] = f"error: {e}"
