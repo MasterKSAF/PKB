@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'shared'))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'src'))
 
 
 def run_json_mode(pdf_path: str, start_page: int, end_page: int, out_path: str, quiet: bool):

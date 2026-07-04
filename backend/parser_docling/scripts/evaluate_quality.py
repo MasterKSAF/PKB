@@ -120,20 +120,37 @@ def get_block_bbox(block: dict) -> list:
     return [0, 0, 0, 0]
 
 
+def _flatten_blocks(blocks: list) -> list:
+    """Разворачивает list-блоки в отдельные элементы с bbox для корректной сортировки."""
+    result = []
+    for b in blocks:
+        if b.get('type') == 'list':
+            items = b.get('items', [])
+            for item in items:
+                item_text = item.get('content', '') if isinstance(item, dict) else str(item)
+                item_bbox = item.get('bounding box', [0, 0, 0, 0]) if isinstance(item, dict) else [0, 0, 0, 0]
+                result.append({'type': 'paragraph', 'content': item_text, 'bounding box': item_bbox})
+        else:
+            result.append(b)
+    return result
+
+
 def blocks_text_sorted(blocks: list, sort_key: str = 'original') -> str:
     """
     Собирает текст из блоков, отсортировав их по указанной стратегии.
     sort_key: 'original' — порядок Docling, 'asc' — BOTLEFT Y ascending,
               'desc' — BOTLEFT Y descending (screen ASC).
+    Для list-блоков элементы разворачиваются в отдельные блоки с их bbox.
     """
+    flat = _flatten_blocks(blocks)
     if sort_key == 'original':
-        sorted_blocks = list(blocks)
+        sorted_blocks = list(flat)
     elif sort_key == 'asc':
-        sorted_blocks = sorted(blocks, key=lambda b: get_block_bbox(b)[1])
+        sorted_blocks = sorted(flat, key=lambda b: get_block_bbox(b)[1])
     elif sort_key == 'desc':
-        sorted_blocks = sorted(blocks, key=lambda b: -get_block_bbox(b)[1])
+        sorted_blocks = sorted(flat, key=lambda b: -get_block_bbox(b)[1])
     else:
-        sorted_blocks = list(blocks)
+        sorted_blocks = list(flat)
     return ' '.join(extract_block_text(b) for b in sorted_blocks)
 
 

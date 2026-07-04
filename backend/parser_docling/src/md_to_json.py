@@ -28,6 +28,47 @@ BLOCK_TYPES = OrderedDict([
 ])
 
 
+def _is_list_marker(line: str) -> Optional[str]:
+    """
+    Проверяет, является ли строка началом списка.
+    Возвращает маркер с типом: 'bullet', 'numbered.dot', 'numbered.num', или None.
+    """
+    stripped = line.lstrip()
+    # Маркированный список: -, *, +
+    if re.match(r'^[-*+]\s+', stripped):
+        rest = re.sub(r'^[-*+]\s+', '', stripped)
+        # Если после маркера идёт .1 .2 и т.д. — это нумерованный список
+        if re.match(r'^\.?\d', rest):
+            indent = len(line) - len(stripped)
+            return f'numbered:{indent}'
+        indent = len(line) - len(stripped)
+        return f'bullet:{indent}'
+    # Нумерованный список с точки: .1, .2, .2.1
+    if re.match(r'^\.\d+(\.\d+)*\s+', stripped):
+        indent = len(line) - len(stripped)
+        return f'numbered.dot:{indent}'
+    # Нумерованный список с цифры: 1., 1.2.3, 2.2.1, (а)
+    if re.match(r'^(\d+[\.\)]|\([а-яa-z]\))\s+', stripped):
+        indent = len(line) - len(stripped)
+        return f'numbered.num:{indent}'
+    return None
+
+
+def _detect_list_type(marker: str) -> str:
+    return 'bullet' if marker.startswith('bullet') else 'numbered'
+
+
+def _extract_list_content(line: str) -> str:
+    """Извлекает содержимое элемента списка, удаляя маркер."""
+    stripped = line.lstrip()
+    # bullet: '- текст' или '- .1 текст'
+    if re.match(r'^[-*+]\s+', stripped):
+        return re.sub(r'^[-*+]\s+', '', stripped).strip()
+    # numbered: '.1 текст', '.2.1 текст', '1. текст', '(а) текст'
+    # Для dotted (.1, .2.1) — сохраняем префикс, т.к. ODO хранит его в content
+    return stripped
+
+
 def split_markdown_blocks(md_text: str) -> List[Dict[str, Any]]:
     """
     Разбивает Markdown-текст на блоки.
@@ -55,9 +96,25 @@ def split_markdown_blocks(md_text: str) -> List[Dict[str, Any]]:
             i += 1
             continue
         
-        # Image placeholder: <!-- image -->
+        # Image placeholder: <!-- image -->  +  caption со следующей строки
         if re.match(r'^<!--\s*image\s*-->$', line.strip()):
-            blocks.append({'type': 'image', 'text': ''})
+            caption = ''
+            # Проверяем следующую непустую строку — это caption?
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            if j < len(lines):
+                next_line = lines[j].strip()
+                # Caption: строка с ключевыми словами подписи (Рис., Fig., Таблица, Table)
+                if (next_line and not next_line.startswith('#') and not next_line.startswith('|')
+                        and not next_line.startswith('<!--')
+                        and not next_line.startswith('![')
+                        and re.match(r'^(Рис\.|Fig\.|Таблица|Table|Иллюстрация|Illustration)', next_line)):
+                    caption = next_line
+                    # Пропускаем строку caption в основном цикле
+                    # Помечаем, что строку нужно пропустить
+                    lines[j] = ''  # очищаем, чтобы основной цикл её пропустил
+            blocks.append({'type': 'image', 'text': caption or ''})
             i += 1
             continue
         
@@ -109,6 +166,65 @@ def split_markdown_blocks(md_text: str) -> List[Dict[str, Any]]:
             blocks.append({'type': 'code', 'text': '\n'.join(code_lines)})
             continue
         
+        # List: маркированный или нумерованный
+        list_marker = _is_list_marker(line)
+        if list_marker:
+            list_type = _detect_list_type(list_marker)
+            # Определяем стиль первого элемента: dot-prefix (.1) или digit-prefix (1.2)
+            first_stripped = line.lstrip()
+            first_after_marker = re.sub(r'^[-*+]\s+', '', first_stripped) if re.match(r'^[-*+]\s+', first_stripped) else first_stripped
+            list_has_dot_prefix = first_after_marker.startswith('.')
+            items = []
+            while i < len(lines):
+                l = lines[i]
+                
+                # Пустая строка в списке — пропускаем (может быть между .1 и .2)
+                if not l.strip():
+                    i += 1
+                    continue
+                
+                # Если строка — заголовок, таблица, image — конец списка
+                if re.match(r'^#{1,6}\s', l):
+                    break
+                if l.strip().startswith('|'):
+                    break
+                if re.match(r'^<!--\s*image\s*-->$', l.strip()):
+                    break
+                if re.match(r'^-{3,}\s*$', l.strip()):
+                    i += 1
+                    continue
+                
+                marker = _is_list_marker(l)
+                if marker and _detect_list_type(marker) == list_type:
+                    stripped_now = l.lstrip()
+                    # Определяем стиль номера ПОСЛЕ удаления маркера (- , *)
+                    text_after_marker = re.sub(r'^[-*+]\s+', '', stripped_now) if re.match(r'^[-*+]\s+', stripped_now) else stripped_now
+                    is_dot_item = text_after_marker.startswith('.')
+                    # Смена стиля: были подпункты (.1), а это новый пункт (1.2)
+                    if list_has_dot_prefix and not is_dot_item:
+                        break
+                    # Смена стиля: были пункты (1.2), а это подпункт (.1)
+                    if not list_has_dot_prefix and is_dot_item:
+                        break
+                    
+                    content = _extract_list_content(l)
+                    items.append(content)
+                    i += 1
+                elif marker:
+                    # Другой тип списка — выходим, обработаем на следующей итерации
+                    break
+                elif not l[0].isspace():
+                    # Строка без отступа и без маркера (напр. параграф) — конец списка
+                    break
+                else:
+                    # Строка с отступом — продолжение элемента
+                    if items:
+                        items[-1] = items[-1] + ' ' + l.strip()
+                    i += 1
+            if items:
+                blocks.append({'type': 'list', 'list_type': list_type, 'items': items})
+            continue
+        
         # Paragraph: всё остальное до пустой строки или заголовка
         para_lines = []
         while i < len(lines):
@@ -122,6 +238,9 @@ def split_markdown_blocks(md_text: str) -> List[Dict[str, Any]]:
             if l.strip().startswith('|'):
                 break
             if re.match(r'^<!--\s*image\s*-->$', l.strip()):
+                break
+            # Не захватываем списки
+            if _is_list_marker(l):
                 break
             # Пропускаем разделители ---
             if re.match(r'^-{3,}\s*$', l.strip()):
@@ -225,6 +344,31 @@ def parse_table(rows: List[str]) -> Dict[str, Any]:
 # 3. MD → JSON converter
 # ============================================================
 
+def _looks_like_list_item(text: str) -> bool:
+    """Проверяет, похож ли короткий параграф на элемент перечисления.
+    Критерии: начинается с заглавной/аббревиатуры или содержит " - " / " — "."""
+    t = text.strip()
+    if not t or len(t) > 100:
+        return False
+    # Начинается с аббревиатуры (заглавные буквы) и содержит разделитель
+    if re.match(r'^[А-ЯA-Z]{2,}\s+[-—]', t):
+        return True
+    if re.match(r'^[А-ЯA-Z][а-яa-z]+\s+[-—]', t):
+        return True
+    # Содержит " - " или " — " (типично для списков определений)
+    if ' - ' in t or ' — ' in t:
+        return True
+    # Начинается с римской цифры, буквы с точкой: I., II., а), б)
+    if re.match(r'^[IVXLCM]+\..', t):
+        return True
+    if re.match(r'^[а-яa-z]\)', t):
+        return True
+    # Очень короткая строка (3-10 символов) из заглавных букв — аббревиатура
+    if 2 <= len(t) <= 10 and re.match(r'^[А-ЯA-Z][А-ЯA-Z0-9]+$', t):
+        return True
+    return False
+
+
 def md_to_json_blocks(md_text: str, page_number: int = 1) -> List[Dict[str, Any]]:
     """
     Конвертирует Markdown страницы в список блоков opendataloader-формата.
@@ -232,33 +376,92 @@ def md_to_json_blocks(md_text: str, page_number: int = 1) -> List[Dict[str, Any]
     raw_blocks = split_markdown_blocks(md_text)
     result = []
     
+    # Буфер для группировки коротких параграфов в список
+    list_buffer = []
+    
+    def flush_list():
+        nonlocal list_buffer
+        if len(list_buffer) >= 3:
+            all_short = all(len(b['text']) <= 120 for b in list_buffer)
+            # Хотя бы один элемент содержит " - " или это заглавная аббревиатура
+            has_list_like = any(_looks_like_list_item(b['text']) for b in list_buffer)
+            if all_short and has_list_like:
+                result.append({
+                    'type': 'list',
+                    'page number': page_number,
+                    'list_type': 'bullet',
+                    'content': '\n'.join(b['text'] for b in list_buffer),
+                    'items': [{'content': b['text']} for b in list_buffer],
+                    'bounding box': [0, 0, 0, 0],
+                })
+                list_buffer = []
+                return
+        # Если не подошло — сбрасываем как обычные параграфы
+        for b in list_buffer:
+            result.append({
+                'type': 'paragraph',
+                'page number': page_number,
+                'content': b['text'],
+                'bounding box': [0, 0, 0, 0],
+            })
+        list_buffer = []
+    
     for bi, block in enumerate(raw_blocks):
         bt = block['type']
+        text = block.get('text', '')
+        
+        # Пропускаем пустые блоки-разделители внутри потенциального списка
+        is_empty_block = bt in ('list', 'horizontal_rule') and not text.strip()
+        if is_empty_block and list_buffer:
+            continue
         
         if bt == 'heading':
+            flush_list()
             result.append({
                 'type': 'heading',
                 'page number': page_number,
                 'heading level': block['level'],
-                'content': block['text'],
+                'content': text,
+                'bounding box': [0, 0, 0, 0],
+            })
+        
+        elif bt == 'list':
+            flush_list()
+            items = block.get('items', [])
+            result.append({
+                'type': 'list',
+                'page number': page_number,
+                'list_type': block.get('list_type', 'bullet'),
+                'content': '\n'.join(items),
+                'items': [{'content': item} for item in items],
                 'bounding box': [0, 0, 0, 0],
             })
         
         elif bt == 'paragraph':
-            result.append({
-                'type': 'paragraph',
-                'page number': page_number,
-                'content': block['text'],
-                'bounding box': [0, 0, 0, 0],
-            })
+            # Короткий параграф (≤120) — в буфер, если буфер уже начат
+            # или это первый похожий на элемент списка
+            is_short = len(text) <= 120
+            is_listy = _looks_like_list_item(text)
+            if is_short and (list_buffer or is_listy):
+                list_buffer.append(block)
+            else:
+                flush_list()
+                result.append({
+                    'type': 'paragraph',
+                    'page number': page_number,
+                    'content': text,
+                    'bounding box': [0, 0, 0, 0],
+                })
         
         elif bt == 'table':
+            flush_list()
             parsed = parse_table(block['rows'])
             parsed['page number'] = page_number
             parsed['bounding box'] = [0, 0, 0, 0]
             result.append(parsed)
         
         elif bt == 'image':
+            flush_list()
             result.append({
                 'type': 'image',
                 'page number': page_number,
@@ -268,6 +471,7 @@ def md_to_json_blocks(md_text: str, page_number: int = 1) -> List[Dict[str, Any]
             })
         
         elif bt == 'code':
+            flush_list()
             # Код как параграф (в MD структура кода не критична)
             result.append({
                 'type': 'paragraph',
@@ -276,6 +480,7 @@ def md_to_json_blocks(md_text: str, page_number: int = 1) -> List[Dict[str, Any]
                 'bounding box': [0, 0, 0, 0],
             })
     
+    flush_list()
     return result
 
 

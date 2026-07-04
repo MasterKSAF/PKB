@@ -1,48 +1,36 @@
 # parser_docling
 
-Утилита для парсинга PDF с помощью **Docling** (вместо OpenDataLoader).
-JSON на выходе — в той же структуре, что и `JsonStandardizer` (`parser_service`).
+Утилита парсинга PDF через **Docling** с пост-обработкой.  
+Выдаёт JSON в структуре, совместимой с `JsonStandardizer` (`parser_service`).
 
-## Использование
+## Структура проекта
+
+```
+parser_docling/
+├── src/             # библиотечный код (docling_mapper, md_to_json, quality_metrics и др.)
+├── scripts/         # CLI-утилиты (run_range, evaluate_quality, compare_json и др.)
+├── data/            # результаты парсинга (JSON)
+├── docs/            # документация (README, SUMMARY, TASK_MD_CONVERTER и др.)
+├── archive/         # устаревший код (main, pdfium_mapper, layout_analyzer и др.)
+├── pdf/             # тестовые PDF-файлы
+└── requirements.txt
+```
+
+## Быстрый старт
 
 ```bash
 cd backend/parser_docling
-python main.py path/to/document.pdf [-o output.json] [--max-pages N] [--engine docling|pdfium]
+
+# Парсинг PDF с диапазоном страниц
+python scripts/run_range.py --start 1 --end 50 -o data/output.json [--mode json|md]
+
+# Оценка качества
+python scripts/evaluate_quality.py data/output.json pdf/2-020101-174-1.pdf
+
+# Сравнение с ODO
+python scripts/compare_json.py data/output_docling.json data/odo_50.json
 ```
 
-- `--engine docling` — Docling (через pipeline, при ошибке — fallback на raw parser)
-- `--engine pdfium` — pypdfium2 (быстро, один блок на страницу)
-- `--max-pages N` — ограничить число страниц
+## Подробнее
 
-## Структура выхода
-
-```json
-{
-  "document": {
-    "source": {"file_name", "file_hash_sha256", "page_count", ...},
-    "pages": [{"page", "width", "height"}, ...],
-    "block": [{"number", "type", "page", "bbox", "content"/"rows"/"image_key", ...}, ...]
-  },
-  "quality": {"confidence", "pages_processed", ..., "per_page": [...]},
-  "errors": [],
-  "status": "completed",
-  "metadata": {"total_pages", "has_tables"}
-}
-```
-
-## Детали работы
-
-### docling engine
-1. Пытается `StandardPdfPipeline` (с таблицами, layout analysis)
-2. При ошибке — fallback на `DoclingPdfParser` + сборка `DoclingDocument` вручную через `docling-core`
-3. Маппинг → стандартный JSON
-
-### pdfium engine
-- `pypdfium2` — прямой рендеринг, без ML, текст одним блоком на страницу
-- Быстро, подходит для любых PDF
-
-## Сравнение с opendataloader
-
-1. `python main.py doc.pdf -o docling.json --engine docling`
-2. Запустить parser_service (opendataloader) → opendataloader.json
-3. Сравнить блоки, таблицы, качество
+см. [docs/README.md](docs/README.md)

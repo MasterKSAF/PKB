@@ -27,6 +27,11 @@ def group_blocks_by_page(blocks: list) -> dict:
     return pages
 
 
+def get_blocks(doc: dict) -> list:
+    """Достаёт блоки из document, поддерживая разные структуры."""
+    return doc.get('block', [])
+
+
 def text_similarity(a: str, b: str) -> float:
     """Сходство текста 0..1."""
     if not a and not b:
@@ -143,8 +148,8 @@ def compare_quality(doc_q, odo_q):
 
 
 def main():
-    doc_path = 'output_50.json'
-    odo_path = 'odo_50.json'
+    doc_path = 'data/output_50.json'
+    odo_path = 'data/odo_50.json'
 
     if len(sys.argv) >= 3:
         doc_path = sys.argv[1]
@@ -155,16 +160,17 @@ def main():
     doc = load_json(doc_path)
     odo = load_json(odo_path)
 
-    d_doc = doc['document']
-    d_odo = odo['document']
+    # Поддержка разных структур: {document} или {content: {document: ...}}
+    d_doc = doc.get('document', doc.get('content', {}).get('document', {}))
+    d_odo = odo.get('document', odo.get('content', {}).get('document', {}))
 
     print("=" * 60)
     print("СРАВНЕНИЕ JSON: Docling vs ODO")
     print("=" * 60)
 
     # 1. Базовые метрики
-    d_blocks = d_doc['block']
-    o_blocks = d_odo['block']
+    d_blocks = get_blocks(d_doc)
+    o_blocks = get_blocks(d_odo)
 
     print(f"\n{'Метрика':40s} {'Docling':>10s} {'ODO':>10s} {'Δ':>8s}")
     print("-" * 70)
@@ -189,7 +195,9 @@ def main():
         print(f"{name:40s} {d_val:>10d} {o_val:>10d} {delta_str:>8s}")
 
     # 2. Quality
-    q_comp = compare_quality(doc['quality'], odo['quality'])
+    doc_q = doc.get('quality', doc.get('content', {}).get('quality', {}))
+    odo_q = odo.get('quality', odo.get('content', {}).get('quality', {}))
+    q_comp = compare_quality(doc_q, odo_q)
     print(f"\n{'Quality confidence':40s} {q_comp['docling_confidence']:>10.3f} {q_comp['odo_confidence']:>10.3f} {q_comp['delta']:>+8.3f}")
 
     # 3. Заголовки

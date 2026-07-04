@@ -250,6 +250,34 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
     json_result = md_to_document_json(page_mds, file_name)
 
     # Проставляем bbox из карты, собранной во время enrich
+    def _match_bbox(pno: int, text: str) -> Optional[list]:
+        """Ищет bbox для текста в bbox_map. Возвращает [x0,y0,x1,y1] или None."""
+        if not text.strip():
+            return None
+        norm = _re.sub(r'[\s\u00a0]+', ' ', text).strip().lower()
+        norm_clean = norm.rstrip('.')
+        for candidate in [norm, norm_clean, norm_clean + '.']:
+            key = (candidate, pno)
+            if key in bbox_map:
+                return bbox_map[key]
+        for (map_text, map_page), map_bbox in bbox_map.items():
+            if map_page == pno and map_text != '__table__':
+                if len(norm) > 10 and norm in map_text:
+                    return map_bbox
+                if len(map_text) > 10 and map_text in norm:
+                    return map_bbox
+        return None
+
+    def _merge_bbox(bboxes: list) -> list:
+        """Объединяет несколько bbox в один (по минимальным/максимальным координатам)."""
+        if not bboxes:
+            return [0, 0, 0, 0]
+        x0 = min(b[0] for b in bboxes)
+        y0 = min(b[1] for b in bboxes)
+        x1 = max(b[2] for b in bboxes)
+        y1 = max(b[3] for b in bboxes)
+        return [x0, y0, x1, y1]
+
     bbox_matched = 0
     for block in json_result.get('content', {}).get('document', {}).get('block', []):
         pno = block.get('page number', 1)
@@ -263,29 +291,31 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
                 bbox_matched += 1
             continue
 
+        if btype == 'list':
+            # Для списка — ищем bbox для каждого элемента и объединяем
+            items = block.get('items', [])
+            if items:
+                item_bboxes = []
+                for item in items:
+                    item_text = item.get('content', '') if isinstance(item, dict) else str(item)
+                    b = _match_bbox(pno, item_text)
+                    if b:
+                        item_bboxes.append(b)
+                        # Сохраняем индивидуальный bbox в элемент
+                        if isinstance(item, dict):
+                            item['bounding box'] = b
+                if item_bboxes:
+                    block['bounding box'] = _merge_bbox(item_bboxes)
+                    bbox_matched += 1
+            continue
+
         if not text.strip():
             continue
 
-        norm = _re.sub(r'[\s\u00a0]+', ' ', text).strip().lower()
-        norm_clean = norm.rstrip('.')
-        
-        for candidate in [norm, norm_clean, norm_clean + '.']:
-            key = (candidate, pno)
-            if key in bbox_map:
-                block['bounding box'] = bbox_map[key]
-                bbox_matched += 1
-                break
-        else:
-            for (map_text, map_page), map_bbox in bbox_map.items():
-                if map_page == pno and map_text != '__table__':
-                    if len(norm) > 10 and norm in map_text:
-                        block['bounding box'] = map_bbox
-                        bbox_matched += 1
-                        break
-                    if len(map_text) > 10 and map_text in norm:
-                        block['bounding box'] = map_bbox
-                        bbox_matched += 1
-                        break
+        matched = _match_bbox(pno, text)
+        if matched:
+            block['bounding box'] = matched
+            bbox_matched += 1
 
     if bbox_matched:
         print(f"  Bbox: restored {bbox_matched} block positions",
