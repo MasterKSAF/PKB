@@ -47,6 +47,32 @@ Current endpoints build contracts and payload previews only.
 
 They do not call LlamaParse or LlamaExtract over the network yet.
 
+## Local usage
+
+Install dependencies:
+
+```powershell
+.\venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+Run tests:
+
+```powershell
+.\venv\Scripts\python.exe -m pytest
+```
+
+Run API locally:
+
+```powershell
+.\venv\Scripts\python.exe -m uvicorn convertor_validator_service_lama.api.app:app --reload
+```
+
+Swagger UI:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
 ## Tests
 
 Current local status:
