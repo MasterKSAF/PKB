@@ -989,5 +989,106 @@ def get_page_blocks(db: Session, document_id: int, page_num: int) -> List[Dict[s
     return blocks
 
 
+def get_page_blocks_md(db: Session, document_id: int, page_num: int) -> List[Dict[str, Any]]:
+    """Retrieve and map document sections on a specific page as blocks with Markdown content."""
+    sections = (
+        db.query(DocumentSection)
+        .filter(DocumentSection.document_id == document_id, DocumentSection.page == page_num)
+        .order_by(DocumentSection.id.asc())
+        .all()
+    )
+    blocks = []
+    for idx, sec in enumerate(sections, 1):
+        md_content = ""
+        if isinstance(sec.content, dict):
+            md_content = sec.content.get("markdown") or sec.content.get("text") or sec.content.get("latex") or ""
+        else:
+            md_content = str(sec.content or "")
+
+        blocks.append({
+            "number": idx,
+            "type": sec.type_,
+            "bbox": sec.bbox,
+            "content": md_content,
+            "confidence": 0.95
+        })
+    return blocks
+
+
+def convert_markdown_to_html(md: str, type_: str = None) -> str:
+    """Helper to convert a markdown string (especially tables) into simple HTML."""
+    if not md:
+        return ""
+    lines = [line.strip() for line in md.strip().split("\n")]
+    if type_ == "table" or (len(lines) >= 3 and any("|" in l for l in lines)):
+        html_lines = ["<table>"]
+        has_tbody = False
+        for i, line in enumerate(lines):
+            if not line.strip() or (i == 1 and all(c in "-:| \t" for c in line if c != "|")):
+                continue
+            cells = [cell.strip() for cell in line.split("|")]
+            if line.startswith("|"):
+                cells = cells[1:]
+            if line.endswith("|"):
+                cells = cells[:-1]
+            if not cells:
+                continue
+            
+            if i == 0:
+                html_lines.append("  <thead>")
+                html_lines.append("    <tr>")
+                for cell in cells:
+                    html_lines.append(f"      <th>{cell}</th>")
+                html_lines.append("    </tr>")
+                html_lines.append("  </thead>")
+            else:
+                if not has_tbody:
+                    html_lines.append("  <tbody>")
+                    has_tbody = True
+                html_lines.append("    <tr>")
+                for cell in cells:
+                    html_lines.append(f"      <td>{cell}</td>")
+                html_lines.append("    </tr>")
+        if has_tbody:
+            html_lines.append("  </tbody>")
+        html_lines.append("</table>")
+        return "\n".join(html_lines)
+    
+    if md.strip().startswith("<") and md.strip().endswith(">"):
+        return md
+    return f"<p>{md}</p>"
+
+
+def get_page_blocks_html(db: Session, document_id: int, page_num: int) -> List[Dict[str, Any]]:
+    """Retrieve and map document sections on a specific page as blocks with HTML content."""
+    sections = (
+        db.query(DocumentSection)
+        .filter(DocumentSection.document_id == document_id, DocumentSection.page == page_num)
+        .order_by(DocumentSection.id.asc())
+        .all()
+    )
+    blocks = []
+    for idx, sec in enumerate(sections, 1):
+        html_content = ""
+        if isinstance(sec.content, dict):
+            if "html" in sec.content and sec.content["html"]:
+                html_content = sec.content["html"]
+            else:
+                raw_text = sec.content.get("markdown") or sec.content.get("text") or sec.content.get("latex") or ""
+                html_content = convert_markdown_to_html(raw_text, sec.type_)
+        else:
+            html_content = convert_markdown_to_html(str(sec.content or ""), sec.type_)
+
+        blocks.append({
+            "number": idx,
+            "type": sec.type_,
+            "bbox": sec.bbox,
+            "content": html_content,
+            "confidence": 0.95
+        })
+    return blocks
+
+
+
 
 

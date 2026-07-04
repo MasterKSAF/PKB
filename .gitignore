@@ -72,3 +72,6 @@ kilo.jsonc
 # Codegraph index (build artifact)
 .codegraph/
 **/.codegraph/
+
+# Local TODO lists
+todo.md
