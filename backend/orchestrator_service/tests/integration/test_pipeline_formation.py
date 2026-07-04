@@ -144,7 +144,7 @@ class TestStartPipeline:
 
 
 # ---------------------------------------------------------------------------
-#  on_step_completed — preview_ocr
+#  on_step_completed --- preview_ocr
 # ---------------------------------------------------------------------------
 
 
@@ -196,7 +196,7 @@ class TestOnStepCompletedPreviewOcr:
 
 
 # ---------------------------------------------------------------------------
-#  on_step_completed — preview_converter (partial preview)
+#  on_step_completed --- preview_converter (partial preview)
 # ---------------------------------------------------------------------------
 
 
@@ -251,7 +251,7 @@ class TestOnStepCompletedPreviewConverterPartial:
 
 
 # ---------------------------------------------------------------------------
-#  on_step_completed — preview_converter (full preview + auto-approve)
+#  on_step_completed --- preview_converter (full preview + auto-approve)
 # ---------------------------------------------------------------------------
 
 
@@ -329,7 +329,7 @@ class TestOnStepCompletedPreviewConverterFullAutoApprove:
 
 
 # ---------------------------------------------------------------------------
-#  approve_draft — partial preview
+#  approve_draft --- partial preview
 # ---------------------------------------------------------------------------
 
 
@@ -368,8 +368,8 @@ class TestApproveDraftPartial:
             "app.core.pipeline.orchestrator.RegistryServiceClient",
             return_value=mock_registry,
         ), patch(
-            "app.tasks.pipeline_formation.run_ocr_full_step.delay",
-        ), patch(
+            "app.tasks.pipeline_formation.run_parser_full_step.delay",
+        ) as mock_parser_delay, patch(
             "app.tasks.pipeline_formation.run_converter_full_step.delay",
         ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
@@ -383,10 +383,15 @@ class TestApproveDraftPartial:
         assert result["version_id"] == 1001
         assert result["is_new_document"] is True
 
-        # Verify task stage goes to full
+        # --- Critical: task must NOT be in terminal state after approve ---
         updated = await repo.get_task(task.id)
         assert updated is not None
-        assert updated.pipeline_stage == TaskStage.FULL.value
+        assert updated.status != TaskStatus.COMPLETED.value, (
+            "Task must NOT be completed after approve --- processing just started"
+        )
+        assert updated.pipeline_stage == TaskStage.FULL.value, (
+            f"Pipeline stage must be FULL after approve, got {updated.pipeline_stage}"
+        )
         assert updated.progress_percent == 50
 
         # Verify new steps created
@@ -400,9 +405,16 @@ class TestApproveDraftPartial:
         full_ocr = next(s for s in all_steps if s.step_name == "full_ocr")
         assert full_ocr.status == "running"
 
+        # --- Celery task WAS dispatched (critical) ---
+        mock_parser_delay.assert_called_once()
+        call_args = mock_parser_delay.call_args
+        assert call_args[0][0] == task.id, "task_id must be passed to parser delay"
+        assert call_args[0][1] == 100, "draft_id must be passed to parser delay"
+        assert call_args[0][2] == "test.pdf", "file_key must be passed to parser delay"
+
 
 # ---------------------------------------------------------------------------
-#  approve_draft — full preview
+#  approve_draft --- full preview
 # ---------------------------------------------------------------------------
 
 
@@ -453,10 +465,15 @@ class TestApproveDraftFull:
         mock_registry.create_document.assert_awaited_once()
         assert result["is_new_document"] is True
 
-        # Verify task stage goes to full
+        # --- Critical: task must NOT be in terminal state after approve ---
         updated = await repo.get_task(task.id)
         assert updated is not None
-        assert updated.pipeline_stage == TaskStage.FULL.value
+        assert updated.status != TaskStatus.COMPLETED.value, (
+            "Task must NOT be completed after approve --- processing just started"
+        )
+        assert updated.pipeline_stage == TaskStage.FULL.value, (
+            f"Pipeline stage must be FULL after approve, got {updated.pipeline_stage}"
+        )
         assert updated.progress_percent == 50
 
         # Verify only full_converter + registry_creation (no full_ocr)
@@ -561,7 +578,7 @@ class TestRejectDraft:
 
 
 # ---------------------------------------------------------------------------
-#  start_pipeline — error paths
+#  start_pipeline --- error paths
 # ---------------------------------------------------------------------------
 
 
@@ -669,12 +686,9 @@ class TestApproveDraftMetadataOverrides:
         with patch(
             "app.core.pipeline.orchestrator.RegistryServiceClient",
         ) as mock_reg_cls, patch(
-            "app.tasks.pipeline_formation.run_ocr_full_step.delay",
-            new_callable=MagicMock,
-        ), patch(
             "app.tasks.pipeline_formation.run_parser_full_step.delay",
             new_callable=MagicMock,
-        ), patch(
+        ) as mock_parser_delay, patch(
             "app.tasks.pipeline_formation.run_converter_full_step.delay",
             new_callable=MagicMock,
         ), patch(
@@ -705,9 +719,21 @@ class TestApproveDraftMetadataOverrides:
         assert result["document_id"] == 42
         assert result["version_id"] == 421
 
+        # --- Critical: task must NOT be completed after approve ---
+        repo = TaskRepository(db_session)
+        updated = await repo.get_task(task.id)
+        assert updated is not None
+        assert updated.status != TaskStatus.COMPLETED.value, (
+            "Task must NOT be completed after approve with metadata_overrides"
+        )
+        assert updated.pipeline_stage == TaskStage.FULL.value
+
+        # --- Celery task WAS dispatched (critical) ---
+        mock_parser_delay.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
-#  on_step_failed — retry exhaustion
+#  on_step_failed --- retry exhaustion
 # ---------------------------------------------------------------------------
 
 
@@ -765,7 +791,7 @@ class TestOnStepFailedRetryExhausted:
 
 
 # ---------------------------------------------------------------------------
-#  _run_ocr_fallback — guard against duplicate OCR (B1)
+#  _run_ocr_fallback --- guard against duplicate OCR (B1)
 # ---------------------------------------------------------------------------
 
 
@@ -785,7 +811,7 @@ class TestRunOcrFallback:
         await repo.start_task_step(parser_step.id)
         await repo.complete_task_step(parser_step.id, output_data={"pages": 3})
 
-        # Create OCR preview_ocr (already completed — this is the guard)
+        # Create OCR preview_ocr (already completed --- this is the guard)
         ocr_step = await repo.create_task_step(
             task_id=task.id, step_name="preview_ocr", step_index=1,
             service_name="OCR Service",
@@ -869,7 +895,7 @@ class TestRunOcrFallback:
             service_name="OCR Service",
             input_data={"file_key": "test.pdf", "mode": "preview", "max_pages": 3, "draft_id": 100},
         )
-        # Step stays pending — not started
+        # Step stays pending --- not started
 
         with patch(
             "app.core.pipeline.orchestrator.RegistryServiceClient",
@@ -898,7 +924,7 @@ class TestRunOcrFallback:
 
 
 # ---------------------------------------------------------------------------
-#  cleanup_stale_tasks — stale running steps with health check (B2)
+#  cleanup_stale_tasks --- stale running steps with health check (B2)
 # ---------------------------------------------------------------------------
 
 
@@ -1022,7 +1048,217 @@ class TestCheckServiceHealth:
             assert result is False
 
     async def test_returns_true_for_unknown_service(self, db_session: AsyncSession):
-        """_check_service_health returns True for services without URL (cannot check)."""
+        """Returns True when service name not in health check list."""
         orchestrator = PipelineOrchestrator(db_session)
-        result = await orchestrator._check_service_health("Orchestrator")
+        result = await orchestrator._check_service_health("unknown-service")
         assert result is True
+
+
+# ---------------------------------------------------------------------------
+#  confirm_draft --- review_required &#8594; validation
+# ---------------------------------------------------------------------------
+
+
+class TestConfirmDraft:
+    """Orchestrator.confirm_draft() behavior.
+
+    Critical: confirm_draft must dispatch actual processing (parser/OCR &#8594; converter)
+    and NOT mark the task as completed. The draft must stay visible in UI
+    until real processing finishes.
+    """
+
+    async def test_confirm_after_review_required_starts_processing(
+        self, db_session: AsyncSession
+    ):
+        """Confirm transitions task to full stage and dispatches parser."""
+        task = await _create_task(db_session, full_completed=False, total_steps=3)
+        # Set task to the correct state for confirm
+        task.status = TaskStatus.ACTIVE.value
+        task.pipeline_stage = TaskStage.DECISION.value
+        await db_session.flush()
+
+        repo = TaskRepository(db_session)
+        # Create upload step with file_key (needed for confirm_draft)
+        upload = await repo.create_task_step(
+            task_id=task.id, step_name="upload", step_index=0,
+            service_name="Orchestrator", input_data={"file_key": "test.pdf"},
+        )
+        await repo.complete_task_step(
+            upload.id,
+            output_data={"draft_id": 100, "task_id": task.id, "file_key": "test.pdf"},
+        )
+
+        mock_registry = AsyncMock()
+        mock_registry.get_draft = AsyncMock(return_value={
+            "data": {"status": "review_required"}
+        })
+        mock_registry.update_draft_status = AsyncMock()
+        mock_registry.update_draft_metadata = AsyncMock()
+        mock_registry.close = AsyncMock()
+
+        # Spy on celery task dispatch to verify it's actually called
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_registry,
+        ), patch(
+            "app.tasks.pipeline_formation.run_parser_full_step.delay",
+        ) as mock_parser_delay, patch(
+            "app.tasks.pipeline_formation.run_converter_full_step.delay",
+        ):
+            orchestrator = PipelineOrchestrator(db_session)
+            result = await orchestrator.confirm_draft(
+                draft_id=100, task_id=task.id,
+            )
+
+        # --- Critical assertions: task NOT in terminal state ---
+        updated = await repo.get_task(task.id)
+        assert updated is not None
+        assert updated.status != TaskStatus.COMPLETED.value, (
+            "Task must NOT be completed after confirm --- processing just started"
+        )
+        assert updated.status != TaskStatus.FAILED.value, (
+            "Task must NOT be failed after confirm"
+        )
+        # Pipeline stage must be FULL, not REGISTRY or INDEXATION
+        assert updated.pipeline_stage == TaskStage.FULL.value, (
+            f"Pipeline stage must be FULL after confirm, got {updated.pipeline_stage}"
+        )
+
+        # --- Steps created ---
+        all_steps = await repo.get_task_steps(task.id)
+        step_names = [s.step_name for s in all_steps]
+        assert "full_ocr" in step_names, "full_ocr step must be created"
+        assert "full_converter" in step_names, "full_converter step must be created"
+
+        # Steps must NOT be completed yet
+        full_ocr = next(s for s in all_steps if s.step_name == "full_ocr")
+        assert full_ocr.status in ("pending", "running"), (
+            f"full_ocr must be pending/running, got {full_ocr.status}"
+        )
+
+        # --- Celery task WAS dispatched (critical: was silently skipped in tests) ---
+        mock_parser_delay.assert_called_once()
+        call_args = mock_parser_delay.call_args
+        assert call_args[0][0] == task.id, "task_id must be passed to parser delay"
+        assert call_args[0][1] == 100, "draft_id must be passed to parser delay"
+        assert call_args[0][2] == "test.pdf", "file_key must be passed to parser delay"
+
+        # --- Registry was notified ---
+        mock_registry.update_draft_status.assert_awaited_with(
+            draft_id=100,
+            status="validation",
+        )
+
+        # --- Return value ---
+        assert result["status"] == "validation", (
+            f"confirm must return status='validation', got {result['status']}"
+        )
+        assert result["queued"] is False, "should not be queued"
+        assert result["draft_id"] == 100
+        assert result["task_id"] == task.id
+
+    async def test_confirm_already_terminal_raises_error(
+        self, db_session: AsyncSession
+    ):
+        """Confirm on completed/failed task must raise ValueError."""
+        task = await _create_task(db_session)
+        task.status = TaskStatus.COMPLETED.value
+        await db_session.flush()
+
+        mock_registry = AsyncMock()
+        mock_registry.get_draft = AsyncMock(return_value={
+            "data": {"status": "review_required"}
+        })
+        mock_registry.close = AsyncMock()
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_registry,
+        ):
+            orchestrator = PipelineOrchestrator(db_session)
+            with pytest.raises(ValueError, match="already in terminal state"):
+                await orchestrator.confirm_draft(
+                    draft_id=100, task_id=task.id,
+                )
+
+    async def test_confirm_wrong_draft_status_raises_error(
+        self, db_session: AsyncSession
+    ):
+        """Confirm on draft not in review_required must raise ValueError."""
+        task = await _create_task(db_session)
+        task.status = TaskStatus.ACTIVE.value
+        task.pipeline_stage = TaskStage.DECISION.value
+        await db_session.flush()
+
+        upload = await TaskRepository(db_session).create_task_step(
+            task_id=task.id, step_name="upload", step_index=0,
+            service_name="Orchestrator", input_data={"file_key": "test.pdf"},
+        )
+        await TaskRepository(db_session).complete_task_step(
+            upload.id,
+            output_data={"draft_id": 100, "task_id": task.id, "file_key": "test.pdf"},
+        )
+
+        mock_registry = AsyncMock()
+        # Draft is NOT in review_required --- should be "ready_for_approve"
+        mock_registry.get_draft = AsyncMock(return_value={
+            "data": {"status": "ready_for_approve"}
+        })
+        mock_registry.close = AsyncMock()
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_registry,
+        ):
+            orchestrator = PipelineOrchestrator(db_session)
+            with pytest.raises(ValueError, match="Confirm requires draft status"):
+                await orchestrator.confirm_draft(
+                    draft_id=100, task_id=task.id,
+                )
+
+    async def test_confirm_queued_when_no_free_slot(
+        self, db_session: AsyncSession
+    ):
+        """Confirm when max concurrent tasks reached must queue."""
+        task = await _create_task(db_session, full_completed=False, total_steps=3)
+        task.status = TaskStatus.ACTIVE.value
+        task.pipeline_stage = TaskStage.DECISION.value
+        await db_session.flush()
+
+        repo = TaskRepository(db_session)
+        upload = await repo.create_task_step(
+            task_id=task.id, step_name="upload", step_index=0,
+            service_name="Orchestrator", input_data={"file_key": "test.pdf"},
+        )
+        await repo.complete_task_step(
+            upload.id,
+            output_data={"draft_id": 100, "task_id": task.id, "file_key": "test.pdf"},
+        )
+
+        mock_registry = AsyncMock()
+        mock_registry.get_draft = AsyncMock(return_value={
+            "data": {"status": "review_required"}
+        })
+        mock_registry.update_draft_status = AsyncMock()
+        mock_registry.update_draft_metadata = AsyncMock()
+        mock_registry.close = AsyncMock()
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_registry,
+        ), patch.object(
+            PipelineOrchestrator, "_has_free_slot",
+            return_value=False,
+        ):
+            orchestrator = PipelineOrchestrator(db_session)
+            result = await orchestrator.confirm_draft(
+                draft_id=100, task_id=task.id,
+            )
+
+        # Task should be queued
+        assert result["queued"] is True
+        assert result["status"] == "queued"
+
+        updated = await repo.get_task(task.id)
+        assert updated is not None
+        assert updated.status == TaskStatus.QUEUED.value
