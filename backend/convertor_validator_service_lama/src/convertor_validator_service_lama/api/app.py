@@ -45,9 +45,16 @@ from convertor_validator_service_lama.services.lama_validator_service import (
 )
 
 
+from convertor_validator_service_lama.models.rag_builder_downcast import (
+    RagBuilderDowncastResult,
+)
 from convertor_validator_service_lama.models.rich_document_package import (
+    RichDocumentPackage,
     RichDocumentPackageAssemblyRequest,
     RichDocumentPackageAssemblyResult,
+)
+from convertor_validator_service_lama.services.rag_builder_downcast_service import (
+    downcast_rich_package_to_rag_builder,
 )
 from convertor_validator_service_lama.services.rich_document_package_assembler import (
     assemble_rich_document_package,
@@ -176,6 +183,11 @@ def rich_document_package(
     request: RichDocumentPackageAssemblyRequest,
 ) -> RichDocumentPackageAssemblyResult:
     return assemble_rich_document_package(request)
+
+
+@app.post("/rag-builder-payload", response_model=RagBuilderDowncastResult)
+def rag_builder_payload(request: RichDocumentPackage) -> RagBuilderDowncastResult:
+    return downcast_rich_package_to_rag_builder(request)
 
 
 @app.post("/rich-document-package/dry-run", response_model=RichDocumentPackageDryRunResponse)
