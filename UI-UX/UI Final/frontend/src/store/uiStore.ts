@@ -91,6 +91,10 @@ interface UIState {
   chatMessages: ChatMessage[];
   setChatMessages: (messages: ChatMessage[]) => void;
   appendChatMessages: (messages: ChatMessage[]) => void;
+  chatTreeOpen: boolean;
+  setChatTreeOpen: (open: boolean) => void;
+  chatProjectsRefreshKey: number;
+  triggerChatProjectsRefresh: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -298,4 +302,9 @@ export const useUIStore = create<UIState>((set) => ({
     set((state) => ({
       chatMessages: [...state.chatMessages, ...messages],
     })),
+  chatTreeOpen: false,
+  setChatTreeOpen: (chatTreeOpen) => set({ chatTreeOpen }),
+  chatProjectsRefreshKey: 0,
+  triggerChatProjectsRefresh: () =>
+    set((state) => ({ chatProjectsRefreshKey: state.chatProjectsRefreshKey + 1 })),
 }));

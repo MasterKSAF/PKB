@@ -348,10 +348,13 @@ export const Chat: React.FC = () => {
     themeMode,
     workMode,
     activeProjectId,
+    chatTreeOpen,
     setActiveProjectId,
     setActiveThreadId,
     setActiveTab,
     setChatMessages,
+    setChatTreeOpen,
+    triggerChatProjectsRefresh,
     setCurrentGatewaySessionId,
   } = useUIStore();
   const isLight = themeMode === 'light';
@@ -468,18 +471,20 @@ export const Chat: React.FC = () => {
       const lastProject = await resolveLastProject();
       setActiveProjectId(lastProject.id);
       setActiveTab('chat');
+      setChatTreeOpen(true);
 
       const session = await chatApi.createSession('Новый чат', lastProject.id);
       const gatewayChatId = String(session.session_id ?? session.id);
       setCurrentGatewaySessionId(gatewayChatId);
       setActiveThreadId(gatewayChatId);
       setChatMessages([]);
+      triggerChatProjectsRefresh();
     } catch (error) {
       console.error('Failed to create chat:', error);
     } finally {
       setGuardActionLoading(false);
     }
-  }, [resolveLastProject, projectsQuery.isLoading, setActiveProjectId, setActiveThreadId, setActiveTab, setChatMessages, setCurrentGatewaySessionId]);
+  }, [resolveLastProject, projectsQuery.isLoading, setActiveProjectId, setActiveThreadId, setActiveTab, setChatTreeOpen, setChatMessages, setCurrentGatewaySessionId, triggerChatProjectsRefresh]);
 
   const handleLastChat = useCallback(async () => {
     if (projectsQuery.isLoading) return;
@@ -488,6 +493,7 @@ export const Chat: React.FC = () => {
       const lastProject = await resolveLastProject();
       setActiveProjectId(lastProject.id);
       setActiveTab('chat');
+      setChatTreeOpen(true);
 
       // Последний чат в проекте (по порядку в массиве chats)
       const lastChat = lastProject.chats?.[lastProject.chats.length - 1];
@@ -503,12 +509,13 @@ export const Chat: React.FC = () => {
         setActiveThreadId(gatewayChatId);
         setChatMessages([]);
       }
+      triggerChatProjectsRefresh();
     } catch (error) {
       console.error('Failed to open last chat:', error);
     } finally {
       setGuardActionLoading(false);
     }
-  }, [resolveLastProject, projectsQuery.isLoading, setActiveProjectId, setActiveThreadId, setActiveTab, setChatMessages, setCurrentGatewaySessionId]);
+  }, [resolveLastProject, projectsQuery.isLoading, setActiveProjectId, setActiveThreadId, setActiveTab, setChatTreeOpen, setChatMessages, setCurrentGatewaySessionId, triggerChatProjectsRefresh]);
 
   const handleSend = () => {
     if (!input.trim() || chatMutation.isPending) return;
@@ -1054,24 +1061,53 @@ export const Chat: React.FC = () => {
                 </Box>
               )}
               {mustSelectGatewayChat && !guardActionLoading && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, py: 6 }}>
-                  <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2.5, py: 6 }}>
+                  <Typography variant="h6" color="text.secondary" sx={{ mb: 0.5 }}>
                     Выберите или создайте чат
                   </Typography>
-                  <Stack direction="row" spacing={2}>
+                  <Stack direction="row" spacing={1.5}>
                     <Button
                       variant="contained"
-                      size="large"
-                      startIcon={<HelpCircle size={18} />}
+                      startIcon={<HelpCircle size={16} />}
                       onClick={handleCreateChat}
+                      disableElevation
+                      sx={{
+                        px: 2,
+                        py: 1.2,
+                        borderRadius: 2.4,
+                        fontSize: '0.88rem',
+                        fontWeight: 500,
+                        textTransform: 'none',
+                        color: isLight ? '#0f172a' : '#edf2ea',
+                        bgcolor: isLight ? '#e0f2fe' : 'rgba(108, 124, 108, 0.22)',
+                        border: '1px solid',
+                        borderColor: isLight ? '#7dd3fc' : 'rgba(155, 169, 147, 0.34)',
+                        '&:hover': {
+                          bgcolor: isLight ? '#bae6fd' : 'rgba(108, 124, 108, 0.28)',
+                        },
+                      }}
                     >
                       Создать чат
                     </Button>
                     <Button
                       variant="outlined"
-                      size="large"
-                      startIcon={<MessageSquare size={18} />}
+                      startIcon={<MessageSquare size={16} />}
                       onClick={handleLastChat}
+                      sx={{
+                        px: 2,
+                        py: 1.2,
+                        borderRadius: 2.4,
+                        fontSize: '0.88rem',
+                        fontWeight: 500,
+                        textTransform: 'none',
+                        color: isLight ? '#075985' : '#b8c4d8',
+                        borderColor: isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(152, 217, 216, 0.22)',
+                        bgcolor: isLight ? 'rgba(224, 242, 254, 0.64)' : 'rgba(152, 217, 216, 0.06)',
+                        '&:hover': {
+                          bgcolor: isLight ? '#e0f2fe' : 'rgba(152, 217, 216, 0.16)',
+                          borderColor: isLight ? 'rgba(14, 116, 144, 0.50)' : 'rgba(152, 217, 216, 0.50)',
+                        },
+                      }}
                     >
                       Последний чат
                     </Button>

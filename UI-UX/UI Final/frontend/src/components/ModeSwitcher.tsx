@@ -103,11 +103,14 @@ export const ModeSwitcher: React.FC = () => {
     currentRole,
     currentUserId,
     themeMode,
+    chatTreeOpen,
+    chatProjectsRefreshKey,
     setActiveProjectId,
     setActiveThreadId,
     setActiveKnowledgeProcessingSection,
     setActiveTab,
     setChatMessages,
+    setChatTreeOpen,
     setThemeMode,
     setVideoGuideOpen,
     setFocusMode,
@@ -122,7 +125,7 @@ export const ModeSwitcher: React.FC = () => {
     [currentRole, currentUser?.availableTabs, currentUser?.permissions, workMode],
   );
   const visibleNavItems = NAV_ITEMS.filter((item) => availableTabs.includes(item.value));
-  const [chatTreeOpen, setChatTreeOpen] = React.useState(false);
+  // chatTreeOpen в сторе (uiStore) — управляется из Chat.tsx
   const [knowledgeProcessingTreeOpen, setKnowledgeProcessingTreeOpen] = React.useState(false);
   const [expandedProjects, setExpandedProjects] = React.useState<Record<string, boolean>>({});
   const [chatProjects, setChatProjects] = React.useState<GatewayChatProject[]>(() =>
@@ -188,6 +191,28 @@ export const ModeSwitcher: React.FC = () => {
     };
   }, [setActiveProjectId, setChatMessages, setCurrentGatewaySessionId, workMode]);
 
+  // Перезагружать проекты при триггере из Chat.tsx (создание/выбор чата)
+  React.useEffect(() => {
+    if (workMode !== 'prod') return;
+
+    let isMounted = true;
+    projectsApi
+      .list()
+      .then((projects) => {
+        if (!isMounted) return;
+        setChatProjects(projects.length ? projects : []);
+        setGatewayNavigationError('');
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setGatewayNavigationError(`Не удалось загрузить проекты: ${getGatewayErrorMessage(error)}`);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chatProjectsRefreshKey, workMode]);
+
   // Раскрывать проект в дереве при установке activeProjectId (из Chat.tsx или дерева)
   React.useEffect(() => {
     if (activeProjectId) {
@@ -239,7 +264,7 @@ export const ModeSwitcher: React.FC = () => {
   const handleNavClick = (tab: AppTab) => {
     if (tab === 'chat') {
       setActiveTab('chat');
-      setChatTreeOpen((open) => !open);
+      setChatTreeOpen(!chatTreeOpen);
       setKnowledgeProcessingTreeOpen(false);
       return;
     }
@@ -252,7 +277,7 @@ export const ModeSwitcher: React.FC = () => {
     }
 
     setChatTreeOpen(false);
-    setKnowledgeProcessingTreeOpen(false);
+    setKnowledgeProcessingTreeOpen(true);
     setActiveTab(tab);
   };
 
