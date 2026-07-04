@@ -1459,6 +1459,16 @@ class PipelineOrchestrator:
         else:  # "auto" — use full_completed flag
             need_full_processing = not task.full_completed
 
+        # SAFETY GUARD: warn when full mode skips processing but preview is incomplete
+        if not need_full_processing and full_mode == "full" and not task.full_completed:
+            logger.warning(
+                f"FULL_PHASE_MODE='full' skips Parser/OCR for draft {draft_id} "
+                f"(task_id={task_id}), but full_completed=False. "
+                f"Document will go to Converter without Parser/OCR output. "
+                f"Set FULL_PHASE_MODE='auto' or 'partial' for normal operation.",
+                extra={"draft_id": draft_id, "task_id": task_id},
+            )
+
         # Choose service for full phase: Parser-first, fallback to OCR (P1F-8)
         parser_enabled = settings.services.PARSER_ENABLED
         ocr_enabled = settings.services.OCR_ENABLED

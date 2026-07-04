@@ -559,3 +559,266 @@ class TestDecidePreviewInProgress:
         data = response.json()
         detail = data.get("detail", data)
         assert detail["error"]["code"] == "PREVIEW_IN_PROGRESS"
+
+
+class TestDecideConfirmAction:
+    """confirm (action for review_required → validation)."""
+
+    DECIDE_URL = "/api/v1/drafts/{draft_id}/decide"
+    CREATE_URL = "/api/v1/drafts/"
+
+    async def test_confirm_requires_decision_stage(
+        self,
+        client: TestClient,
+        auth_header: dict,
+        db_session: AsyncSession,
+    ):
+        """confirm на upload-стадии → 409 INVALID_STAGE."""
+        response = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-confirm " * 100), "application/pdf")},
+            data={"document_key": "doc-confirm", "source_type": "GOST"},
+        )
+        assert response.status_code == 202
+        draft_id = response.json()["draft_id"]
+
+        from sqlalchemy import select
+        from app.models.pipeline import Task
+
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == draft_id)
+        )
+        task = result.scalar_one_or_none()
+        assert task is not None
+        task.pipeline_stage = "upload"
+        task.status = "active"
+        await db_session.flush()
+        await db_session.commit()
+
+        response = client.patch(
+            self.DECIDE_URL.format(draft_id=draft_id),
+            headers=auth_header,
+            json={"action": "confirm"},
+        )
+        assert response.status_code == 409
+        data = response.json()
+        detail = data.get("detail", data)
+        assert detail["error"]["code"] == "INVALID_STAGE"
+
+    async def test_confirm_on_decision_returns_validation(
+        self,
+        client: TestClient,
+        auth_header: dict,
+        db_session: AsyncSession,
+    ):
+        """confirm на decision-стадии → ответ с status='validation'."""
+        from unittest.mock import patch, AsyncMock
+
+        response = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-confirm2 " * 100), "application/pdf")},
+            data={"document_key": "doc-confirm2", "source_type": "GOST"},
+        )
+        assert response.status_code == 202
+        draft_id = response.json()["draft_id"]
+        task_id = response.json()["task_id"]
+
+        from sqlalchemy import select
+        from app.models.pipeline import Task
+
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == draft_id)
+        )
+        task = result.scalar_one_or_none()
+        assert task is not None
+        task.pipeline_stage = "decision"
+        task.status = "active"
+        await db_session.flush()
+        await db_session.commit()
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ) as mock_reg_cls, patch(
+            "app.tasks.pipeline_formation.run_parser_full_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_converter_full_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_registry_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+        ):
+            mock_reg = mock_reg_cls.return_value
+            mock_reg.get_draft = AsyncMock(return_value={
+                "data": {"draft_id": draft_id, "title_key": "Confirm Test", "document_key": "CONFIRM-001"}
+            })
+            mock_reg.get_draft_preview = AsyncMock(return_value={
+                "data": {"title": "Confirm Title", "doc_code": "CONFIRM-001"}
+            })
+            mock_reg.create_document = AsyncMock(return_value={
+                "data": {"document_id": 6001, "version_id": 60001, "is_new_document": True}
+            })
+            mock_reg.create_draft_snapshot = AsyncMock()
+            mock_reg.close = AsyncMock()
+
+            response = client.patch(
+                self.DECIDE_URL.format(draft_id=draft_id),
+                headers=auth_header,
+                json={"action": "confirm"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "validation"
+        assert data["action"] == "confirm"
+
+
+class TestDecideBusinessKeyDrift:
+    """BUSINESS_KEY_DRIFT при approve (метаданные изменились)."""
+
+    DECIDE_URL = "/api/v1/drafts/{draft_id}/decide"
+    CREATE_URL = "/api/v1/drafts/"
+
+    async def test_business_key_drift_returns_409(
+        self,
+        client: TestClient,
+        auth_header: dict,
+        db_session: AsyncSession,
+    ):
+        """При изменении title через overrides → 409 BUSINESS_KEY_DRIFT."""
+        from unittest.mock import patch, AsyncMock
+
+        response = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-bkdrift " * 100), "application/pdf")},
+            data={"document_key": "doc-bkdrift", "source_type": "GOST"},
+        )
+        assert response.status_code == 202
+        draft_id = response.json()["draft_id"]
+        task_id = response.json()["task_id"]
+
+        from sqlalchemy import select
+        from app.models.pipeline import Task, TaskStep
+
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == draft_id)
+        )
+        task = result.scalar_one_or_none()
+        assert task is not None
+        task.pipeline_stage = "decision"
+        task.status = "active"
+
+        steps_result = await db_session.execute(
+            select(TaskStep).where(TaskStep.task_id == task.id)
+        )
+        for step in steps_result.scalars().all():
+            step.status = "completed"
+        await db_session.flush()
+        await db_session.commit()
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ) as mock_reg_cls:
+            mock_reg = mock_reg_cls.return_value
+            mock_reg.get_draft = AsyncMock(return_value={
+                "data": {"draft_id": draft_id, "title_key": "Original", "document_key": "ORIG-001"}
+            })
+            mock_reg.get_draft_preview = AsyncMock(return_value={
+                "data": {"title": "Original Title", "doc_code": "ORIG-001", "title_hash_sha256": "dd3545e9ab2b0772384fdf2d61abd18cdbf3c14c2e6a7fbe1dcda54f52ec805b"}
+            })
+            mock_reg.create_document = AsyncMock()
+            mock_reg.create_draft_snapshot = AsyncMock()
+            mock_reg.close = AsyncMock()
+
+            overrides = {"title": "Completely Different Title"}
+
+            response = client.patch(
+                self.DECIDE_URL.format(draft_id=draft_id),
+                headers=auth_header,
+                json={"action": "approve", "metadata_overrides": overrides},
+            )
+
+        assert response.status_code == 409
+        data = response.json()
+        detail = data.get("detail", data)
+        assert detail["error"]["code"] == "BUSINESS_KEY_DRIFT"
+
+
+class TestDecideDuplicateFileAfterApprove:
+    """DUPLICATE_FILE_AFTER_APPROVE при race condition с Registry."""
+
+    DECIDE_URL = "/api/v1/drafts/{draft_id}/decide"
+    CREATE_URL = "/api/v1/drafts/"
+
+    async def test_duplicate_file_after_approve_returns_409(
+        self,
+        client: TestClient,
+        auth_header: dict,
+        db_session: AsyncSession,
+    ):
+        """Registry возвращает DUPLICATE_FILE → 409 с conflict_document_id."""
+        from unittest.mock import patch, AsyncMock
+
+        response = client.post(
+            self.CREATE_URL,
+            headers=auth_header,
+            files={"file": ("test.pdf", io.BytesIO(b"%PDF-dedup " * 100), "application/pdf")},
+            data={"document_key": "doc-dedup", "source_type": "GOST"},
+        )
+        assert response.status_code == 202
+        draft_id = response.json()["draft_id"]
+        task_id = response.json()["task_id"]
+
+        from sqlalchemy import select
+        from app.models.pipeline import Task, TaskStep
+
+        result = await db_session.execute(
+            select(Task).where(Task.draft_id == draft_id)
+        )
+        task = result.scalar_one_or_none()
+        assert task is not None
+        task.pipeline_stage = "decision"
+        task.status = "active"
+
+        steps_result = await db_session.execute(
+            select(TaskStep).where(TaskStep.task_id == task.id)
+        )
+        for step in steps_result.scalars().all():
+            step.status = "completed"
+        await db_session.flush()
+        await db_session.commit()
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+        ) as mock_reg_cls:
+            mock_reg = mock_reg_cls.return_value
+            mock_reg.get_draft = AsyncMock(return_value={
+                "data": {"draft_id": draft_id, "title_key": "Dedup Test", "document_key": "DEDUP-001"}
+            })
+            mock_reg.get_draft_preview = AsyncMock(return_value={
+                "data": {"title": "Dedup Title", "doc_code": "DEDUP-001"}
+            })
+            # Simulate DUPLICATE_FILE error
+            mock_reg.create_document = AsyncMock(return_value={
+                "error": {
+                    "code": "DUPLICATE_FILE",
+                    "details": {"conflict_document_id": 777},
+                }
+            })
+            mock_reg.create_draft_snapshot = AsyncMock()
+            mock_reg.close = AsyncMock()
+            mock_reg.update_draft_status = AsyncMock()
+
+            response = client.patch(
+                self.DECIDE_URL.format(draft_id=draft_id),
+                headers=auth_header,
+                json={"action": "approve"},
+            )
+
+        assert response.status_code == 409
+        data = response.json()
+        detail = data.get("detail", data)
+        assert detail["error"]["code"] == "DUPLICATE_FILE_AFTER_APPROVE"
+        assert detail["error"]["details"]["conflict_document_id"] == 777
