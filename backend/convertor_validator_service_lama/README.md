@@ -116,6 +116,30 @@ It does not implement downcast to RAG Builder-compatible JSON.
 
 Final corrections are still owned by the Python validator/assembler policy: `python_validator_assembler_applies_final_corrections`.
 
+### Full document structure
+
+The assembled package now includes a first-class `document_structure` block.
+
+This block is part of the full document model and is not limited by the current RAG Builder contract.
+
+It may contain:
+
+- `document_boundaries`
+- `table_of_contents`
+- `nested_documents`
+- `sections`
+- `tables`
+- `images`
+- `formulas`
+- `cross_references`
+- `quality_report`
+- `correction_proposals`
+
+Tables may preserve nested cell content through table cells with embedded images and formulas.
+
+The original raw artifacts are still preserved in `artifacts`.
+The normalized `document_structure` exists alongside raw artifacts to provide a stable full-document structure for downstream validators, adapters, and future services.
+
 ## Document package boundary
 
 `rich_document_package.json` is the full logical document container produced by the parser/validator pipeline.
@@ -222,5 +246,5 @@ http://127.0.0.1:8000/docs
 
 Current local status:
 
-- 87 passed
+- 101 passed
 - 1 warning from FastAPI/TestClient dependency stack
