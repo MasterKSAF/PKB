@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Container,
@@ -16,6 +16,8 @@ import {
   Dialog,
   Slider,
   Tooltip,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import {
   Send,
@@ -28,6 +30,7 @@ import {
   ExternalLink,
   Bookmark,
   HelpCircle,
+  MessageSquare,
   ShieldCheck,
   X,
   FileText,
@@ -37,8 +40,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
-import { chatApi, sourceApi } from '../utils/http';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { chatApi, projectsApi, sourceApi, type GatewayChatProject } from '../utils/http';
 import { ChatMessage, Citation } from '../utils/mockData';
 import { Feedback } from './Feedback';
 import { useUIStore } from '../store/uiStore';
@@ -82,6 +85,8 @@ const statusTone: Record<ChatStatus, 'success' | 'warning' | 'error' | 'info'> =
 type ChatPreview = Citation & {
   previewId: string;
   previewKind: 'source' | 'document';
+  /** Исходный фрагмент цитирования — сохраняем отдельно от full_text страницы */
+  originalFragment?: string;
 };
 
 function getGatewayErrorMessage(error: unknown) {
@@ -154,6 +159,56 @@ function sourceButtonSx(isLight: boolean, fontSize = '0.74rem') {
       borderColor: isLight ? '#38bdf8' : 'rgba(184,196,216,0.28)',
     },
   } as const;
+}
+
+/** Подсветить originalFragment (если есть) внутри полного текста */
+function highlightFragmentInText(
+  fullText: string,
+  fragment: string | undefined,
+  isLight: boolean,
+): React.ReactNode[] {
+  if (!fragment || !fullText) return [fullText];
+
+  const cleanFragment = fragment.trim();
+  if (!cleanFragment) return [fullText];
+
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  let index = fullText.indexOf(cleanFragment);
+  let key = 0;
+
+  while (index !== -1) {
+    if (index > cursor) {
+      parts.push(fullText.slice(cursor, index));
+    }
+    parts.push(
+      <Box
+        key={`fragment-${key}`}
+        component="mark"
+        sx={{
+          px: 0.35,
+          py: 0.05,
+          borderRadius: 0.7,
+          bgcolor: isLight ? 'rgba(56, 189, 248, 0.45)' : 'rgba(56, 189, 248, 0.40)',
+          color: 'inherit',
+          boxShadow: isLight
+            ? '0 0 0 1px rgba(2, 132, 199, 0.30)'
+            : '0 0 0 1px rgba(56, 189, 248, 0.30)',
+        }}
+      >
+        {fullText.slice(index, index + cleanFragment.length)}
+      </Box>,
+    );
+    cursor = index + cleanFragment.length;
+    index = fullText.indexOf(cleanFragment, cursor);
+    key++;
+  }
+
+  if (cursor < fullText.length) {
+    parts.push(fullText.slice(cursor));
+  }
+
+  return parts.length ? parts : [fullText];
 }
 
 function countMatches(text: string, query: string) {
@@ -286,7 +341,22 @@ function renderInlineCitationText(
 }
 
 export const Chat: React.FC = () => {
-  const { appendChatMessages, chatMessages, currentGatewaySessionId, themeMode, workMode } = useUIStore();
+  const {
+    appendChatMessages,
+    chatMessages,
+    currentGatewaySessionId,
+    themeMode,
+    workMode,
+    activeProjectId,
+    chatTreeOpen,
+    setActiveProjectId,
+    setActiveThreadId,
+    setActiveTab,
+    setChatMessages,
+    setChatTreeOpen,
+    triggerChatProjectsRefresh,
+    setCurrentGatewaySessionId,
+  } = useUIStore();
   const isLight = themeMode === 'light';
   const assistantAccent = isLight ? '#0284c7' : '#98d9d8';
   const messages = chatMessages;
@@ -300,6 +370,7 @@ export const Chat: React.FC = () => {
   const [previewZoom, setPreviewZoom] = useState(1);
   const [expandedPreviewOpen, setExpandedPreviewOpen] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [downloadAnchorEl, setDownloadAnchorEl] = useState<HTMLElement | null>(null);
   const [activeSearchMatch, setActiveSearchMatch] = useState(0);
   const [activePreviewSearchMatch, setActivePreviewSearchMatch] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -368,8 +439,83 @@ export const Chat: React.FC = () => {
       setExpandedCitations((prev) => ({ ...prev, [data.id]: false }));
     },
   });
+  const [guardActionLoading, setGuardActionLoading] = useState(false);
+  const projectsQuery = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectsApi.list(),
+    enabled: workMode === 'prod' && !currentGatewaySessionId,
+    staleTime: 30_000,
+  });
   const mustSelectGatewayChat = workMode === 'prod' && !currentGatewaySessionId;
-  const chatSessionGuardMessage = mustSelectGatewayChat ? 'Сначала создайте или выберите чат' : '';
+
+  /** Взять последний проект (по updatedAt) или создать новый, если нет проектов */
+  const resolveLastProject = useCallback(async (): Promise<GatewayChatProject> => {
+    let projects = projectsQuery.data ?? [];
+    if (projects.length === 0) {
+      const created = await projectsApi.create('Новый проект');
+      projects = [created];
+    }
+    // Сортируем по updatedAt (новые в конце), чтобы взять действительно последний
+    const sorted = [...projects].sort((a, b) => {
+      const aTime = a.chats?.[0]?.updatedAt ? new Date(a.chats[0].updatedAt).getTime() : 0;
+      const bTime = b.chats?.[0]?.updatedAt ? new Date(b.chats[0].updatedAt).getTime() : 0;
+      return aTime - bTime;
+    });
+    return sorted[sorted.length - 1] ?? projects[0];
+  }, [projectsQuery.data]);
+
+  const handleCreateChat = useCallback(async () => {
+    if (projectsQuery.isLoading) return;
+    setGuardActionLoading(true);
+    try {
+      const lastProject = await resolveLastProject();
+      setActiveProjectId(lastProject.id);
+      setActiveTab('chat');
+      setChatTreeOpen(true);
+
+      const session = await chatApi.createSession('Новый чат', lastProject.id);
+      const gatewayChatId = String(session.session_id ?? session.id);
+      setCurrentGatewaySessionId(gatewayChatId);
+      setActiveThreadId(gatewayChatId);
+      setChatMessages([]);
+      triggerChatProjectsRefresh();
+    } catch (error) {
+      console.error('Failed to create chat:', error);
+    } finally {
+      setGuardActionLoading(false);
+    }
+  }, [resolveLastProject, projectsQuery.isLoading, setActiveProjectId, setActiveThreadId, setActiveTab, setChatTreeOpen, setChatMessages, setCurrentGatewaySessionId, triggerChatProjectsRefresh]);
+
+  const handleLastChat = useCallback(async () => {
+    if (projectsQuery.isLoading) return;
+    setGuardActionLoading(true);
+    try {
+      const lastProject = await resolveLastProject();
+      setActiveProjectId(lastProject.id);
+      setActiveTab('chat');
+      setChatTreeOpen(true);
+
+      // Последний чат в проекте (по порядку в массиве chats)
+      const lastChat = lastProject.chats?.[lastProject.chats.length - 1];
+      if (lastChat) {
+        const session = await chatApi.getSession(lastChat.id);
+        setCurrentGatewaySessionId(lastChat.id);
+        setActiveThreadId(lastChat.id);
+        setChatMessages(session.messages);
+      } else {
+        const session = await chatApi.createSession('Новый чат', lastProject.id);
+        const gatewayChatId = String(session.session_id ?? session.id);
+        setCurrentGatewaySessionId(gatewayChatId);
+        setActiveThreadId(gatewayChatId);
+        setChatMessages([]);
+      }
+      triggerChatProjectsRefresh();
+    } catch (error) {
+      console.error('Failed to open last chat:', error);
+    } finally {
+      setGuardActionLoading(false);
+    }
+  }, [resolveLastProject, projectsQuery.isLoading, setActiveProjectId, setActiveThreadId, setActiveTab, setChatTreeOpen, setChatMessages, setCurrentGatewaySessionId, triggerChatProjectsRefresh]);
 
   const handleSend = () => {
     if (!input.trim() || chatMutation.isPending) return;
@@ -418,11 +564,13 @@ export const Chat: React.FC = () => {
 
   const openPreview = (citation: Citation, previewKind: ChatPreview['previewKind']) => {
     const previewId = `${previewKind}-${citation.id}`;
+    const originalFragment = citation.text;
     const preview: ChatPreview = {
       ...citation,
       page: previewKind === 'document' ? 1 : citation.page,
       previewId,
       previewKind,
+      originalFragment,
     };
 
     setOpenedCitations((prev) => {
@@ -443,6 +591,7 @@ export const Chat: React.FC = () => {
                   page: previewKind === 'document' ? 1 : hydratedCitation.page,
                   previewId,
                   previewKind,
+                  originalFragment,
                 }
               : item,
           ),
@@ -653,26 +802,75 @@ export const Chat: React.FC = () => {
                                     {highlightText(item.text, normalizedChatSearch, isLight)}
                                   </Typography>
                                   <Stack direction="row" spacing={1.4} useFlexGap sx={{ flexWrap: 'wrap', mt: 0.6 }}>
-                                    <Button
-                                      size="small"
-                                      variant="text"
-                                      startIcon={<ExternalLink size={14} />}
-                                      className="source-link-button"
-                                      sx={sourceButtonSx(isLight)}
-                                      onClick={() => openPreview(item.citation, 'source')}
+                                    <Tooltip
+                                      title={
+                                        <Box sx={{ maxWidth: 320 }}>
+                                          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>
+                                            {item.citation.document}
+                                          </Typography>
+                                          <Typography variant="caption" sx={{ display: 'block', mt: 0.25, opacity: 0.85 }}>
+                                            {item.citation.section}
+                                          </Typography>
+                                          {item.citation.text && (
+                                            <Typography
+                                              variant="caption"
+                                              sx={{
+                                                display: 'block',
+                                                mt: 0.5,
+                                                p: 0.75,
+                                                borderRadius: 0.6,
+                                                bgcolor: 'rgba(255,255,255,0.08)',
+                                                lineHeight: 1.4,
+                                                maxHeight: 120,
+                                                overflow: 'hidden',
+                                              }}
+                                            >
+                                              {item.citation.text.length > 250
+                                                ? item.citation.text.slice(0, 250) + '…'
+                                                : item.citation.text}
+                                            </Typography>
+                                          )}
+                                        </Box>
+                                      }
+                                      placement="top"
+                                      arrow
                                     >
-                                      Страница
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      variant="text"
-                                      startIcon={<FileText size={14} />}
-                                      className="source-link-button"
-                                      sx={sourceButtonSx(isLight)}
-                                      onClick={() => openPreview(item.citation, 'document')}
+                                      <Button
+                                        size="small"
+                                        variant="text"
+                                        startIcon={<ExternalLink size={14} />}
+                                        className="source-link-button"
+                                        sx={sourceButtonSx(isLight)}
+                                        onClick={() => openPreview(item.citation, 'source')}
+                                      >
+                                        Страница
+                                      </Button>
+                                    </Tooltip>
+                                    <Tooltip
+                                      title={
+                                        <Box sx={{ maxWidth: 300 }}>
+                                          <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>
+                                            {item.citation.document}
+                                          </Typography>
+                                          <Typography variant="caption" sx={{ display: 'block', mt: 0.25, opacity: 0.85 }}>
+                                            {item.citation.section}
+                                          </Typography>
+                                        </Box>
+                                      }
+                                      placement="top"
+                                      arrow
                                     >
-                                      Документ
-                                    </Button>
+                                      <Button
+                                        size="small"
+                                        variant="text"
+                                        startIcon={<FileText size={14} />}
+                                        className="source-link-button"
+                                        sx={sourceButtonSx(isLight)}
+                                        onClick={() => openPreview(item.citation, 'document')}
+                                      >
+                                        Документ
+                                      </Button>
+                                    </Tooltip>
                                   </Stack>
                                 </Box>
                               </Box>
@@ -739,26 +937,47 @@ export const Chat: React.FC = () => {
                                     </Typography>
 
                                     <Stack direction="row" spacing={1.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
-                                      <Button
-                                        size="small"
-                                        variant="text"
-                                        startIcon={<ExternalLink size={14} />}
-                                        className="source-link-button"
-                                        sx={sourceButtonSx(isLight, '0.76rem')}
-                                        onClick={() => openPreview(cite, 'source')}
+                                      <Tooltip
+                                        title={
+                                          <Box sx={{ maxWidth: 300 }}>
+                                            <Typography variant="caption" sx={{ fontWeight: 700, display: 'block' }}>
+                                              {cite.document}
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ display: 'block', mt: 0.25 }}>
+                                              {cite.section}
+                                            </Typography>
+                                          </Box>
+                                        }
+                                        placement="top"
+                                        arrow
                                       >
-                                        Страница
-                                      </Button>
-                                      <Button
-                                        size="small"
-                                        variant="text"
-                                        startIcon={<FileText size={14} />}
-                                        className="source-link-button"
-                                        sx={sourceButtonSx(isLight, '0.76rem')}
-                                        onClick={() => openPreview(cite, 'document')}
+                                        <Button
+                                          size="small"
+                                          variant="text"
+                                          startIcon={<ExternalLink size={14} />}
+                                          className="source-link-button"
+                                          sx={sourceButtonSx(isLight, '0.76rem')}
+                                          onClick={() => openPreview(cite, 'source')}
+                                        >
+                                          Страница
+                                        </Button>
+                                      </Tooltip>
+                                      <Tooltip
+                                        title={`${cite.document} · ${cite.section}`}
+                                        placement="top"
+                                        arrow
                                       >
-                                        Документ
-                                      </Button>
+                                        <Button
+                                          size="small"
+                                          variant="text"
+                                          startIcon={<FileText size={14} />}
+                                          className="source-link-button"
+                                          sx={sourceButtonSx(isLight, '0.76rem')}
+                                          onClick={() => openPreview(cite, 'document')}
+                                        >
+                                          Документ
+                                        </Button>
+                                      </Tooltip>
                                     </Stack>
                                     </Paper>
                                   </Box>
@@ -841,12 +1060,66 @@ export const Chat: React.FC = () => {
                   </Box>
                 </Box>
               )}
-              {chatSessionGuardMessage && (
-                <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2.2 }}>
-                  {chatSessionGuardMessage}
-                </Alert>
+              {mustSelectGatewayChat && !guardActionLoading && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2.5, py: 6 }}>
+                  <Typography variant="h6" color="text.secondary" sx={{ mb: 0.5 }}>
+                    Выберите или создайте чат
+                  </Typography>
+                  <Stack direction="row" spacing={1.5}>
+                    <Button
+                      variant="contained"
+                      startIcon={<HelpCircle size={16} />}
+                      onClick={handleCreateChat}
+                      disableElevation
+                      sx={{
+                        px: 2,
+                        py: 1.2,
+                        borderRadius: 2.4,
+                        fontSize: '0.88rem',
+                        fontWeight: 500,
+                        textTransform: 'none',
+                        color: isLight ? '#0f172a' : '#edf2ea',
+                        bgcolor: isLight ? '#e0f2fe' : 'rgba(108, 124, 108, 0.22)',
+                        border: '1px solid',
+                        borderColor: isLight ? '#7dd3fc' : 'rgba(155, 169, 147, 0.34)',
+                        '&:hover': {
+                          bgcolor: isLight ? '#bae6fd' : 'rgba(108, 124, 108, 0.28)',
+                        },
+                      }}
+                    >
+                      Создать чат
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      startIcon={<MessageSquare size={16} />}
+                      onClick={handleLastChat}
+                      sx={{
+                        px: 2,
+                        py: 1.2,
+                        borderRadius: 2.4,
+                        fontSize: '0.88rem',
+                        fontWeight: 500,
+                        textTransform: 'none',
+                        color: isLight ? '#075985' : '#b8c4d8',
+                        borderColor: isLight ? 'rgba(14, 116, 144, 0.24)' : 'rgba(152, 217, 216, 0.22)',
+                        bgcolor: isLight ? 'rgba(224, 242, 254, 0.64)' : 'rgba(152, 217, 216, 0.06)',
+                        '&:hover': {
+                          bgcolor: isLight ? '#e0f2fe' : 'rgba(152, 217, 216, 0.16)',
+                          borderColor: isLight ? 'rgba(14, 116, 144, 0.50)' : 'rgba(152, 217, 216, 0.50)',
+                        },
+                      }}
+                    >
+                      Последний чат
+                    </Button>
+                  </Stack>
+                </Box>
               )}
-              {chatMutation.isError && !chatSessionGuardMessage && (
+              {guardActionLoading && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress size={24} />
+                </Box>
+              )}
+              {chatMutation.isError && !mustSelectGatewayChat && (
                 <Alert severity="error" variant="outlined" sx={{ borderRadius: 2.2 }}>
                   {getGatewayErrorMessage(chatMutation.error)}
                 </Alert>
@@ -885,7 +1158,7 @@ export const Chat: React.FC = () => {
                   multiline
                   minRows={1}
                   maxRows={4}
-                  placeholder={mustSelectGatewayChat ? 'Сначала создайте или выберите чат' : 'Задайте вопрос ассистенту'}
+                  placeholder={mustSelectGatewayChat ? 'Создайте или выберите чат через меню' : 'Задайте вопрос ассистенту'}
                   variant="standard"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -1080,7 +1353,7 @@ export const Chat: React.FC = () => {
           </Box>
 
           {activeCitation && (
-            <Box className="preview-scroll-panel" sx={{ overflow: activeCitation.previewKind === 'document' ? 'auto' : 'hidden', flexGrow: 1 }}>
+            <Box className="preview-scroll-panel" sx={{ overflow: 'auto', flexGrow: 1 }}>
               <Box
                 sx={{
                   position: 'sticky',
@@ -1089,7 +1362,7 @@ export const Chat: React.FC = () => {
                   px: 1.35,
                   py: 1,
                   bgcolor: isLight ? '#f5f7fa' : '#101116',
-                  borderBottom: isLight ? '1px solid rgba(15,23,42,0.12)' : '1px solid rgba(255,255,255,0.08)',
+                  borderBottom: isLight ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.08)',
                 }}
               >
                 <Stack spacing={1}>
@@ -1098,14 +1371,10 @@ export const Chat: React.FC = () => {
                       variant="text"
                       size="small"
                       className="source-link-button"
+                      id="download-source-button"
                       startIcon={<Download size={14} />}
                       title={activeCitation.document}
-                      onClick={() =>
-                        downloadPreviewFile(
-                          activeCitation.document,
-                          `${activeCitation.document}\n${activeCitation.section}\nСтраница ${activeCitation.page}\n\n${activeCitation.text}`,
-                        )
-                      }
+                      onClick={(e) => setDownloadAnchorEl(e.currentTarget)}
                       sx={{
                         ...sourceButtonSx(isLight, '0.82rem'),
                         justifyContent: 'flex-start',
@@ -1119,6 +1388,46 @@ export const Chat: React.FC = () => {
                         {activeCitation.document}
                       </Box>
                     </Button>
+                    <Menu
+                      anchorEl={downloadAnchorEl}
+                      open={Boolean(downloadAnchorEl)}
+                      onClose={() => setDownloadAnchorEl(null)}
+                      slotProps={{
+                        paper: {
+                          sx: {
+                            bgcolor: isLight ? '#fff' : '#1e1f23',
+                            border: '1px solid',
+                            borderColor: isLight ? 'rgba(15,23,42,0.12)' : 'rgba(198,216,240,0.20)',
+                            borderRadius: 2,
+                            minWidth: 190,
+                          },
+                        },
+                      }}
+                    >
+                      <MenuItem
+                        onClick={() => {
+                          setDownloadAnchorEl(null);
+                          downloadPreviewFile(
+                            activeCitation.document,
+                            `${activeCitation.document}\n${activeCitation.section}\nСтраница ${activeCitation.page}\n\n${activeCitation.text}`,
+                          );
+                        }}
+                      >
+                        <FileText size={15} style={{ marginRight: 10 }} />
+                        Скачать как TXT
+                      </MenuItem>
+                      {activeCitation.documentUrl && (
+                        <MenuItem
+                          onClick={() => {
+                            setDownloadAnchorEl(null);
+                            window.open(activeCitation.documentUrl, '_blank', 'noopener,noreferrer');
+                          }}
+                        >
+                          <FileText size={15} style={{ marginRight: 10 }} />
+                          Скачать PDF
+                        </MenuItem>
+                      )}
+                    </Menu>
                     <Tooltip title="Уменьшить масштаб">
                       <IconButton size="small" onClick={() => setPreviewZoom((value) => Math.max(0.75, value - 0.1))}>
                         <ZoomOut size={16} />
@@ -1235,29 +1544,70 @@ export const Chat: React.FC = () => {
                   }}
                 >
                   <Typography variant="caption" sx={{ color: '#777' }}>
-                    Страница {activeCitation.page}
-                  </Typography>
-                  <Typography variant="h6" sx={{ mt: 1, mb: 1, color: '#1f1f1f', fontFamily: 'Georgia, serif' }}>
-                    {activeCitation.previewKind === 'document' ? 'Титульная страница документа' : activeCitation.section}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#555', mb: 2 }}>
                     {activeCitation.previewKind === 'source'
-                      ? 'Открыта только страница, на которую ссылается ответ. Без перехода к остальным страницам документа.'
-                      : 'Открыт весь документ: страницы идут ниже друг за другом, область просмотра прокручивается вниз.'}
+                      ? `${activeCitation.document} · стр. ${activeCitation.page}`
+                      : `Страница ${activeCitation.page}`}
                   </Typography>
-                  <Box
-                    sx={{
-                      mt: 2,
-                      p: 2,
-                      border: '2px solid rgba(56, 189, 248, 0.55)',
-                      bgcolor: 'rgba(56, 189, 248, 0.10)',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ lineHeight: 1.8 }}>
-                      {highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
-                    </Typography>
-                  </Box>
+
+                  {activeCitation.previewKind === 'source' ? (
+                    <>
+                      {/* Изображение страницы — если доступно */}
+                      {activeCitation.pagePreviewUrl && (
+                        <Box
+                          sx={{
+                            borderRadius: 1.5,
+                            overflow: 'hidden',
+                            border: '1px solid rgba(0,0,0,0.08)',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            bgcolor: '#fff',
+                            maxHeight: '60vh',
+                            mb: 2,
+                          }}
+                        >
+                          <img
+                            src={activeCitation.pagePreviewUrl}
+                            alt={`Страница ${activeCitation.page}`}
+                            style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain' }}
+                            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                          />
+                        </Box>
+                      )}
+
+                      <Typography variant="body2" sx={{ mb: 1, color: '#555' }}>
+                        Цитируемый фрагмент:
+                      </Typography>
+                      <Box
+                        sx={{
+                          p: 2,
+                          border: '2px solid rgba(56, 189, 248, 0.55)',
+                          bgcolor: 'rgba(56, 189, 248, 0.10)',
+                          borderRadius: 1,
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
+                          {activeCitation.originalFragment && !normalizedPreviewSearch
+                            ? highlightFragmentInText(activeCitation.text, activeCitation.originalFragment, isLight)
+                            : highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
+                        </Typography>
+                      </Box>
+                    </>
+                  ) : (
+                    <Box
+                      sx={{
+                        mt: 2,
+                        p: 2,
+                        border: '2px solid rgba(56, 189, 248, 0.55)',
+                        bgcolor: 'rgba(56, 189, 248, 0.10)',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ lineHeight: 1.8 }}>
+                        {highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
+                      </Typography>
+                    </Box>
+                  )}
+
                   {activeCitation.previewKind === 'document' && [1, 2, 3, 4].map((pageOffset) => {
                     const pageNumber = activeCitation.page + pageOffset;
                     return (
@@ -1285,13 +1635,13 @@ export const Chat: React.FC = () => {
                       </Box>
                     );
                   })}
-                  <Box sx={{ mt: 4, pt: 2, borderTop: '1px solid #d2cec2', color: '#777' }}>
-                    <Typography variant="caption">
-                      {activeCitation.previewKind === 'source'
-                        ? `Страница ${activeCitation.page}`
-                        : `Конец документа, страниц: 5`}
-                    </Typography>
-                  </Box>
+                  {activeCitation.previewKind !== 'source' && (
+                    <Box sx={{ mt: 4, pt: 2, borderTop: '1px solid #d2cec2', color: '#777' }}>
+                      <Typography variant="caption">
+                        Конец документа, страниц: 5
+                      </Typography>
+                    </Box>
+                  )}
                 </Paper>
               </Stack>
               </Box>
@@ -1412,29 +1762,67 @@ export const Chat: React.FC = () => {
                 }}
               >
                 <Typography variant="caption" sx={{ color: '#777' }}>
-                  Страница {activeCitation.page}
-                </Typography>
-                <Typography variant="h6" sx={{ mt: 1, mb: 1.2, color: '#1f1f1f', fontFamily: 'Georgia, serif' }}>
-                  {activeCitation.previewKind === 'document' ? 'Титульная страница документа' : activeCitation.section}
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#555', mb: 2.2 }}>
                   {activeCitation.previewKind === 'source'
-                    ? 'Открыт фрагмент страницы, на который ссылается ответ ассистента.'
-                    : 'Открыт просмотр всего документа с вертикальной прокруткой страниц.'}
+                    ? `${activeCitation.document} · стр. ${activeCitation.page}`
+                    : `Страница ${activeCitation.page}`}
                 </Typography>
-                <Box
-                  sx={{
-                    mt: 2,
-                    p: 2.2,
-                    border: '2px solid rgba(56, 189, 248, 0.55)',
-                    bgcolor: 'rgba(56, 189, 248, 0.10)',
-                    borderRadius: 1,
-                  }}
-                >
-                  <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
-                    {highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
-                  </Typography>
-                </Box>
+
+                {activeCitation.previewKind === 'source' ? (
+                  <>
+                    {/* Изображение страницы */}
+                    {activeCitation.pagePreviewUrl && (
+                      <Box
+                        sx={{
+                          borderRadius: 1.5,
+                          overflow: 'hidden',
+                          border: '1px solid rgba(0,0,0,0.08)',
+                          display: 'flex',
+                          justifyContent: 'center',
+                          bgcolor: '#fff',
+                          my: 2,
+                        }}
+                      >
+                        <img
+                          src={activeCitation.pagePreviewUrl}
+                          alt={`Страница ${activeCitation.page}`}
+                          style={{ maxWidth: '100%', objectFit: 'contain' }}
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
+                      </Box>
+                    )}
+                    <Typography variant="body2" sx={{ mb: 1, color: '#555' }}>
+                      Цитируемый фрагмент:
+                    </Typography>
+                    <Box
+                      sx={{
+                        p: 2.2,
+                        border: '2px solid rgba(56, 189, 248, 0.55)',
+                        bgcolor: 'rgba(56, 189, 248, 0.10)',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ lineHeight: 1.85, whiteSpace: 'pre-wrap' }}>
+                        {activeCitation.originalFragment && !normalizedPreviewSearch
+                          ? highlightFragmentInText(activeCitation.text, activeCitation.originalFragment, isLight)
+                          : highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
+                      </Typography>
+                    </Box>
+                  </>
+                ) : (
+                  <Box
+                    sx={{
+                      mt: 2,
+                      p: 2.2,
+                      border: '2px solid rgba(56, 189, 248, 0.55)',
+                      bgcolor: 'rgba(56, 189, 248, 0.10)',
+                      borderRadius: 1,
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ lineHeight: 1.85 }}>
+                      {highlightText(activeCitation.text, normalizedPreviewSearch, isLight, activePreviewSearchMatch)}
+                    </Typography>
+                  </Box>
+                )}
                 {activeCitation.previewKind === 'document' &&
                   [1, 2, 3].map((pageOffset) => (
                     <Box key={pageOffset} sx={{ mt: 4, pt: 3, minHeight: 420, borderTop: '1px solid #d2cec2' }}>

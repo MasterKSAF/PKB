@@ -64,6 +64,8 @@ interface UIState {
   setCurrentPermissions: (permissions: Record<string, boolean>) => void;
   currentGatewaySessionId: string | null;
   setCurrentGatewaySessionId: (sessionId: string | null) => void;
+  activeThreadId: string;
+  setActiveThreadId: (threadId: string) => void;
   activeProjectId: string;
   setActiveProjectId: (projectId: string) => void;
   themeMode: 'dark' | 'light';
@@ -89,6 +91,10 @@ interface UIState {
   chatMessages: ChatMessage[];
   setChatMessages: (messages: ChatMessage[]) => void;
   appendChatMessages: (messages: ChatMessage[]) => void;
+  chatTreeOpen: boolean;
+  setChatTreeOpen: (open: boolean) => void;
+  chatProjectsRefreshKey: number;
+  triggerChatProjectsRefresh: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -135,6 +141,7 @@ export const useUIStore = create<UIState>((set) => ({
       currentRole: 'user',
       currentPermissions: {},
       currentGatewaySessionId: null,
+      activeThreadId: '',
       chatMessages: [],
       ...(state.workMode === 'prod'
         ? {
@@ -155,6 +162,8 @@ export const useUIStore = create<UIState>((set) => ({
   setCurrentPermissions: (currentPermissions) => set({ currentPermissions }),
   currentGatewaySessionId: null,
   setCurrentGatewaySessionId: (currentGatewaySessionId) => set({ currentGatewaySessionId }),
+  activeThreadId: '',
+  setActiveThreadId: (activeThreadId) => set({ activeThreadId }),
   activeProjectId: '',
   setActiveProjectId: (activeProjectId) => set({ activeProjectId }),
   themeMode: getInitialThemeMode(),
@@ -168,6 +177,7 @@ export const useUIStore = create<UIState>((set) => ({
       if (workMode === state.workMode) return state;
 
       const prodUsers = state.workMode === 'prod' ? state.adminUsers : state.prodAdminUsersSnapshot;
+      const nextActiveThreadId = workMode === 'demo' ? 'chat-hull' : '';
       const prodUserId = state.workMode === 'prod' ? state.currentUserId : state.prodCurrentUserIdSnapshot;
       const targetUsers = workMode === 'demo' ? MOCK_ADMIN_USERS : prodUsers;
       const targetUserId = workMode === 'demo' ? MOCK_ADMIN_USERS[0]?.id ?? '' : prodUserId;
@@ -182,6 +192,7 @@ export const useUIStore = create<UIState>((set) => ({
         workMode,
         apiStatus: workMode === 'demo' ? 'demo' : 'offline',
         currentGatewaySessionId: null,
+        activeThreadId: nextActiveThreadId,
         adminUsers: targetUsers,
         currentUserId: targetUserId,
         currentRole,
@@ -197,6 +208,7 @@ export const useUIStore = create<UIState>((set) => ({
     set((state) => {
       const workMode = state.workMode === 'demo' ? 'prod' : 'demo';
       const prodUsers = state.workMode === 'prod' ? state.adminUsers : state.prodAdminUsersSnapshot;
+      const nextActiveThreadId = workMode === 'demo' ? 'chat-hull' : '';
       const prodUserId = state.workMode === 'prod' ? state.currentUserId : state.prodCurrentUserIdSnapshot;
       const targetUsers = workMode === 'demo' ? MOCK_ADMIN_USERS : prodUsers;
       const targetUserId = workMode === 'demo' ? MOCK_ADMIN_USERS[0]?.id ?? '' : prodUserId;
@@ -211,6 +223,7 @@ export const useUIStore = create<UIState>((set) => ({
         workMode,
         apiStatus: workMode === 'demo' ? 'demo' : 'offline',
         currentGatewaySessionId: null,
+        activeThreadId: nextActiveThreadId,
         adminUsers: targetUsers,
         currentUserId: targetUserId,
         currentRole,
@@ -289,4 +302,9 @@ export const useUIStore = create<UIState>((set) => ({
     set((state) => ({
       chatMessages: [...state.chatMessages, ...messages],
     })),
+  chatTreeOpen: false,
+  setChatTreeOpen: (chatTreeOpen) => set({ chatTreeOpen }),
+  chatProjectsRefreshKey: 0,
+  triggerChatProjectsRefresh: () =>
+    set((state) => ({ chatProjectsRefreshKey: state.chatProjectsRefreshKey + 1 })),
 }));

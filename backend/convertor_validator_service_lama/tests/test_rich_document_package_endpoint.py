@@ -27,10 +27,93 @@ def _payload() -> dict:
                 "job_id": "extract-job-sections",
                 "pass_name": "sections",
                 "status": "COMPLETED",
-                "result": {"sections": [{"title": "1. Scope"}]},
+                "result": {
+                    "sections": [
+                        {
+                            "section_id": "section-1",
+                            "clause": "1",
+                            "title": "1. Scope",
+                            "level": 1,
+                            "path": "1",
+                            "page_start": 1,
+                            "page_end": 1,
+                            "section_type": "text",
+                            "content": {"text": "Scope text"},
+                        }
+                    ]
+                },
                 "raw_response": {
                     "job": {"id": "extract-job-sections", "status": "COMPLETED"},
-                    "extract_result": {"sections": [{"title": "1. Scope"}]},
+                    "extract_result": {
+                        "sections": [
+                            {
+                                "section_id": "section-1",
+                                "title": "1. Scope",
+                            }
+                        ]
+                    },
+                },
+            },
+            "tables": {
+                "job_id": "extract-job-tables",
+                "pass_name": "tables",
+                "status": "COMPLETED",
+                "result": {
+                    "tables": [
+                        {
+                            "table_id": "table-1",
+                            "caption": "Table 1",
+                            "page": 2,
+                            "cells": [
+                                {
+                                    "row_index": 0,
+                                    "column_index": 1,
+                                    "text": "Cell text",
+                                    "images": [
+                                        {
+                                            "image_id": "image-in-cell-1",
+                                            "caption": "Cell image",
+                                            "page": 2,
+                                        }
+                                    ],
+                                    "formulas": [
+                                        {
+                                            "formula_id": "formula-in-cell-1",
+                                            "expression": "a=b",
+                                            "page": 2,
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                },
+                "raw_response": {
+                    "job": {"id": "extract-job-tables", "status": "COMPLETED"},
+                    "extract_result": {"tables": [{"table_id": "table-1"}]},
+                },
+            },
+            "cross_references": {
+                "job_id": "extract-job-cross-references",
+                "pass_name": "cross_references",
+                "status": "COMPLETED",
+                "result": {
+                    "cross_references": [
+                        {
+                            "reference_id": "ref-1",
+                            "source_id": "section-1",
+                            "target_document_code": "ГОСТ 123",
+                            "reference_type": "normative_reference",
+                            "context": "See ГОСТ 123",
+                        }
+                    ]
+                },
+                "raw_response": {
+                    "job": {
+                        "id": "extract-job-cross-references",
+                        "status": "COMPLETED",
+                    },
+                    "extract_result": {"cross_references": [{"reference_id": "ref-1"}]},
                 },
             },
             "validation_critic": {
@@ -65,7 +148,7 @@ def test_rich_document_package_endpoint_returns_assembled_package() -> None:
     data = response.json()
     package = data["package"]
 
-    assert data["artifact_count"] == 9
+    assert data["artifact_count"] == 11
     assert package["package_name"] == "rich_document_package.json"
     assert package["parse_job_id"] == "parse-job-123"
     assert package["source_pdf_path"] == "document.pdf"
@@ -78,9 +161,18 @@ def test_rich_document_package_endpoint_returns_assembled_package() -> None:
     assert package["artifacts"]["markdown"]["content"] == "# Parsed document"
 
     assert package["artifacts"]["sections"]["source"] == "extract_pass"
-    assert package["artifacts"]["sections"]["content"] == {
-        "sections": [{"title": "1. Scope"}]
-    }
+    assert package["artifacts"]["sections"]["content"]["sections"][0]["title"] == "1. Scope"
+
+    assert package["artifacts"]["tables"]["source"] == "extract_pass"
+    assert package["artifacts"]["tables"]["content"]["tables"][0]["table_id"] == "table-1"
+
+    assert package["artifacts"]["cross_references"]["source"] == "extract_pass"
+    assert (
+        package["artifacts"]["cross_references"]["content"]["cross_references"][0][
+            "target_document_code"
+        ]
+        == "ГОСТ 123"
+    )
 
     assert package["artifacts"]["quality_report"]["source"] == "python_validator"
     assert package["artifacts"]["quality_report"]["content"] == {
@@ -89,6 +181,40 @@ def test_rich_document_package_endpoint_returns_assembled_package() -> None:
 
     assert package["artifacts"]["correction_proposals"]["source"] == "python_validator"
     assert package["artifacts"]["correction_proposals"]["content"] == [
+        {"field": "title", "proposal": "fix spacing"}
+    ]
+
+
+def test_rich_document_package_endpoint_exposes_document_structure_contract() -> None:
+    response = client.post("/rich-document-package", json=_payload())
+
+    assert response.status_code == 200
+
+    package = response.json()["package"]
+    structure = package["document_structure"]
+
+    assert structure["sections"][0]["section_id"] == "section-1"
+    assert structure["sections"][0]["title"] == "1. Scope"
+    assert structure["sections"][0]["content"] == {"text": "Scope text"}
+
+    assert structure["tables"][0]["table_id"] == "table-1"
+    assert structure["tables"][0]["caption"] == "Table 1"
+    assert structure["tables"][0]["cells"][0]["text"] == "Cell text"
+    assert (
+        structure["tables"][0]["cells"][0]["images"][0]["image_id"]
+        == "image-in-cell-1"
+    )
+    assert (
+        structure["tables"][0]["cells"][0]["formulas"][0]["expression"]
+        == "a=b"
+    )
+
+    assert structure["cross_references"][0]["reference_id"] == "ref-1"
+    assert structure["cross_references"][0]["source_id"] == "section-1"
+    assert structure["cross_references"][0]["target_document_code"] == "ГОСТ 123"
+
+    assert structure["quality_report"] == {"status": "needs_review"}
+    assert structure["correction_proposals"] == [
         {"field": "title", "proposal": "fix spacing"}
     ]
 
