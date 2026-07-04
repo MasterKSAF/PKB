@@ -1,16 +1,24 @@
 from fastapi import FastAPI, HTTPException
 
 from convertor_validator_service_lama.clients.llama_cloud_boundary import MissingLlamaCloudApiKeyError
+from convertor_validator_service_lama.clients.llama_extract_rest_client import (
+    LlamaExtractJobFailedError,
+    LlamaExtractPollingTimeoutError,
+    LlamaExtractResponseError,
+    MissingLlamaExtractProjectIdError,
+)
 from convertor_validator_service_lama.clients.llama_parse_rest_client import (
     LlamaParseJobFailedError,
     LlamaParsePollingTimeoutError,
     LlamaParseResponseError,
 )
+from convertor_validator_service_lama.models.extract_job import ExtractJobPollingConfig, ExtractJobResult
 from convertor_validator_service_lama.models.parse_job import ParseJobPollingConfig, ParseJobResult
 from convertor_validator_service_lama.models.contracts import (
     DryRunResponse,
     ExtractPassDryRunRequest,
     ExtractPassDryRunResponse,
+    ExtractPassRunRequest,
     ExtractPassesDryRunRequest,
     ExtractPassesDryRunResponse,
     ExtractPassPlanResponse,
@@ -30,6 +38,7 @@ from convertor_validator_service_lama.services.lama_validator_service import (
     build_parse_job_dry_run_response,
     build_rich_document_package_dry_run_response,
     build_rich_document_package_plan_response,
+    run_extract_pass_with_polling,
     run_parse_job_with_polling,
 )
 
@@ -79,6 +88,34 @@ def parse_job(request: ParseJobRequest) -> ParseJobResult:
     except LlamaParseResponseError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+
+
+
+@app.post("/extract-pass", response_model=ExtractJobResult)
+def extract_pass(request: ExtractPassRunRequest) -> ExtractJobResult:
+    polling_config = ExtractJobPollingConfig(
+        max_attempts=request.max_attempts,
+        interval_seconds=request.interval_seconds,
+    )
+
+    try:
+        return run_extract_pass_with_polling(
+            parse_job_id=request.parse_job_id,
+            pass_name=request.pass_name,
+            extraction_schema=request.extraction_schema,
+            instructions=request.instructions,
+            schema_name=request.schema_name,
+            expand=request.expand,
+            polling_config=polling_config,
+        )
+    except (MissingLlamaCloudApiKeyError, MissingLlamaExtractProjectIdError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LlamaExtractPollingTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except LlamaExtractJobFailedError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except LlamaExtractResponseError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 @app.post("/extract-pass/dry-run", response_model=ExtractPassDryRunResponse)
 def extract_pass_dry_run(request: ExtractPassDryRunRequest) -> ExtractPassDryRunResponse:

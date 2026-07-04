@@ -83,6 +83,17 @@ class ExtractPassDryRunResponse(BaseModel):
     extract_payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class ExtractPassRunRequest(BaseModel):
+    parse_job_id: str = Field(min_length=1)
+    pass_name: LlamaExtractPassName
+    extraction_schema: dict[str, Any] = Field(default_factory=dict)
+    instructions: str | None = None
+    schema_name: str | None = None
+    expand: list[str] = Field(default_factory=lambda: ["extract_result"])
+    max_attempts: int = Field(default=60, ge=1)
+    interval_seconds: float = Field(default=2.0, ge=0.0)
+
+
 class ExtractPassesDryRunRequest(BaseModel):
     parse_job_id: str
 
