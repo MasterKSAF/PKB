@@ -45,6 +45,7 @@ Use `.env.example` as a template for local configuration:
 - POST /rich-document-package
 - POST /rich-document-package/dry-run
 - GET /rich-document-package/plan
+- POST /rag-builder-payload
 
 ## LlamaParse REST scope
 
@@ -110,6 +111,37 @@ It does not implement downcast to RAG Builder-compatible JSON.
 
 Final corrections are still owned by the Python validator/assembler policy: `python_validator_assembler_applies_final_corrections`.
 
+## RAG Builder payload export scope
+
+`POST /rag-builder-payload` exports a RAG Builder-compatible payload from an already assembled `rich_document_package.json` structure.
+
+This endpoint is an adapter/exporter for the orchestrator.
+
+It does:
+
+- accept `RichDocumentPackage`
+- map document metadata
+- map sections
+- map tables
+- map images
+- map formulas
+- map cross_references
+- return `RagBuilderDowncastResult`
+- return warnings for missing optional source artifacts
+
+It does not:
+
+- call RAG Builder
+- call LlamaCloud
+- run OCR
+- run LlamaParse
+- run LlamaExtract
+- write to the knowledge DB
+- create embeddings
+- run indexing
+
+RAG Builder execution is owned by the orchestrator.
+
 ## Dry-run scope
 
 Dry-run endpoints build contracts and payload previews only.
@@ -152,5 +184,5 @@ http://127.0.0.1:8000/docs
 
 Current local status:
 
-- 71 passed
+- 87 passed
 - 1 warning from FastAPI/TestClient dependency stack
