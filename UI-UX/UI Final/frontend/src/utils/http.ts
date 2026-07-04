@@ -2556,7 +2556,12 @@ export const sourceApi = {
       const innerText = textData?.data ?? textData;
 
       // Используем готовый markdown из сервера (с image_key → image links)
-      const pageMarkdown = innerText?.markdown || '';
+      let pageMarkdown = innerText?.markdown || '';
+      // Резим относительные пути /api/v1/files/ → абсолютные через Gateway
+      if (pageMarkdown) {
+        const filesBase = `${BASE_URL.replace(/\/+$/, '')}/files/`;
+        pageMarkdown = pageMarkdown.replace(/\(\/api\/v1\/files/g, `(${filesBase}`);
+      }
 
       // Fallback: собираем текст из blocks вручную
       const blocksText =

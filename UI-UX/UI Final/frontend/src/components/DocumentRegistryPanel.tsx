@@ -689,8 +689,14 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
       const textData = textResult.status === 'fulfilled' ? textResult.value : null;
 
       // Используем готовый markdown с сервера, либо собираем из blocks
-      const pageMarkdown = textData?.markdown
-        || (Array.isArray(textData?.blocks) ? buildMarkdownFromBlocks(textData.blocks) : '');
+      let pageMarkdown = textData?.markdown || '';
+      // Резим относительные пути /api/v1/files/ → абсолютные через Gateway
+      if (pageMarkdown) {
+        const filesBase = `${GATEWAY_API_BASE_URL.replace(/\/+$/, '')}/files/`;
+        pageMarkdown = pageMarkdown.replace(/\(\/api\/v1\/files/g, `(${filesBase}`);
+      } else if (Array.isArray(textData?.blocks)) {
+        pageMarkdown = buildMarkdownFromBlocks(textData.blocks);
+      }
 
       return {
         preview: previewResult.status === 'fulfilled' ? previewResult.value : null,

@@ -2190,7 +2190,7 @@ def get_draft_preview(draft_id: int, db: Session = Depends(get_db)):
             preview_page_nums = sorted(set(b.get('page') for b in all_blocks if b.get('page')))[:3]
             preview_blocks = [b for b in all_blocks if b.get('page') in preview_page_nums]
             if preview_blocks:
-                preview_md = draft_crud.draft_blocks_to_markdown(preview_blocks)
+                preview_md = draft_crud.draft_blocks_to_markdown(preview_blocks, files_base_url='/api/v1/files')
 
         data = {
             'draft_id': draft.draft_id,
