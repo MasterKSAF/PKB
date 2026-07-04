@@ -1,0 +1,235 @@
+from convertor_validator_service_lama.models.extract_job import ExtractJobResult
+from convertor_validator_service_lama.models.parse_job import ParseJobResult
+from convertor_validator_service_lama.models.rich_document_package import (
+    RichDocumentStructure,
+)
+from convertor_validator_service_lama.services.rich_document_package_assembler import (
+    assemble_rich_document_package,
+)
+from convertor_validator_service_lama.models.rich_document_package import (
+    RichDocumentPackageAssemblyRequest,
+)
+
+
+def _parse_result() -> ParseJobResult:
+    return ParseJobResult.model_construct(
+        job_id="parse-job-1",
+        status="COMPLETED",
+        markdown="# Test document",
+        items=[],
+        metadata={"title": "Test document"},
+        job_metadata={},
+        raw_response={"job_id": "parse-job-1"},
+    )
+
+
+def _extract_result(result: dict[str, object]) -> ExtractJobResult:
+    return ExtractJobResult.model_construct(
+        job_id="extract-job-1",
+        status="COMPLETED",
+        result=result,
+        raw_response=result,
+    )
+
+
+def test_assembler_fills_document_structure_from_extract_artifacts() -> None:
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        parse_result=_parse_result(),
+        extract_results={
+            "document_boundaries": _extract_result(
+                {
+                    "document_boundaries": [
+                        {
+                            "boundary_id": "boundary-1",
+                            "boundary_type": "main_document",
+                            "title": "Main document",
+                            "page_start": 1,
+                            "page_end": 10,
+                        }
+                    ]
+                }
+            ),
+            "table_of_contents": _extract_result(
+                {
+                    "table_of_contents": [
+                        {
+                            "item_id": "toc-1",
+                            "title": "1. Scope",
+                            "level": 1,
+                            "page": 1,
+                            "path": "1",
+                            "target_section_id": "section-1",
+                        }
+                    ]
+                }
+            ),
+            "nested_documents": _extract_result(
+                {
+                    "nested_documents": [
+                        {
+                            "nested_document_id": "nested-1",
+                            "document_code": "APPENDIX-A",
+                            "title": "Appendix A",
+                            "page_start": 11,
+                            "page_end": 12,
+                            "parent_boundary_id": "boundary-1",
+                        }
+                    ]
+                }
+            ),
+            "sections": _extract_result(
+                {
+                    "sections": [
+                        {
+                            "section_id": "section-1",
+                            "clause": "1",
+                            "title": "1. Scope",
+                            "level": 1,
+                            "path": "1",
+                            "page_start": 1,
+                            "page_end": 1,
+                            "section_type": "text",
+                            "content": {"text": "Scope text"},
+                        }
+                    ]
+                }
+            ),
+            "tables": _extract_result(
+                {
+                    "tables": [
+                        {
+                            "table_id": "table-1",
+                            "caption": "Table 1",
+                            "page": 2,
+                            "cells": [
+                                {
+                                    "row_index": 0,
+                                    "column_index": 1,
+                                    "text": "Cell text",
+                                    "images": [
+                                        {
+                                            "image_id": "image-in-cell-1",
+                                            "caption": "Cell image",
+                                            "page": 2,
+                                        }
+                                    ],
+                                    "formulas": [
+                                        {
+                                            "formula_id": "formula-in-cell-1",
+                                            "expression": "a=b",
+                                            "page": 2,
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ),
+            "images": _extract_result(
+                {
+                    "images": [
+                        {
+                            "image_id": "image-1",
+                            "caption": "Figure 1",
+                            "alt_text": "Figure alt",
+                            "page": 3,
+                            "bbox": [0.1, 0.2, 0.3, 0.4],
+                            "storage_uri": "minio://bucket/image-1.png",
+                        }
+                    ]
+                }
+            ),
+            "formulas": _extract_result(
+                {
+                    "formulas": [
+                        {
+                            "formula_id": "formula-1",
+                            "expression": "x=y",
+                            "latex": "x=y",
+                            "page": 4,
+                            "parameters": [{"name": "x"}],
+                        }
+                    ]
+                }
+            ),
+            "cross_references": _extract_result(
+                {
+                    "cross_references": [
+                        {
+                            "reference_id": "ref-1",
+                            "source_id": "section-1",
+                            "target_document_code": "ГОСТ 123",
+                            "reference_type": "normative_reference",
+                            "context": "See ГОСТ 123",
+                        }
+                    ]
+                }
+            ),
+            "validation_critic": _extract_result(
+                {
+                    "quality_report": {"score": 0.95},
+                    "correction_proposals": [
+                        {
+                            "kind": "replace_text",
+                            "target": "section-1",
+                        }
+                    ],
+                }
+            ),
+        },
+    )
+
+    result = assemble_rich_document_package(request)
+
+    structure = result.package.document_structure
+
+    assert isinstance(structure, RichDocumentStructure)
+    assert structure.document_boundaries[0].boundary_id == "boundary-1"
+    assert structure.table_of_contents[0].target_section_id == "section-1"
+    assert structure.nested_documents[0].document_code == "APPENDIX-A"
+
+    assert structure.sections[0].section_id == "section-1"
+    assert structure.sections[0].content == {"text": "Scope text"}
+
+    assert structure.tables[0].table_id == "table-1"
+    assert structure.tables[0].cells[0].text == "Cell text"
+    assert structure.tables[0].cells[0].images[0].image_id == "image-in-cell-1"
+    assert structure.tables[0].cells[0].formulas[0].expression == "a=b"
+
+    assert structure.images[0].image_id == "image-1"
+    assert structure.images[0].storage_uri == "minio://bucket/image-1.png"
+
+    assert structure.formulas[0].formula_id == "formula-1"
+    assert structure.formulas[0].parameters == [{"name": "x"}]
+
+    assert structure.cross_references[0].target_document_code == "ГОСТ 123"
+
+    assert structure.quality_report == {"score": 0.95}
+    assert structure.correction_proposals[0]["kind"] == "replace_text"
+
+
+def test_assembler_uses_empty_document_structure_when_extract_artifacts_are_absent() -> None:
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        parse_result=_parse_result(),
+        extract_results={},
+    )
+
+    result = assemble_rich_document_package(request)
+
+    structure = result.package.document_structure
+
+    assert structure.document_boundaries == []
+    assert structure.table_of_contents == []
+    assert structure.nested_documents == []
+    assert structure.sections == []
+    assert structure.tables == []
+    assert structure.images == []
+    assert structure.formulas == []
+    assert structure.cross_references == []
+    assert structure.quality_report is None
+    assert structure.correction_proposals == []
