@@ -7,6 +7,7 @@ import logging
 from typing import Optional
 from app.services.parsers.base import BaseParser, ParseResult
 from app.services.parsers.pdf_parser import PdfParser
+from app.services.parsers.docling_parser import DoclingParser  # новый импорт
 from app.config import settings
 import json
 import os
@@ -25,13 +26,14 @@ class ParserFactory:
     def get_parser(cls, mime_type: str) -> Optional[BaseParser]:
         """
         Возвращает экземпляр парсера для указанного MIME-типа.
-
-        Args:
-            mime_type: MIME-тип документа.
-
-        Returns:
-            Экземпляр парсера или None, если тип не поддерживается.
+        Если включён Docling-парсер, возвращает DoclingParser для PDF.
         """
+        # ---- Переключение на Docling ----
+        if settings.use_docling_parser and mime_type == "application/pdf":
+            logger.debug("Using DoclingParser (USE_DOCLING_PARSER=True)")
+            return DoclingParser()
+
+        # ---- Старый путь (мок или ODL) ----
         if settings.use_mock_parser:
             logger.debug("Using MockPdfParser")
             return MockPdfParser()

@@ -141,6 +141,10 @@ class ParseStep(PipelineStep):
 
         ctx.options["original_file_name"] = ctx.original_file_name
 
+        # ---- ДОБАВЛЯЕМ: передаём max_pages в options для DoclingParser ----
+        if ctx.max_pages is not None:
+            ctx.options["max_pages"] = ctx.max_pages
+
         # ── Preview mode: обрезаем PDF до max_pages страниц ──────────────
         # Чтобы CLI парсер не обрабатывал весь документ (что может висеть >300с),
         # передаём только первые max_pages страниц.

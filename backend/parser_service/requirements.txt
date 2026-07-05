@@ -5,13 +5,17 @@ pydantic-settings==2.7.0
 uvicorn==0.46.0
 python-magic==0.4.27
 #python-magic-bin==0.4.14
-opendataloader-pdf==2.4.7
-opendataloader-pdf[hybrid]
 pypdf==6.12.2
 pymupdf==1.28.0
 python-dotenv==1.2.2
 # зависимости aiohttp и botocore будут подтянуты автоматически
 yara-python
+
+opendataloader-pdf==2.4.7
+opendataloader-pdf[hybrid]
+
+docling 
+docling-core
 
 pytest==9.0.3
 pytest-asyncio==1.4.0
