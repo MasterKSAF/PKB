@@ -15,6 +15,28 @@
 - **registry_creation** шаг падает с 400 из-за несовпадения формата данных между конвертером и create_pipeline_document.
 - **Секции не сохраняются** → Orchestrator не может прочитать sections с ID → RAG Builder не получает данные для индексации.
 - Статус документа после approve остаётся "uploaded" (не доходит до "validating").
+- **FULL_PHASE_MODE="full"** пропускает Parser/OCR на full-фазе полностью. При `full_completed=False` документ уходит в Converter без распознанного текста.
+  Guard: добавлен warning-лог в approve_draft при `full` mode + `full_completed=False`.
+- **После approve Celery-задачи могут не выполняться**, если нет воркеров (docker без celery -pipeline). Документ создаётся в Registry со статусом "uploaded", но pipeline (ocr→converter→registry→rag) не завершается.
+  Тесты не ловят это, т.к. мокают .delay() глобально.
+
+### Почему черновик сразу в "uploaded" после подтверждения (2026-07-05)
+
+**Сценарий:**
+1. UI отправляет PATCH /drafts/{id}/decide action=approve
+2. `approve_draft()` создаёт документ в Registry с `status: "uploaded"` (строка 1277 orchestrator.py)
+3. Диспатчит Celery-задачи full_ocr/full_converter/registry/rag в очередь
+4. **Если нет Celery worker — задачи висят в очереди**, документ навсегда остаётся "uploaded"
+5. Даже если Celery есть, **registry_creation шаг падает с 400** из-за несовпадения формата данных
+
+**Почему тесты не ловят:**
+- Все .delay() замоканы глобально в conftest.py (no-op)
+- Тесты проверяют HTTP-ответ (200, document_id есть), но не проверяют что Celery-задачи реально диспатчатся
+- Нет E2E-теста, который бы запускал Celery worker воркер и проверял pipeline до конца
+
+**Что делать:**
+- Временно: запустить celery -A app.celery_app worker -Q pipeline в отдельном контейнере
+- Постоянно: интеграционный тест, который проверяет что после approve задача переходит в active/full_stage
 
 ## parser_docling
 

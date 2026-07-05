@@ -1,33 +1,33 @@
-# Сессия: фикс дублей file_hash_sha256 ✅
+# План сессии: Registry errors + Mock FSM + approve flow
 
-## Сделано
+## ✅ 1. Создать MockRegistryClient (утилита для тестов)
+- [x] `tests/shared/mock_registry_client.py` с FSM-валидацией (409 при approved/discarded)
 
-### Проблема: почему были дубли
-1. **`approve_draft`** не передавал `file_hash_sha256` в `doc_payload` → NULL в БД
-2. **PostgreSQL** UNIQUE constraint не работает на NULL → дубли множились
-3. **`create_draft`** проверял только `is_duplicate_file` (активные черновики), не `is_duplicate_document`
-4. **`registry.drafts`** не имел колонки `file_hash_sha256` — хэш терялся после создания черновика
-5. **`base_client.py`** — `ConnectError` и `CircuitBreakerError` маскировались mock-response вместо re-raise
+## ✅ 2. Убрать глушение Registry errors (17 блоков)
+- [x] `_on_preview_completed`: 5 блоков try/except
+- [x] `approve_draft`: 4 блока try/except  
+- [x] `confirm_draft`: 2 блока try/except
+- [x] `reject_draft`: 1 блок try/except
+- [x] `stop_duplicate_draft`: 1 блок try/except
+- [x] `run_registry_step` (pipeline_formation.py): 1 блок try/except
+- [x] `registry_creation` handler: 2 блока try/except (get_document_sections, save sections)
+- [x] `rag_index` handler: 1 блок try/except (update_document_status)
 
-### Исправления
+## ✅ 3. Рефакторинг approve → converter → registry
+- [x] `approve_draft()`: убрать create_document, DUPLICATE_FILE, sync, document_id/version_id
+- [x] `_on_full_step_completed("full_converter")`: добавить create_document + sync
+- [x] Обновить возврат approve_draft → document_id=None
+- [x] Удалён мёртвый код DUPLICATE_FILE_AFTER_APPROVE в decide_draft
 
-| Файл | Изменение |
-|------|-----------|
-| `orchestrator/.../base_client.py` | `ConnectError` и `CircuitBreakerError` → **raise**, а не fallback к моку |
-| `orchestrator/.../drafts.py` | Проверка `is_duplicate_document` → 409 `DUPLICATE_DOCUMENT` |
-| `orchestrator/.../drafts.py:683` | `get_draft` возвращает `file_hash_sha256` |
-| `orchestrator/.../orchestrator.py:1295` | `doc_payload["file_hash_sha256"]` из `draft_data` (Registry) |
-| `registry/.../models/draft.py` | Колонки `file_hash_sha256`, `title_hash_sha256`, `title_key` |
-| `registry/.../crud/draft.py` | Сохранение `file_hash_sha256` при create_draft |
-| `registry/.../schemas/draft.py` | `file_hash_sha256` в DraftSchema |
-| `registry/.../routes.py` | Передача полей в CRUD |
-| `data/tests/test_file_hash_dedup.py` | **Новый** E2E тест (9/9 PASS) |
-| `data/tests/config.py` | `TEST_CLEANUP` / `cleanup_enabled()` |
-| `data/tests/test_pdf_tests_full.py` | Параметризация директории, auto-approve |
+## ✅ 4. Обновить тесты
+- [x] Вписать MockRegistryClient в test_pipeline_formation.py
+- [x] Обновить TestApproveDraftPartial/Full — approve не создаёт документ
+- [x] Добавить тест: on_step_completed("full_converter") → создаёт документ
+- [x] Исправить test_celery_tasks.py::TestRunRegistryStep
 
-### Миграция БД
-```sql
-ALTER TABLE registry.drafts ADD COLUMN file_hash_sha256 TEXT;
-ALTER TABLE registry.drafts ADD COLUMN title_hash_sha256 TEXT;
-ALTER TABLE registry.drafts ADD COLUMN title_key TEXT;
-```
+## ❌ Осталось (не входило в задачу)
+- `test_draft_to_document_flow.py` — ждёт document_id от approve
+- `test_draft_to_indexation_flow.py` — ждёт document_id от approve
+- `test_draft_to_version.py` — ждёт document_id от approve
+- `pipeline_indexation.py` — pre-existing баг job_id
+- `test_celery_tasks.py::TestRunOcrPreviewStep::test_failure_path_triggers_retry` — pre-existing

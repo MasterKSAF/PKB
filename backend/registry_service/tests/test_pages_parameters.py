@@ -102,7 +102,12 @@ def test_document_pages_and_parameters(client):
     assert page2_data["page"] == 2
     assert len(page2_data["blocks"]) == 1
     assert page2_data["blocks"][0]["type"] == "formula"
-    assert "E = mc^2" in page2_data["blocks"][0]["content"]
+    # Raw structure — content is the original JSONB object
+    assert isinstance(page2_data["blocks"][0]["content"], dict)
+    assert page2_data["blocks"][0]["content"]["latex"] == "E = mc^2"
+    assert page2_data["blocks"][0]["content"]["meaning"] == "Mass-energy equivalence"
+    # Confidence is 0 (no data)
+    assert page2_data["blocks"][0]["confidence"] == 0
 
     # 4. Test GET /registry/documents/{id}/pages/{page_num}/text
     page2_text_res = client.get(f"/api/v1/registry/documents/{doc_id}/pages/2/text")
@@ -110,6 +115,8 @@ def test_document_pages_and_parameters(client):
     page2_text_data = page2_text_res.json()["data"]
     assert page2_text_data["page"] == 2
     assert len(page2_text_data["blocks"]) == 1
+    # /text returns plain text (latex extracted)
+    assert page2_text_data["blocks"][0]["content"] == "E = mc^2"
 
     # 5. Test GET /registry/documents/{id}/pages/{page_num}/preview
     page2_prev_res = client.get(f"/api/v1/registry/documents/{doc_id}/pages/2/preview")
@@ -118,6 +125,8 @@ def test_document_pages_and_parameters(client):
     assert page2_prev_data["page"] == 2
     assert "key" in page2_prev_data
     assert "p2.png" in page2_prev_data["key"]
+    # Preview text_layer uses markdown-formatted content
+    assert page2_prev_data["text_layer"] == "E = mc^2"
 
     # 6. Test GET /registry/documents/{id}/parameters
     params_res = client.get(f"/api/v1/registry/documents/{doc_id}/parameters")

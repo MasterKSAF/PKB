@@ -818,21 +818,24 @@ class RegistryServiceClient(ServiceClient):
         )
 
     async def get_draft_preview(self, draft_id: int) -> dict:
-        """Get preview metadata for a draft."""
+        """Get preview metadata for a draft (with first 3 pages in MD)."""
         return await self.call(
             "GET",
             f"/api/v1/registry/drafts/{draft_id}/preview",
             mock_response={
                 "data": {
                     "draft_id": draft_id,
-                    "doc_code": "ГОСТ 20868-81",
                     "title": "Стойки установочные крепежные",
-                    "document_type": "normative",
+                    "doc_code": "ГОСТ 20868-81",
+                    "source_type": "GOST",
                     "year": "1981",
-                    "revision": None,
+                    "era": "USSR",
+                    "jurisdiction": "RU",
+                    "issuing_body": "Госстандарт СССР",
                     "preview_not_supported": False,
                     "total_pages": 3,
                     "processed_pages": 3,
+                    "preview_md": "# ГОСТ 20868-81\n\nНастоящий стандарт распространяется...\n\n| A1 | B1 |\n|---|----|\n| A2 | B2 |\n\n- Пункт 1\n- Пункт 2",
                 }
             },
         )
@@ -948,4 +951,43 @@ class RegistryServiceClient(ServiceClient):
                 }
             },
             json={"preview_metadata": metadata},
+        )
+
+    async def get_draft_pages(self, draft_id: int) -> dict:
+        """Get pages list for a draft from raw_data."""
+        return await self.call(
+            "GET",
+            f"/api/v1/registry/drafts/{draft_id}/pages",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "pages_total": 3,
+                    "pages": [
+                        {"page": 1, "width": 595, "height": 842},
+                        {"page": 2, "width": 595, "height": 842},
+                        {"page": 3, "width": 595, "height": 842},
+                    ],
+                }
+            },
+        )
+
+    async def get_draft_page(self, draft_id: int, page_num: int) -> dict:
+        """Get blocks for a specific draft page from raw_data."""
+        return await self.call(
+            "GET",
+            f"/api/v1/registry/drafts/{draft_id}/pages/{page_num}",
+            mock_response={
+                "data": {
+                    "draft_id": draft_id,
+                    "page": page_num,
+                    "blocks": [
+                        {
+                            "number": 1,
+                            "type": "paragraph",
+                            "page": page_num,
+                            "content": f"Mock content for draft {draft_id} page {page_num}",
+                        }
+                    ],
+                }
+            },
         )

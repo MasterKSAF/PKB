@@ -156,6 +156,62 @@ class TestSagaCoordinator:
         # Должен вызвать delete_document для registry_creation (единственный с компенсацией)
         mock_delete.assert_awaited_once_with(50)
 
+    async def test_compensate_marks_document_failed_when_no_registry_step(
+        self, mock_task_repo: SagaCoordinator
+    ):
+        """Если pipeline упал на full_ocr/full_converter ДО registry_creation,
+        и у task есть document_id (создан approve_draft),
+        документ должен получить статус failed, а не висеть в uploaded."""
+        saga = mock_task_repo
+        saga.task_repo.get_task_steps.return_value = [
+            MockStep("upload", 0, status="completed"),
+            MockStep("full_ocr", 1, status="failed"),
+        ]
+
+        # У task есть document_id (установлен approve_draft)
+        task = MockTask(document_id=100)
+
+        with patch(
+            "app.services.registry_client.RegistryServiceClient.update_document_status",
+            new=AsyncMock(),
+        ) as mock_update_status:
+            await saga.compensate(task_id=1, failed_step="full_ocr", task=task)
+
+        # Документ должен быть помечен как failed
+        mock_update_status.assert_awaited_once_with(
+            document_id=100,
+            status="failed",
+        )
+
+        # Task всё равно помечен как failed через task_repo
+        saga.task_repo.update_task_status.assert_called_once()
+        call_kwargs = saga.task_repo.update_task_status.call_args[1]
+        assert call_kwargs.get("status") == "failed", (
+            "Task status must be set to failed even when document is marked"
+        )
+
+    async def test_compensate_skips_document_failed_when_no_document_id(
+        self, mock_task_repo: SagaCoordinator
+    ):
+        """Если у task нет document_id (черновик не аппрувнут),
+        статус документа не обновляется — это нормально."""
+        saga = mock_task_repo
+        saga.task_repo.get_task_steps.return_value = [
+            MockStep("upload", 0, status="completed"),
+            MockStep("preview_ocr", 1, status="failed"),
+        ]
+
+        task = MockTask(document_id=None)
+
+        with patch(
+            "app.services.registry_client.RegistryServiceClient.update_document_status",
+            new=AsyncMock(),
+        ) as mock_update_status:
+            await saga.compensate(task_id=1, failed_step="preview_ocr", task=task)
+
+        # update_document_status НЕ вызывается — document_id=None
+        mock_update_status.assert_not_called()
+
 
 # ============================================================================
 #  2. PipelineOrchestrator.on_step_failed → Saga

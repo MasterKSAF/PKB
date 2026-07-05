@@ -42,9 +42,16 @@ echo ""
 
 # ── 2. Удаление volumes (huggingface_cache — кеш Infinity — оставляем) ───────
 echo -e "${YELLOW}[2/3] Removing data volumes (pg_data, minio_data)...${NC}"
+
+# Определяем имя проекта из docker-compose.yml (fallback — имя директории)
+PROJECT_NAME=$(grep -E '^name:' docker-compose.yml | sed 's/name:[[:space:]]*//' | tr -d ' ')
+if [ -z "$PROJECT_NAME" ]; then
+    PROJECT_NAME=$(basename "$(pwd)")
+fi
+
 docker volume rm \
-  $(docker volume ls --filter label=com.docker.compose.volume=pg_data -q) \
-  $(docker volume ls --filter label=com.docker.compose.volume=minio_data -q) \
+  "${PROJECT_NAME}_pg_data" \
+  "${PROJECT_NAME}_minio_data" \
   2>/dev/null || true
 echo -e "  ${GREEN}Data volumes removed.${NC}"
 echo ""

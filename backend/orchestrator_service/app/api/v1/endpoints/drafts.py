@@ -619,19 +619,18 @@ async def get_draft_preview(
         return DraftPreviewResponse(
             draft_id=draft_id,
             preview=PreviewMetadata(
-                doc_code=data.get("doc_code"),
                 title=data.get("title"),
-                document_type=data.get("document_type"),
+                doc_code=data.get("doc_code"),
                 source_type=data.get("source_type"),
                 year=data.get("year"),
-                revision=data.get("revision"),
                 era=data.get("era"),
                 jurisdiction=data.get("jurisdiction"),
-                mks_oks_code=data.get("mks_oks_code"),
-                okstu_code=data.get("okstu_code"),
                 issuing_body=data.get("issuing_body"),
-                udk_code=data.get("udk_code"),
             ),
+            preview_not_supported=data.get("preview_not_supported", True),
+            total_pages=data.get("total_pages", 0),
+            processed_pages=data.get("processed_pages", 0),
+            preview_md=data.get("preview_md"),
         )
     except HTTPException:
         raise
@@ -1304,30 +1303,6 @@ async def decide_draft(
                         }
                     },
                 )
-            # DUPLICATE_FILE_AFTER_APPROVE — race condition with Registry
-            if "DUPLICATE_FILE_AFTER_APPROVE" in err_msg:
-                # Extract conflict_document_id from error message
-                conflict_id = None
-                _marker = "conflict_document_id="
-                _pos = err_msg.find(_marker)
-                if _pos != -1:
-                    _rest = err_msg[_pos + len(_marker):]
-                    _end = _rest.find(" ")
-                    _val = _rest[:_end] if _end != -1 else _rest
-                    try:
-                        conflict_id = int(_val)
-                    except (ValueError, TypeError):
-                        pass
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "error": {
-                            "code": "DUPLICATE_FILE_AFTER_APPROVE",
-                            "message": "Документ с таким файлом уже существует",
-                            "details": {"conflict_document_id": conflict_id},
-                        }
-                    },
-                )
             # Other ValueErrors — re-raise as 500
             raise
 
@@ -1580,6 +1555,97 @@ async def delete_draft(
                 "error": {
                     "code": "NOT_FOUND",
                     "message": f"Черновик {draft_id} не найден",
+                    "details": {"original_error": str(exc)},
+                }
+            },
+        )
+    finally:
+        await registry.close()
+
+
+# ---------------------------------------------------------------------------
+#  GET /drafts/{draft_id}/pages  — List pages for a draft
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{draft_id}/pages",
+    responses={404: {"description": "Черновик не найден"}},
+)
+async def get_draft_pages(
+    draft_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Get pages list for a draft (proxies to Registry)."""
+    registry = RegistryServiceClient()
+    try:
+        result = await registry.get_draft_pages(draft_id)
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Черновик {draft_id} не найден",
+                    }
+                },
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Черновик {draft_id} не найден",
+                    "details": {"original_error": str(exc)},
+                }
+            },
+        )
+    finally:
+        await registry.close()
+
+
+# ---------------------------------------------------------------------------
+#  GET /drafts/{draft_id}/pages/{page_num}  — Get page blocks
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{draft_id}/pages/{page_num}",
+    responses={404: {"description": "Черновик или страница не найдены"}},
+)
+async def get_draft_page(
+    draft_id: int,
+    page_num: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Get blocks for a specific draft page (proxies to Registry)."""
+    registry = RegistryServiceClient()
+    try:
+        result = await registry.get_draft_page(draft_id, page_num)
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "error": {
+                        "code": "NOT_FOUND",
+                        "message": f"Страница {page_num} черновика {draft_id} не найдена",
+                    }
+                },
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"Страница {page_num} черновика {draft_id} не найдена",
                     "details": {"original_error": str(exc)},
                 }
             },

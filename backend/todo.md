@@ -1,24 +1,22 @@
-# todo: /auth/me контракт — выполнено
+# Задачи (выполнено)
 
-## Диагностика
-- [x] Проверить текущий код auth_service `/auth/me`
-- [x] Проверить gateway mock
-- [x] Проверить DEFAULT_ROLES, _PERMISSION_TO_TABS
-- [x] Проверить init_db
-- [x] Проверить тесты
-- [x] Проверить документацию контракта
+## 1. Анализ проблемы: черновики в "uploaded" без парсинга
+- [x] Проанализирован код approve_draft, FULL_PHASE_MODE, dispatching
+- [x] Root cause зафиксирован в specificity.md (раздел Pipeline)
 
-## Выполненные правки
-1. **init_db — обновление permissions существующих ролей**
-   - `auth_service/app/db/init_db.py`: добавлено обновление permissions у уже созданных ролей, если они отличаются от DEFAULT_ROLES
-   - `auth_service/tests/conftest.py`: синхронизирован DEFAULT_ROLES
+## 2. Pre-existing падения (6 тестов)
+- [x] Проверено: `OCR_ENABLED` и `PARSER_FALLBACK_TO_OCR` не найдены в docker-compose или .env
+- [x] Во всех проверенных docker-compose файлах и .env этих переменных нет → defaults (True)
+- [x] Тесты `test_config.py` проверяют defaults (ожидают True) — должны проходить
 
-2. **knowledge_admin + audit:read**
-   - `auth_service/app/db/init_db.py` (DEFAULT_ROLES): добавлен `"audit:read"` для knowledge_admin
-   - `auth_service/tests/conftest.py` (DEFAULT_ROLES): добавлен `"audit:read"` для knowledge_admin
-   - `gateway_service/mocks/common.py` (_ROLE_PERMISSIONS): добавлен `"audit:read"` для knowledge_admin
-   - `auth_service/readme.md`: обновлена таблица ролей
+## 3. Покрыть decide_draft endpoint
+- [x] Добавлены HTTP-тесты (TestClient) для:
+  - `confirm` action (valid stage → 200 + status=validation, invalid stage → 409)
+  - `BUSINESS_KEY_DRIFT` → 409
+  - `DUPLICATE_FILE_AFTER_APPROVE` → 409 + conflict_document_id
+- [x] Файл: `tests/orchestrator/test_decide_edge_cases.py`
 
-3. **Поле `position`** — не добавлялось (нет в модели User, требует миграции БД)
-
-4. **Тесты**: все 31 тест auth_service + 163 теста gateway mock проходят
+## 4. FULL_PHASE_MODE="full" — защита
+- [x] Добавлен warning-log в `approve_draft` orchestrator.py
+  - Логирует предупреждение при `full` mode + `full_completed=False`
+  - Указывает draft_id, task_id, рекомендует `auto` или `partial`

@@ -12,6 +12,8 @@ import {
   Typography,
 } from '@mui/material';
 import { ExternalLink, FileText } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type Citation = {
   id: string;
@@ -22,6 +24,8 @@ type Citation = {
   version: string;
   documentUrl?: string;
   pagePreviewUrl?: string;
+  /** Combined markdown with embedded image references */
+  pageMarkdown?: string;
 };
 
 interface SourcePreviewDialogProps {
@@ -35,6 +39,7 @@ export const SourcePreviewDialog: React.FC<SourcePreviewDialogProps> = ({ open, 
 
   const hasImage = Boolean(citation.pagePreviewUrl);
   const hasDocument = Boolean(citation.documentUrl);
+  const hasMarkdown = Boolean(citation.pageMarkdown);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
@@ -60,82 +65,108 @@ export const SourcePreviewDialog: React.FC<SourcePreviewDialogProps> = ({ open, 
 
           <Divider />
 
-          {/* Изображение страницы (если доступно) */}
-          {hasImage && (
+          {/* Продвинутый MD с картинками (основной режим) */}
+          {hasMarkdown ? (
             <Box
               sx={{
                 borderRadius: 2,
                 overflow: 'hidden',
-                border: '1px solid rgba(255,255,255,0.08)',
-                display: 'flex',
-                justifyContent: 'center',
-                bgcolor: '#fff',
-                maxHeight: '65vh',
+                border: '1px solid rgba(0,0,0,0.08)',
+                bgcolor: '#f4f1e8',
+                p: 3,
+                color: '#202020',
+                fontFamily: 'Georgia, serif',
+                '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } },
+                '& th': { bgcolor: 'action.hover' },
+                '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' },
+                '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' },
+                '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 1 },
               }}
             >
-              <img
-                src={citation.pagePreviewUrl}
-                alt={`Страница ${citation.page} документа`}
-                style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain' }}
-              />
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {citation.pageMarkdown}
+              </ReactMarkdown>
             </Box>
-          )}
+          ) : (
+            <>
+              {/* Изображение страницы (fallback) */}
+              {hasImage && (
+                <Box
+                  sx={{
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    bgcolor: '#fff',
+                    maxHeight: '65vh',
+                  }}
+                >
+                  <img
+                    src={citation.pagePreviewUrl}
+                    alt={`Страница ${citation.page} документа`}
+                    style={{ maxWidth: '100%', maxHeight: '65vh', objectFit: 'contain' }}
+                  />
+                </Box>
+              )}
 
-          {/* PDF через iframe (если нет изображения, но есть URL документа) */}
-          {!hasImage && hasDocument && (
-            <Box
-              sx={{
-                borderRadius: 2,
-                overflow: 'hidden',
-                border: '1px solid rgba(255,255,255,0.08)',
-                bgcolor: '#fff',
-                height: '65vh',
-              }}
-            >
-              <iframe
-                src={citation.documentUrl}
-                title="PDF документ"
-                style={{ width: '100%', height: '100%', border: 'none' }}
-              />
-            </Box>
-          )}
+              {/* PDF через iframe (если нет изображения, но есть URL документа) */}
+              {!hasImage && hasDocument && (
+                <Box
+                  sx={{
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    bgcolor: '#fff',
+                    height: '65vh',
+                  }}
+                >
+                  <iframe
+                    src={citation.documentUrl}
+                    title="PDF документ"
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                  />
+                </Box>
+              )}
 
-          {/* Текст (показываем всегда) */}
-          <Box
-            sx={{
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2,
-              p: 2,
-              bgcolor: 'rgba(255,255,255,0.02)',
-            }}
-          >
-            <Stack spacing={1.5}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <FileText size={18} />
-                <Typography variant="subtitle2" color="primary">
-                  {hasImage || hasDocument ? 'Текст фрагмента' : 'Пример страницы источника'}
-                </Typography>
-              </Stack>
-
+              {/* Текст (показываем всегда, fallback) */}
               <Box
                 sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
                   borderRadius: 2,
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  bgcolor: '#0f1217',
-                  p: 3,
-                  minHeight: 160,
+                  p: 2,
+                  bgcolor: 'rgba(255,255,255,0.02)',
                 }}
               >
-                <Typography variant="caption" color="text.secondary">
-                  Страница {citation.page}
-                </Typography>
-                <Typography variant="body2" sx={{ mt: 2, lineHeight: 1.8, color: 'text.primary' }}>
-                  {citation.text}
-                </Typography>
+                <Stack spacing={1.5}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                    <FileText size={18} />
+                    <Typography variant="subtitle2" color="primary">
+                      {hasImage || hasDocument ? 'Текст фрагмента' : 'Пример страницы источника'}
+                    </Typography>
+                  </Stack>
+
+                  <Box
+                    sx={{
+                      borderRadius: 2,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      bgcolor: '#0f1217',
+                      p: 3,
+                      minHeight: 160,
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      Страница {citation.page}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 2, lineHeight: 1.8, color: 'text.primary' }}>
+                      {citation.text}
+                    </Typography>
+                  </Box>
+                </Stack>
               </Box>
-            </Stack>
-          </Box>
+            </>
+          )}
 
           <Typography variant="body2" color="text.secondary">
             Предпросмотр источника показывает документ, страницу и найденный фрагмент, чтобы пользователь мог быстро

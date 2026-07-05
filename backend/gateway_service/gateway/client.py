@@ -95,12 +95,18 @@ ROUTE_TABLE: List[RouteEntry] = [
         {"GET"}, r"^/api/v1/drafts$", "registry",
         transform=lambda p: p.replace("/api/v1/drafts", "/api/v1/registry/drafts", 1),
     ),
-    # ── Orchestrator: детали черновика ─────────────────────────────────────
-    RouteEntry({"GET"}, r"^/api/v1/drafts/\d+$", "orchestrator"),
+    # ── Registry: детали черновика ────────────────────────────────────────
+    RouteEntry(
+        {"GET"}, r"^/api/v1/drafts/\d+$", "registry",
+        transform=lambda p: p.replace("/api/v1/drafts", "/api/v1/registry/drafts", 1),
+    ),
 
     # ── Orchestrator: черновики (управление/пайплайн) ─────────────────────
     RouteEntry({"POST"}, r"^/api/v1/drafts$", "orchestrator"),
-    RouteEntry({"GET", "POST"}, r"^/api/v1/drafts/\d+/preview$", "orchestrator"),
+    RouteEntry({"GET"}, r"^/api/v1/drafts/\d+/preview$", "registry",
+        transform=lambda p: p.replace("/api/v1/drafts", "/api/v1/registry/drafts", 1),
+    ),
+    RouteEntry({"POST"}, r"^/api/v1/drafts/\d+/preview$", "orchestrator"),
     RouteEntry({"GET"}, r"^/api/v1/drafts/\d+/preview/status$", "orchestrator"),
     RouteEntry({"PATCH"}, r"^/api/v1/drafts/\d+/decide$", "orchestrator"),
     RouteEntry({"PATCH"}, r"^/api/v1/drafts/\d+/metadata$", "orchestrator"),
@@ -139,6 +145,10 @@ ROUTE_TABLE: List[RouteEntry] = [
     ),
     RouteEntry(
         {"GET"}, r"^/api/v1/documents/\d+/versions$", "registry",
+        transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
+    ),
+    RouteEntry(
+        {"GET"}, r"^/api/v1/documents/\d+/content_md$", "registry",
         transform=lambda p: p.replace("/api/v1/documents", "/api/v1/registry/documents", 1),
     ),
     RouteEntry(

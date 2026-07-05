@@ -112,6 +112,30 @@ class SagaCoordinator:
         )
         await self.task_repo.update_task_status(task_id, status="failed")
 
+        # If a document was created (e.g. by approve_draft) before the pipeline failed,
+        # mark it as failed so it doesn't stay in "uploaded" limbo.
+        doc_id = getattr(task, 'document_id', None) if task else None
+        if doc_id:
+            try:
+                from app.services.registry_client import RegistryServiceClient
+                reg = RegistryServiceClient()
+                try:
+                    await reg.update_document_status(
+                        document_id=doc_id,
+                        status="failed",
+                    )
+                    logger.info(
+                        f"Document {doc_id} marked as failed after pipeline failure",
+                        extra={"task_id": task_id, "failed_step": failed_step},
+                    )
+                finally:
+                    await reg.close()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to mark document {doc_id} as failed: {e}",
+                    extra={"task_id": task_id},
+                )
+
         logger.info(
             f"Saga compensation completed for task {task_id}",
             extra={"failed_step": failed_step, "compensated_steps": len(completed_steps)},

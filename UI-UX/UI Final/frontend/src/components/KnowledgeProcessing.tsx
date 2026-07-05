@@ -51,6 +51,8 @@ import {
 } from '../utils/http';
 import { downloadPreviewFile } from '../utils/downloadPreview';
 import { getUserFacingApiError } from '../utils/errors';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   MOCK_DOCUMENTS,
   MOCK_PROCESSING_LOGS,
@@ -67,11 +69,15 @@ type DraftPreview = {
   documentType: string;
   year: string;
   revision: string | null;
+  /** Markdown первых 3 страниц с картинками (из preview_md) */
+  previewMd?: string | null;
 };
 
 type PreviewPage = {
   title: string;
   lines: string[];
+  /** Если true — lines[0] содержит markdown с картинками */
+  isMarkdown?: boolean;
 };
 
 type DraftDuplicate = {
@@ -532,6 +538,9 @@ const getLogDotColor = (retryStatus: ProcessingLogItem['retryStatus']) => {
   return '#38bdf8';
 };
 
+/** Базовый URL для прокси файлов через Gateway */
+const FILES_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8080/api/v1').replace(/\/+$/, '') + '/files';
+
 const buildPreviewPages = (draft: DraftItem): PreviewPage[] => {
   const preview = draft.preview;
   const previewStatusLine = preview
@@ -540,7 +549,7 @@ const buildPreviewPages = (draft: DraftItem): PreviewPage[] => {
       ? 'Предпросмотр: выполняется'
       : 'Предпросмотр: не запущен';
 
-  return [
+  const pages: PreviewPage[] = [
     {
       title: 'Краткий срез',
       lines: [
@@ -575,6 +584,19 @@ const buildPreviewPages = (draft: DraftItem): PreviewPage[] => {
       ],
     },
   ];
+
+  // Добавляем страницу с markdown первых 3 страниц документа (если доступно)
+  if (preview?.previewMd) {
+    // Резим относительные пути картинок → абсолютные через Gateway
+    const resolvedMd = preview.previewMd.replaceAll('/api/v1/files/', FILES_BASE_URL);
+    pages.push({
+      title: 'Содержимое (первые страницы)',
+      lines: [resolvedMd],
+      isMarkdown: true,
+    });
+  }
+
+  return pages;
 };
 
 const buildDocumentPreviewText = (draft: DraftItem) =>
@@ -987,14 +1009,15 @@ const normalizeDraftStatusFromGateway = (status?: string): DraftStatus => {
 
 const mapGatewayPreviewMetadata = (payload: any): DraftPreview | null => {
   const preview = payload?.preview_metadata ?? payload?.preview ?? null;
-  if (!preview) return null;
+  if (!preview && !payload?.preview_md) return null;
 
   return {
-    docCode: String(preview.doc_code ?? preview.docCode ?? payload?.doc_code ?? payload?.docCode ?? ''),
-    title: String(preview.title ?? payload?.title ?? ''),
-    documentType: String(preview.document_type ?? preview.documentType ?? 'normative'),
-    year: String(preview.year ?? payload?.year ?? ''),
-    revision: preview.revision ?? payload?.revision ?? null,
+    docCode: String(preview?.doc_code ?? preview?.docCode ?? payload?.doc_code ?? payload?.docCode ?? ''),
+    title: String(preview?.title ?? payload?.title ?? ''),
+    documentType: String(preview?.document_type ?? preview?.documentType ?? 'normative'),
+    year: String(preview?.year ?? payload?.year ?? ''),
+    revision: preview?.revision ?? payload?.revision ?? null,
+    previewMd: payload?.preview_md ?? preview?.previewMd ?? null,
   };
 };
 
@@ -3239,9 +3262,17 @@ export const KnowledgeProcessing: React.FC = () => {
                                 {selectedDraft.preview?.title ?? selectedDraft.title}
                               </Typography>
                             </Box>
-                            <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.7, fontFamily: 'inherit' }}>
-                              {renderHighlightedText(currentPreviewText, normalizedPreviewSearch, isLight)}
-                            </Typography>
+                            {currentPreviewPage.isMarkdown ? (
+                              <Box sx={{ m: 0, lineHeight: 1.7, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' }, '& img': { maxWidth: '100%', height: 'auto', my: 1 } }}>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {currentPreviewText}
+                                </ReactMarkdown>
+                              </Box>
+                            ) : (
+                              <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.7, fontFamily: 'inherit' }}>
+                                {renderHighlightedText(currentPreviewText, normalizedPreviewSearch, isLight)}
+                              </Typography>
+                            )}
                           </Stack>
                         ) : (
                           <Typography sx={{ color: '#6f6757', fontFamily: 'Georgia, serif' }}>Нет предпросмотра</Typography>
@@ -3574,9 +3605,17 @@ export const KnowledgeProcessing: React.FC = () => {
                           {selectedDraft?.preview?.title ?? selectedDraft?.title}
                         </Typography>
                       </Box>
-                      <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
-                        {renderHighlightedText(currentPreviewText, normalizedPreviewSearch, isLight)}
-                      </Typography>
+                      {currentPreviewPage.isMarkdown ? (
+                        <Box sx={{ m: 0, lineHeight: 1.75, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' }, '& img': { maxWidth: '100%', height: 'auto', my: 1 } }}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {currentPreviewText}
+                          </ReactMarkdown>
+                        </Box>
+                      ) : (
+                        <Typography component="pre" sx={{ m: 0, whiteSpace: 'pre-wrap', lineHeight: 1.75, fontFamily: 'inherit' }}>
+                          {renderHighlightedText(currentPreviewText, normalizedPreviewSearch, isLight)}
+                        </Typography>
+                      )}
                     </Stack>
                   )}
                 </Paper>

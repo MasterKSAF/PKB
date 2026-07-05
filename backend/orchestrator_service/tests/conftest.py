@@ -28,6 +28,7 @@ os.environ["CELERY_BROKER_URL"] = "memory://"
 os.environ["CELERY_RESULT_BACKEND"] = "cache+memory://"
 
 from app.main import create_application
+from sqlalchemy import event as sa_event
 
 # --- Celery configuration for tests ---
 #
@@ -115,18 +116,31 @@ def db_engine():
 
     # Ensure all models are imported/registered with Base.metadata
     import app.models.pipeline  # noqa: F401
+    import app.models.external_task  # noqa: F401
 
     import asyncio
 
+    # For SQLite, attach pipeline schema as file-based DB (not :memory:)
+    # because ATTACH DATABASE is connection-specific and each connection
+    # from NullPool would get a separate in-memory database.
+    _pipeline_db_path = os.path.join(os.path.dirname(__file__), "test_pipeline_meta.db")
+
+    @sa_event.listens_for(engine.sync_engine, "connect")
+    def _attach_pipeline(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute(f"ATTACH DATABASE '{_pipeline_db_path}' AS pipeline")
+        cursor.execute("PRAGMA journal_mode=MEMORY")
+        cursor.execute("PRAGMA synchronous=OFF")
+        cursor.execute("PRAGMA cache_size=-64000")
+        cursor.close()
+
     async def _init():
+        # Remove stale pipeline db
+        if os.path.exists(_pipeline_db_path):
+            os.remove(_pipeline_db_path)
         async with engine.begin() as conn:
             from sqlalchemy import text
-            # SQLite: attach pipeline schema (for pipeline.tasks with schema="pipeline")
-            try:
-                await conn.execute(text("ATTACH DATABASE ':memory:' AS pipeline"))
-            except Exception:
-                pass  # already attached
-            # Performance pragmas — skip disk flush, use memory journal
+            # Performance pragmas
             await conn.execute(text("PRAGMA journal_mode=MEMORY"))
             await conn.execute(text("PRAGMA synchronous=OFF"))
             await conn.execute(text("PRAGMA cache_size=-64000"))

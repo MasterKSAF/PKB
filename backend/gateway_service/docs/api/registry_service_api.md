@@ -101,6 +101,8 @@
 | GET | `/registry/documents/{id}/pages` | Список страниц |
 | GET | `/registry/documents/{id}/pages/{num}` | Конкретная страница |
 | GET | `/registry/documents/{id}/pages/{num}/text` | Текст страницы |
+| GET | `/registry/documents/{id}/pages/{num}/content_md` | Страница в формате Markdown |
+| GET | `/registry/documents/{id}/pages/{num}/content_html` | Страница в формате HTML |
 | GET | `/registry/documents/{id}/pages/{num}/preview` | Превью страницы |
 | GET | `/registry/documents/{id}/file` | Скачивание файла |
 | GET | `/registry/documents/{id}/history` | История статусов |
@@ -726,6 +728,8 @@ POST /registry/terminology/import
 | GET | `/registry/documents/{doc_id}/pages` | Список страниц документа | public |
 | GET | `/registry/documents/{doc_id}/pages/{page_num}` | Конкретная страница (bbox) | public |
 | GET | `/registry/documents/{doc_id}/pages/{page_num}/text` | Текстовый слой страницы | public |
+| GET | `/registry/documents/{doc_id}/pages/{page_num}/content_md` | Страница в формате Markdown | public |
+| GET | `/registry/documents/{doc_id}/pages/{page_num}/content_html` | Страница в формате HTML | public |
 | GET | `/registry/documents/{doc_id}/pages/{page_num}/preview` | Превью страницы (изображение + blocks) | public |
 | GET | `/registry/documents/{doc_id}/file` | Скачивание файла документа | public |
 | GET | `/registry/documents/{doc_id}/history` | История статусов документа | public |

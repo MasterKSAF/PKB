@@ -174,7 +174,7 @@ Prod-доступ:
 | Черновики | `POST /drafts`, `GET /drafts`, `GET /drafts/{id}`, `GET /drafts/{id}/preview`, `PATCH /drafts/{id}/metadata`, `PATCH /drafts/{id}/decide`, `DELETE /drafts/{id}` |
 | Task status | `GET /tasks/{task_id}/status`, `GET /drafts/{draft_id}/tasks` |
 | Документы | `GET /documents`, `GET /documents/{id}`, `GET /documents/{id}/status`, `history`, `errors`, `parameters`, `pages`, `file`, `versions`, `DELETE /documents/{id}` |
-| Страницы | `GET /documents/{id}/pages/{page}/preview`, `GET /documents/{id}/pages/{page}/text` |
+| Страницы | `GET /documents/{id}/pages/{page}/preview`, `GET /documents/{id}/pages/{page}/content_md` |
 | Очередь | `GET /documents/queue` |
 | Reprocess | `POST /documents/{id}/reprocess` |
 | Registry documents | `GET /registry/documents`, `GET /registry/documents/{id}`, `GET /registry/documents/{id}/sections`, `PATCH /registry/documents/{id}` |
