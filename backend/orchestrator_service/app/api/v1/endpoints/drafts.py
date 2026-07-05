@@ -375,8 +375,8 @@ async def create_draft(
     if original_filename:
         metadata_fields["original_filename"] = original_filename
         metadata_fields["display_name"] = original_filename
-    # file_hash_sha256 сохраняется в registry.drafts (колонка добавлена)
-    # и при approve будет передан в registry.documents через draft_data
+    # file_hash_sha256 — для передачи в create_document через upload step (P1F-12)
+    metadata_fields["file_hash_sha256"] = file_hash
 
     # --- Check duplicates via Registry ---
     registry = RegistryServiceClient()

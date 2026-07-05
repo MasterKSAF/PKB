@@ -294,12 +294,22 @@ class TestDecideWithMetadataOverrides:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["document_id"] is not None
+        # approve_draft больше не создаёт документ — он появится после full_converter
+        assert data["document_id"] is None
+        assert data["version_id"] is None
         assert data["action"] == "approve"
+        assert data["status"] == "proceeding"
 
-        # Verify overrides were applied via API response
-        assert data["document_id"] is not None
-        assert data["version_id"] is not None
+        # Verify overrides were passed to create_draft_snapshot
+        mock_reg.create_draft_snapshot.assert_awaited_once()
+        snap_args = mock_reg.create_draft_snapshot.call_args
+        assert snap_args[0][0] == draft_id  # draft_id
+        snap_metadata = snap_args[0][1]
+        assert snap_metadata.get("title") == overrides["title"]
+        assert snap_metadata.get("doc_code") == overrides["doc_code"]
+
+        # create_document НЕ вызывается approve_draft — это делает full_converter
+        mock_reg.create_document.assert_not_called()
 
 
 class TestDecideProceedAction:
@@ -354,7 +364,9 @@ class TestDecideProceedAction:
         data = response.json()
         assert data["action"] == "proceed"
         assert data["status"] == "proceeding"
-        assert data["document_id"] is not None
+        # approve_draft больше не создаёт документ
+        assert data["document_id"] is None
+        assert data["version_id"] is None
 
 
 class TestDecideForceNewVersion:
@@ -651,7 +663,7 @@ class TestDecideConfirmAction:
         ):
             mock_reg = mock_reg_cls.return_value
             mock_reg.get_draft = AsyncMock(return_value={
-                "data": {"draft_id": draft_id, "title_key": "Confirm Test", "document_key": "CONFIRM-001"}
+                "data": {"draft_id": draft_id, "title_key": "Confirm Test", "document_key": "CONFIRM-001", "status": "review_required"}
             })
             mock_reg.get_draft_preview = AsyncMock(return_value={
                 "data": {"title": "Confirm Title", "doc_code": "CONFIRM-001"}
@@ -660,6 +672,8 @@ class TestDecideConfirmAction:
                 "data": {"document_id": 6001, "version_id": 60001, "is_new_document": True}
             })
             mock_reg.create_draft_snapshot = AsyncMock()
+            mock_reg.update_draft_status = AsyncMock()
+            mock_reg.update_draft_metadata = AsyncMock()
             mock_reg.close = AsyncMock()
 
             response = client.patch(
@@ -747,18 +761,26 @@ class TestDecideBusinessKeyDrift:
 
 
 class TestDecideDuplicateFileAfterApprove:
-    """DUPLICATE_FILE_AFTER_APPROVE при race condition с Registry."""
+    """create_document перенесён в full_converter — DUPLICATE_FILE невозможен на уровне approve.
+
+    Сценарий DUPLICATE_FILE теперь проверяется на уровне оркестратора:
+    test_file_hash_duplication.py::test_duplicate_file_hash_blocks_double_approve
+    """
 
     DECIDE_URL = "/api/v1/drafts/{draft_id}/decide"
     CREATE_URL = "/api/v1/drafts/"
 
-    async def test_duplicate_file_after_approve_returns_409(
+    async def test_approve_ignores_registry_create_document_error(
         self,
         client: TestClient,
         auth_header: dict,
         db_session: AsyncSession,
     ):
-        """Registry возвращает DUPLICATE_FILE → 409 с conflict_document_id."""
+        """approve возвращает 200 даже если Registry create_document вернёт ошибку.
+
+        create_document вызывается в _on_full_step_completed("full_converter"),
+        поэтому ошибка Registry не влияет на approve.
+        """
         from unittest.mock import patch, AsyncMock
 
         response = client.post(
@@ -792,7 +814,15 @@ class TestDecideDuplicateFileAfterApprove:
 
         with patch(
             "app.core.pipeline.orchestrator.RegistryServiceClient",
-        ) as mock_reg_cls:
+        ) as mock_reg_cls, patch(
+            "app.tasks.pipeline_formation.run_parser_full_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_converter_full_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_registry_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+        ):
             mock_reg = mock_reg_cls.return_value
             mock_reg.get_draft = AsyncMock(return_value={
                 "data": {"draft_id": draft_id, "title_key": "Dedup Test", "document_key": "DEDUP-001"}
@@ -800,13 +830,7 @@ class TestDecideDuplicateFileAfterApprove:
             mock_reg.get_draft_preview = AsyncMock(return_value={
                 "data": {"title": "Dedup Title", "doc_code": "DEDUP-001"}
             })
-            # Simulate DUPLICATE_FILE error
-            mock_reg.create_document = AsyncMock(return_value={
-                "error": {
-                    "code": "DUPLICATE_FILE",
-                    "details": {"conflict_document_id": 777},
-                }
-            })
+            # create_document не вызывается approve_draft — можно не мокать
             mock_reg.create_draft_snapshot = AsyncMock()
             mock_reg.close = AsyncMock()
             mock_reg.update_draft_status = AsyncMock()
@@ -817,8 +841,8 @@ class TestDecideDuplicateFileAfterApprove:
                 json={"action": "approve"},
             )
 
-        assert response.status_code == 409
+        # approve не вызывает create_document — ошибка Registry не влияет
+        assert response.status_code == 200
         data = response.json()
-        detail = data.get("detail", data)
-        assert detail["error"]["code"] == "DUPLICATE_FILE_AFTER_APPROVE"
-        assert detail["error"]["details"]["conflict_document_id"] == 777
+        assert data["document_id"] is None
+        assert data["status"] == "proceeding"

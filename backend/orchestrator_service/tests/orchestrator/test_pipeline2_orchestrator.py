@@ -83,8 +83,8 @@ class TestRagIndexCompletion:
             status="validating",
         )
 
-        # Background activation scheduled via delay()
-        mock_activate_task.delay.assert_called_once_with(document_id=100500)
+        # Background activation scheduled via delay() — передаётся task.id как job_id
+        mock_activate_task.delay.assert_called_once_with(task.id, document_id=100500)
 
 
 class TestReprocessReindex:

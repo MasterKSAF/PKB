@@ -83,8 +83,12 @@ httpx.AsyncClient = _FakeHttpxClient  # type: ignore[misc]
 
 
 @pytest.fixture(scope="session")
-def app():
-    """Create a fresh FastAPI application instance for tests."""
+def app(db_engine):
+    """Create a fresh FastAPI application instance for tests.
+
+    Зависимость от db_engine гарантирует, что все таблицы созданы
+    и ATTACH DATABASE listener зарегистрирован до старта BackgroundTaskPoller.
+    """
     return create_application()
 
 

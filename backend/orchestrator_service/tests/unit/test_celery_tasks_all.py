@@ -699,7 +699,7 @@ class TestRunActivateDocumentStep:
         ):
             from app.tasks.pipeline_indexation import run_activate_document_step
 
-            result = run_activate_document_step.run(document_id=42)
+            result = run_activate_document_step.run(job_id="test", document_id=42)
 
         assert result == {"status": "active", "document_id": 42}
         mock_rag.get_build_status.assert_awaited_once_with(
@@ -724,7 +724,7 @@ class TestRunActivateDocumentStep:
         ):
             from app.tasks.pipeline_indexation import run_activate_document_step
 
-            result = run_activate_document_step.run(document_id=42)
+            result = run_activate_document_step.run(job_id="test", document_id=42)
 
         assert result == {"status": "build_failed", "document_id": 42}
         mock_rag.check_index.assert_not_called()
@@ -750,7 +750,7 @@ class TestRunActivateDocumentStep:
         ):
             from app.tasks.pipeline_indexation import run_activate_document_step
 
-            result = run_activate_document_step.run(document_id=42)
+            result = run_activate_document_step.run(job_id="12345", document_id=42)
 
         assert result == {"status": "pending", "document_id": 42}
         mock_ext_repo.create.assert_awaited_once()
@@ -778,7 +778,7 @@ class TestRunActivateDocumentStep:
         ):
             from app.tasks.pipeline_indexation import run_activate_document_step
 
-            result = run_activate_document_step.run(document_id=42)
+            result = run_activate_document_step.run(job_id="12345", document_id=42)
 
         # No self.retry() — defer to Poller
         assert result == {"status": "pending", "document_id": 42}

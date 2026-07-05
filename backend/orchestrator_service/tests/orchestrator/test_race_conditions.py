@@ -133,13 +133,17 @@ class TestDuplicateDetectionInCreateDraft:
             pass
 
 
-class TestApproveDraftCreateDocumentError:
-    """Ошибка Registry.create_document при approve."""
+class TestApproveDraftRegistryError:
+    """Ошибка Registry при approve (get_draft / get_draft_preview).
 
-    async def test_approve_raises_value_error_on_registry_failure(
+    create_document больше не вызывается в approve_draft — он перенесён
+    в _on_full_step_completed("full_converter").
+    """
+
+    async def test_approve_raises_error_on_get_draft_failure(
         self, db_session: AsyncSession,
     ):
-        """При ошибке create_document → ValueError с описанием."""
+        """При ошибке get_draft → ошибка не глушится."""
         repo = TaskRepository(db_session)
         task = await repo.create_task(
             draft_id=200, pipeline_type="formation", total_steps=3,
@@ -148,54 +152,14 @@ class TestApproveDraftCreateDocumentError:
         await db_session.flush()
 
         mock_registry = AsyncMock()
-        mock_registry.get_draft.return_value = {
-            "data": {"draft_id": 200, "title_key": "Test"},
-        }
-        mock_registry.get_draft_preview.return_value = {
-            "data": {"title": "Test", "doc_code": "GOST 123"},
-        }
-        # Симулируем ошибку Registry
-        mock_registry.create_document.side_effect = RuntimeError("Registry connection failed")
+        mock_registry.get_draft.side_effect = RuntimeError("Registry connection failed")
 
         with patch(
             "app.core.pipeline.orchestrator.RegistryServiceClient",
             return_value=mock_registry,
         ):
             orchestrator = PipelineOrchestrator(db_session)
-            with pytest.raises(ValueError) as exc_info:
+            with pytest.raises(RuntimeError) as exc_info:
                 await orchestrator.approve_draft(draft_id=200, task_id=task.id)
 
-            assert "Registry create_document failed" in str(exc_info.value)
-
-    async def test_approve_raises_value_error_on_missing_document_id(
-        self, db_session: AsyncSession,
-    ):
-        """Registry вернул success, но без document_id → ValueError."""
-        repo = TaskRepository(db_session)
-        task = await repo.create_task(
-            draft_id=201, pipeline_type="formation", total_steps=3,
-        )
-        task.full_completed = True
-        await db_session.flush()
-
-        mock_registry = AsyncMock()
-        mock_registry.get_draft.return_value = {
-            "data": {"draft_id": 201, "title_key": "Test"},
-        }
-        mock_registry.get_draft_preview.return_value = {
-            "data": {"title": "Test", "doc_code": "GOST 123"},
-        }
-        # create_document without document_id
-        mock_registry.create_document.return_value = {
-            "data": {"status": "created"},
-        }
-
-        with patch(
-            "app.core.pipeline.orchestrator.RegistryServiceClient",
-            return_value=mock_registry,
-        ):
-            orchestrator = PipelineOrchestrator(db_session)
-            with pytest.raises(ValueError) as exc_info:
-                await orchestrator.approve_draft(draft_id=201, task_id=task.id)
-
-            assert "Registry create_document returned no document_id" in str(exc_info.value)
+            assert "Registry connection failed" in str(exc_info.value)

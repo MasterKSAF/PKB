@@ -223,13 +223,13 @@ def run_reprocess_step(self, task_id: int, document_id: str):
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30, name="tasks.pipeline.run_activate_document_step")
-def run_activate_document_step(self, document_id: int):
+def run_activate_document_step(self, job_id: str, document_id: int):
     """
     Background task: check RAG Builder status, then defer to Poller if needed.
 
     BackgroundTaskPoller handles waiting for completion and activating the document.
     """
-    logger.info(f"Background activation for document {document_id}")
+    logger.info(f"Background activation for document {document_id} (job={job_id})")
     from app.services.rag_client import RAGBuilderClient
 
     try:

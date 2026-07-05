@@ -198,6 +198,47 @@ class MockRegistryClient:
         self._log_call("update_document_status", document_id=document_id, status=status)
         return {"data": {"document_id": document_id, "status": status}}
 
+    async def delete_draft(self, draft_id: int) -> dict:
+        """Delete a draft."""
+        self._log_call("delete_draft", draft_id=draft_id)
+        self._drafts.pop(draft_id, None)
+        return {
+            "data": {
+                "id": draft_id,
+                "deleted_at": "2026-06-08T10:00:00Z",
+            }
+        }
+
+    async def check_uniqueness(
+        self,
+        title: str,
+        doc_code: str | None = None,
+        era: str | None = None,
+        source_type: str | None = None,
+        file_size_bytes: int | None = None,
+        file_hash_sha256: str | None = None,
+        title_hash_sha256: str | None = None,
+    ) -> dict:
+        """Check document uniqueness (duplicate detection)."""
+        self._log_call(
+            "check_uniqueness",
+            title=title,
+            doc_code=doc_code,
+            era=era,
+            source_type=source_type,
+            file_size_bytes=file_size_bytes,
+            file_hash_sha256=file_hash_sha256,
+            title_hash_sha256=title_hash_sha256,
+        )
+        return {
+            "data": {
+                "is_duplicate": False,
+                "is_duplicate_file": False,
+                "candidates": [],
+                "title_hash_sha256": title_hash_sha256,
+            }
+        }
+
     # ------------------------------------------------------------------
     #  Lifecycle
     # ------------------------------------------------------------------

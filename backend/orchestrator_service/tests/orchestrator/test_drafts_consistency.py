@@ -80,25 +80,10 @@ class TestApproveConsistency:
         )
         assert decide_resp.status_code == 200, f"Approve failed: {decide_resp.text}"
         decide_data = decide_resp.json()
-        assert decide_data["document_id"] is not None, "document_id must not be None after approve"
-        doc_id = decide_data["document_id"]
-
-        # GET /drafts/{id} — прокси в Registry
-        get_resp = client.get(
-            self.GET_DRAFT_URL.format(draft_id=created_draft),
-            headers=auth_header,
-        )
-        assert get_resp.status_code == 200, f"GET draft failed: {get_resp.text}"
-        get_data = get_resp.json()
-
-        # Registry должен знать о document_id
-        reg_doc_id = get_data.get("document_id")
-        is_new = get_data.get("is_new_document")
-
-        assert reg_doc_id == doc_id, (
-            f"Registry draft.document_id ({reg_doc_id}) != created document_id ({doc_id})"
-        )
-        assert is_new is False, "is_new_document should be False after approve"
+        # approve_draft больше не создаёт документ — document_id появится после full_converter
+        assert decide_data["document_id"] is None, "document_id should be None after approve"
+        assert decide_data["is_new_document"] is False
+        assert decide_data["status"] == "proceeding"
 
     async def test_approve_document_id_in_decision_response(
         self,
@@ -136,10 +121,11 @@ class TestApproveConsistency:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["document_id"] is not None, "document_id must be present after approve"
-        assert data["version_id"] is not None, "version_id must be present after approve"
-        assert data["is_new_document"] is True, "First approve should be is_new_document=True"
+        # approve_draft больше не создаёт документ
+        assert data["document_id"] is None, "document_id should be None after approve"
+        assert data["version_id"] is None, "version_id should be None after approve"
         assert data["status"] == "proceeding"
+        assert data["is_new_document"] is False, "approve больше не создаёт документ"
         assert data["action"] == "approve"
 
 

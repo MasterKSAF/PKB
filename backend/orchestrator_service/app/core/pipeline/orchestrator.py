@@ -982,6 +982,13 @@ class PipelineOrchestrator:
 
             # --- Create document in Registry (moved from approve_draft) ---
             meta = metadata or {}
+            # Извлекаем file_hash_sha256 из upload step metadata_fields (P1F-12)
+            upload_step = next((s for s in steps if s.step_name == "upload"), None)
+            upload_metadata = {}
+            if upload_step and upload_step.input_data:
+                upload_metadata = upload_step.input_data.get("metadata_fields", {}) or {}
+            file_hash = meta.get("file_hash_sha256") or upload_metadata.get("file_hash_sha256")
+
             doc_payload = {
                 "title": meta.get("title") or f"Draft {task.draft_id}",
                 "doc_code": meta.get("doc_code") or f"DRAFT-{task.draft_id}",
@@ -994,6 +1001,7 @@ class PipelineOrchestrator:
                 "udk_code": meta.get("udk_code"),
                 "draft_id": task.draft_id,
                 "status": "uploaded",
+                "file_hash_sha256": file_hash,
             }
             registry_doc = RegistryServiceClient()
             doc_result = await registry_doc.create_document(doc_payload)
@@ -1170,7 +1178,7 @@ class PipelineOrchestrator:
             # Schedule background activation: later check with RAG and activate
             try:
                 from app.tasks.pipeline_indexation import run_activate_document_step
-                run_activate_document_step.delay(document_id=document_id)
+                run_activate_document_step.delay(task.id, document_id=document_id)
                 logger.info(
                     f"Scheduled background activation for document {document_id}",
                     extra={"task_id": task.id, "draft_id": task.draft_id},

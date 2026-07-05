@@ -66,8 +66,9 @@ class TestDraftToDocumentChain:
         assert decide_resp.status_code == 200
         decide_data = decide_resp.json()
         assert decide_data["draft_id"] == draft_id
-        assert decide_data["document_id"] is not None
-        assert decide_data["version_id"] is not None
+        # approve не создаёт документ — он появится после full_converter
+        assert decide_data["document_id"] is None
+        assert decide_data["version_id"] is None
         assert "is_new_document" in decide_data
         assert decide_data["action"] == "approve"
 

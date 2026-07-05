@@ -100,9 +100,9 @@ class TestDraftToDocumentFlow:
         assert decide_resp.status_code == 200
         decide_data = decide_resp.json()
         assert decide_data["draft_id"] == draft_id
-        assert decide_data["document_id"] is not None
-        assert decide_data["version_id"] is not None
-        assert decide_data["is_new_document"] is True
+        assert decide_data["document_id"] is None
+        assert decide_data["version_id"] is None
+        assert decide_data["is_new_document"] is False
         assert decide_data["action"] == "approve"
         assert decide_data["status"] == "proceeding"
 
@@ -121,7 +121,8 @@ class TestDraftToDocumentFlow:
         assert task_data["task_id"] == decide_data["task_id"]
         assert task_data["draft_id"] == draft_id
         # document_id should appear in task after approve
-        assert task_data.get("document_id") is not None
+        # approve не создаёт документ — он появится после full_converter
+        assert task_data.get("document_id") is None
 
     async def test_draft_upload_without_file_returns_422(
         self, client: TestClient, auth_header: dict

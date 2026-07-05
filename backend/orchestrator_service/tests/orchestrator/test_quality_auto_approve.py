@@ -176,7 +176,8 @@ class TestAutoApproveEnabled:
         assert updated_task is not None
         # After approve, stage should be 'full'
         assert updated_task.pipeline_stage == TaskStage.FULL.value
-        assert updated_task.document_id == 1001
+        # approve_draft больше не создаёт документ — document_id появится после full_converter
+        assert updated_task.document_id is None
 
 
 class TestAutoApproveBlocked:

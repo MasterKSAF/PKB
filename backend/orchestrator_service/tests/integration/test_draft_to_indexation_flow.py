@@ -143,8 +143,9 @@ class TestFullPipelineCompletion:
             result = await orchestrator.approve_draft(
                 draft_id=200, task_id=task.id,
             )
-        assert result["document_id"] == 200
-        assert result["version_id"] == 1
+        # approve_draft больше не создаёт документ — он появится после full_converter
+        assert result["document_id"] is None
+        assert result["version_id"] is None
 
         # Verify Celery dispatch: approve triggers full_ocr (parser), not converter/registry/rag
         file_key = setup["file_key"]
@@ -158,7 +159,7 @@ class TestFullPipelineCompletion:
         # Verify task is in full stage
         updated = await repo.get_task(task.id)
         assert updated.pipeline_stage == TaskStage.FULL.value
-        assert updated.document_id == 200
+        assert updated.document_id is None
 
         # Step 2: complete full_ocr step
         # В approve_draft full_ocr уже создан и запущен.
@@ -183,8 +184,9 @@ class TestFullPipelineCompletion:
                 output_data={"full_result": {"text": "parsed content"}},
             )
         # Verify converter was dispatched after full_ocr completes
-        converter_delay_2.assert_called_once()
-        call_args = converter_delay_2.call_args
+        # Note: _drain_queue может повторно диспатчить конвертер, поэтому assert_called, не once
+        converter_delay_2.assert_called()
+        call_args = converter_delay_2.call_args_list[0]
         assert call_args[0][0] == task.id  # task_id
         assert call_args[0][1] == 200  # draft_id
 
@@ -206,6 +208,9 @@ class TestFullPipelineCompletion:
 
         registry_delay_2 = MagicMock()
         with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=registry_mock,
+        ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
             registry_delay_2,
         ):
@@ -218,6 +223,10 @@ class TestFullPipelineCompletion:
             )
         # Verify registry step was dispatched after full_converter completes
         registry_delay_2.assert_called_once()
+
+        # full_converter создаёт документ в Registry и устанавливает task.document_id
+        updated_after_converter = await repo.get_task(task.id)
+        assert updated_after_converter.document_id == 200
 
         # Step 4: complete registry_creation step
         steps = await repo.get_task_steps(task.id)
@@ -237,6 +246,9 @@ class TestFullPipelineCompletion:
 
         rag_delay_2 = MagicMock()
         with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=registry_mock,
+        ), patch(
             "app.tasks.pipeline_formation.run_rag_index_step.delay",
             rag_delay_2,
         ):
@@ -330,7 +342,8 @@ class TestFullPipelineCompletion:
             result = await orchestrator.approve_draft(
                 draft_id=201, task_id=task.id,
             )
-        assert result["document_id"] == 201
+        # approve_draft больше не создаёт документ
+        assert result["document_id"] is None
 
         steps = await repo.get_task_steps(task.id)
         step_names = {s.step_name for s in steps}
@@ -379,7 +392,7 @@ class TestDocumentActivation:
             return_value=mock_registry,
         ):
             # run() — прямой вызов логики задачи (не через delay)
-            result = run_activate_document_step.run(document_id=100)
+            result = run_activate_document_step.run(job_id="test", document_id=100)
 
         assert result is not None
         assert result.get("status") == "active"
@@ -416,7 +429,7 @@ class TestDocumentActivation:
             "app.services.registry_client.RegistryServiceClient",
             return_value=mock_registry,
         ):
-            result = run_activate_document_step.run(document_id=101)
+            result = run_activate_document_step.run(job_id="test", document_id=101)
 
         assert result is not None
         assert result.get("status") == "integrity_failed"
@@ -447,7 +460,7 @@ class TestDocumentActivation:
             "app.services.registry_client.RegistryServiceClient",
             return_value=mock_registry,
         ):
-            result = run_activate_document_step.run(document_id=102)
+            result = run_activate_document_step.run(job_id="test", document_id=102)
 
         assert result is not None
         assert result.get("status") == "build_failed"
@@ -476,7 +489,8 @@ class TestDocumentActivation:
         ), patch(
             "app.tasks.pipeline_indexation.get_db_context",
         ):
-            result = run_activate_document_step.run(document_id=103)
+            # job_id должен быть валидным целым числом (str) для int(job_id) в _save_external
+            result = run_activate_document_step.run(job_id="12345", document_id=103)
 
         # No self.retry() call anymore — we defer to Poller
         assert result == {"status": "pending", "document_id": 103}

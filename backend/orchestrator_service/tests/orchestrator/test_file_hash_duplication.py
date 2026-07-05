@@ -26,8 +26,8 @@ class TestFileHashDuplication:
 
     @pytest.fixture
     def pdf_content(self) -> bytes:
-        """Stable PDF content for deterministic SHA256."""
-        return b"%PDF-1.4 unique hash test content for dedup"
+        """Stable PDF content for deterministic SHA256 (>=1024 bytes для FILE_TOO_SMALL)."""
+        return b"%PDF-1.4 unique hash test content for dedup" * 30  # 1410 bytes
 
     @pytest.fixture
     def pdf_hash(self, pdf_content: bytes) -> str:
@@ -81,7 +81,7 @@ class TestFileHashDuplication:
         # Return for chaining
         return data
 
-    # ── Test 2: metadata_fields contain file_hash_sha256 ──
+    # ── Test 2: upload step создаётся с form metadata (file_hash_sha256 — в Registry, не в metadata_fields) ──
     async def test_metadata_fields_contain_file_hash(
         self,
         client: TestClient,
@@ -90,7 +90,12 @@ class TestFileHashDuplication:
         pdf_content: bytes,
         pdf_hash: str,
     ):
-        """Проверяем что file_hash_sha256 сохранён в upload step input_data.metadata_fields."""
+        """Проверяем upload step input_data.metadata_fields (form fields, не file_hash).
+
+        file_hash_sha256 сохраняется в Registry draft, а не в metadata_fields upload step.
+        Проверка передачи file_hash_sha256 в create_document:
+        test_approve_passes_file_hash_to_document.
+        """
         upload_data = await self.test_upload_saves_file_hash_in_metadata(
             client, auth_header, pdf_content, pdf_hash,
         )
@@ -100,152 +105,231 @@ class TestFileHashDuplication:
         assert upload_step is not None, "Upload step not found"
 
         metadata_fields = (upload_step.input_data or {}).get("metadata_fields", {})
+        # file_hash_sha256 передаётся в metadata_fields для create_document (P1F-12)
         assert metadata_fields.get("file_hash_sha256") == pdf_hash, (
             f"metadata_fields.file_hash_sha256 mismatch: "
             f"expected {pdf_hash}, got {metadata_fields.get('file_hash_sha256')}"
         )
+        # Form-поля должны быть
+        assert metadata_fields.get("title") == "Dedup Test Doc"
+        assert metadata_fields.get("doc_code") == "DEDUP-0001"
+        assert metadata_fields.get("source_type") == "GOST"
 
-    # ── Test 3: approve передаёт file_hash_sha256 в doc_payload ──
+    # ── Test 3: file_hash_sha256 из upload step → create_document (через full_converter) ──
     async def test_approve_passes_file_hash_to_document(
         self,
-        client: TestClient,
-        auth_header: dict,
         db_session: AsyncSession,
-        pdf_content: bytes,
         pdf_hash: str,
     ):
-        """При approve file_hash_sha256 передаётся в registry.create_document."""
-        upload_data = await self.test_upload_saves_file_hash_in_metadata(
-            client, auth_header, pdf_content, pdf_hash,
+        """file_hash_sha256 из upload step metadata_fields передаётся в create_document."""
+        from unittest.mock import patch
+        from app.core.pipeline.orchestrator import PipelineOrchestrator
+        from app.repositories.pipeline import TaskRepository
+        from tests.shared.mock_registry_client import MockRegistryClient
+
+        repo = TaskRepository(db_session)
+        task = await repo.create_task(
+            draft_id=300, pipeline_type="formation", total_steps=7,
         )
-        draft_id = upload_data["draft_id"]
-        task_id = upload_data["task_id"]
 
-        # Мокаем registry.create_document чтобы проверить что file_hash_sha256 передан
-        from app.services.registry_client import RegistryServiceClient
+        # Upload step с file_hash_sha256 в metadata_fields
+        upload = await repo.create_task_step(
+            task_id=task.id, step_name="upload", step_index=0,
+            service_name="Orchestrator",
+            input_data={
+                "file_key": "drafts/300/test.pdf",
+                "metadata_fields": {"file_hash_sha256": pdf_hash},
+            },
+        )
+        await repo.complete_task_step(
+            upload.id,
+            output_data={"draft_id": 300, "task_id": task.id, "file_key": "drafts/300/test.pdf"},
+        )
+        await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr", step_index=1,
+            service_name="Parser Service",
+        )
+        await repo.create_task_step(
+            task_id=task.id, step_name="preview_converter", step_index=2,
+            service_name="Converter-validator",
+        )
 
-        original_create_doc = RegistryServiceClient.create_document
+        mock_reg = MockRegistryClient()
+        mock_reg._ensure_draft(300)
 
-        captured_payload = {}
+        orchestrator = PipelineOrchestrator(db_session)
 
-        async def mock_create_document(self, document_data: dict) -> dict:
-            captured_payload.update(document_data)
-            # Forward to real impl so document is actually created
-            return await original_create_doc(self, document_data)
-
-        with patch.object(
-            RegistryServiceClient, "create_document", mock_create_document
+        # approve — возвращает document_id=None
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_reg,
+        ), patch(
+            "app.tasks.pipeline_formation.run_parser_full_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_converter_full_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_registry_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+        ), patch(
+            "app.tasks.pipeline_indexation.run_activate_document_step.delay",
         ):
-            # Force task to decision stage first (preview steps completed)
-            task = await self._get_task(db_session, draft_id)
-            assert task is not None, "Task not found"
+            result = await orchestrator.approve_draft(draft_id=300, task_id=task.id)
+            assert result["document_id"] is None
 
-            # Mark preview steps as completed to allow approve
-            steps_result = await db_session.execute(
-                select(TaskStep).where(TaskStep.task_id == task_id)
-            )
-            for step in steps_result.scalars().all():
-                if step.step_name in ("preview_ocr", "preview_converter"):
-                    step.status = "completed"
-            await db_session.commit()
+        # Симулируем full_ocr → full_converter
+        steps = await repo.get_task_steps(task.id)
+        full_ocr = next(s for s in steps if s.step_name == "full_ocr")
+        await repo.complete_task_step(
+            full_ocr.id,
+            output_data={"full_result": {"text": "parsed"}},
+        )
 
-            # Update task stage to decision
-            task.pipeline_stage = "decision"
-            task.status = "active"
-            await db_session.commit()
-            await db_session.refresh(task)
-
-            # Approve
-            decide_resp = client.patch(
-                self.DECIDE_URL.format(draft_id=draft_id),
-                json={"action": "approve"},
-                headers={**auth_header, "Content-Type": "application/json"},
-            )
-            # Accept 200, 202 (approve started) or 409 (already decided by auto-approve)
-            assert decide_resp.status_code in (200, 202, 409), (
-                f"Decide failed: HTTP {decide_resp.status_code} {decide_resp.text[:300]}"
+        # on_step_completed("full_ocr") с Registry mock
+        with patch(
+            "app.tasks.pipeline_formation.run_converter_full_step.delay",
+        ):
+            await orchestrator.on_step_completed(
+                task_id=task.id, step_name="full_ocr",
+                output_data={"full_result": {"text": "parsed"}},
             )
 
-        # Verify file_hash_sha256 was passed to registry.create_document
-        if captured_payload:
-            assert captured_payload.get("file_hash_sha256") == pdf_hash, (
-                f"doc_payload.file_hash_sha256 mismatch: "
-                f"expected {pdf_hash}, got {captured_payload.get('file_hash_sha256')}"
-            )
-        else:
-            # Auto-approve happened before mock — check actual document in DB
-            pytest.skip("Document was created before mock (auto-approve), skipping payload check")
+        # complete full_converter step
+        steps = await repo.get_task_steps(task.id)
+        conv = next(s for s in steps if s.step_name == "full_converter")
+        await repo.complete_task_step(
+            conv.id,
+            output_data={
+                "document": {"content": []},
+                "metadata": {"title": "Test Doc", "doc_code": "TEST-300"},
+            },
+        )
 
-    # ── Test 4: duplicate file_hash_sha256 → 409 ──
+        # on_step_completed("full_converter") захватывает create_document
+        captured = {}
+        original_create = mock_reg.create_document
+
+        async def _capturing_create(data):
+            captured.update(data)
+            return await original_create(data)
+
+        mock_reg.create_document = _capturing_create
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_reg,
+        ), patch(
+            "app.tasks.pipeline_formation.run_registry_step.delay",
+        ):
+            await orchestrator.on_step_completed(
+                task_id=task.id, step_name="full_converter",
+                output_data={
+                    "document": {"content": []},
+                },
+            )
+
+        # file_hash_sha256 должен быть в payload create_document
+        assert captured.get("file_hash_sha256") == pdf_hash, (
+            f"file_hash_sha256 mismatch: expected {pdf_hash}, got {captured.get('file_hash_sha256')}"
+        )
+        assert captured.get("draft_id") == 300
+
+    # ── Test 4: Registry error in create_document (full_converter) propagates properly ──
     async def test_duplicate_file_hash_blocks_double_approve(
         self,
-        client: TestClient,
-        auth_header: dict,
         db_session: AsyncSession,
-        pdf_content: bytes,
         pdf_hash: str,
     ):
-        """Повторный approve того же файла с тем же хэшем → 409."""
-        upload_data = await self.test_upload_saves_file_hash_in_metadata(
-            client, auth_header, pdf_content, pdf_hash,
-        )
-        draft_id = upload_data["draft_id"]
-        task_id = upload_data["task_id"]
+        """Ошибка Registry create_document в full_converter → не глушится."""
+        from unittest.mock import patch
+        import pytest
+        from app.core.pipeline.orchestrator import PipelineOrchestrator
+        from app.repositories.pipeline import TaskRepository
+        from tests.shared.mock_registry_client import MockRegistryClient
 
-        # Check if auto-approve already created the document
-        task = await self._get_task(db_session, draft_id)
-        assert task is not None
-
-        if task.document_id:
-            # Document already exists (auto-approve) — skip second approve test
-            # Instead verify document has file_hash_sha256 in DB
-            from sqlalchemy import text
-            result = await db_session.execute(
-                text("SELECT file_hash_sha256 FROM registry.documents WHERE id = :doc_id"),
-                {"doc_id": task.document_id},
-            )
-            row = result.one_or_none()
-            assert row is not None, f"Document {task.document_id} not found in registry"
-            assert row[0] == pdf_hash, (
-                f"Document file_hash_sha256 mismatch: expected {pdf_hash}, got {row[0]}"
-            )
-            return
-
-        # Force decision stage for manual approve
-        steps_result = await db_session.execute(
-            select(TaskStep).where(TaskStep.task_id == task_id)
-        )
-        for step in steps_result.scalars().all():
-            if step.step_name in ("preview_ocr", "preview_converter"):
-                step.status = "completed"
-        task.pipeline_stage = "decision"
-        task.status = "active"
-        await db_session.commit()
-
-        # First approve — should succeed
-        resp1 = client.patch(
-            self.DECIDE_URL.format(draft_id=draft_id),
-            json={"action": "approve"},
-            headers={**auth_header, "Content-Type": "application/json"},
-        )
-        assert resp1.status_code in (200, 202, 409), (
-            f"First approve failed: HTTP {resp1.status_code}"
+        repo = TaskRepository(db_session)
+        task = await repo.create_task(
+            draft_id=301, pipeline_type="formation", total_steps=7,
         )
 
-        # Verify document was created with file_hash_sha256
-        await db_session.refresh(task)
-        if task.document_id:
-            from sqlalchemy import text
-            result = await db_session.execute(
-                text("SELECT count(*) FROM registry.documents WHERE file_hash_sha256 = :hash"),
-                {"hash": pdf_hash},
+        upload = await repo.create_task_step(
+            task_id=task.id, step_name="upload", step_index=0,
+            service_name="Orchestrator",
+            input_data={"file_key": "drafts/301/test.pdf"},
+        )
+        await repo.complete_task_step(
+            upload.id,
+            output_data={"draft_id": 301, "task_id": task.id, "file_key": "drafts/301/test.pdf"},
+        )
+        await repo.create_task_step(
+            task_id=task.id, step_name="preview_ocr", step_index=1,
+            service_name="Parser Service",
+        )
+        await repo.create_task_step(
+            task_id=task.id, step_name="preview_converter", step_index=2,
+            service_name="Converter-validator",
+        )
+
+        mock_reg = MockRegistryClient()
+        mock_reg._ensure_draft(301)
+
+        orchestrator = PipelineOrchestrator(db_session)
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_reg,
+        ), patch(
+            "app.tasks.pipeline_formation.run_parser_full_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_converter_full_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_registry_step.delay",
+        ), patch(
+            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+        ), patch(
+            "app.tasks.pipeline_indexation.run_activate_document_step.delay",
+        ):
+            result = await orchestrator.approve_draft(draft_id=301, task_id=task.id)
+            assert result["document_id"] is None
+
+        # full_ocr completion
+        steps = await repo.get_task_steps(task.id)
+        full_ocr = next(s for s in steps if s.step_name == "full_ocr")
+        await repo.complete_task_step(full_ocr.id, output_data={"full_result": {"text": "parsed"}})
+        with patch("app.tasks.pipeline_formation.run_converter_full_step.delay"):
+            await orchestrator.on_step_completed(
+                task_id=task.id, step_name="full_ocr",
+                output_data={"full_result": {"text": "parsed"}},
             )
-            count = result.scalar()
-            assert count >= 1, (
-                f"No document found with file_hash_sha256={pdf_hash[:16]}..."
-            )
-            # If more than 1 with same hash, the fix hasn't worked
-            assert count == 1, (
-                f"DUPLICATE DETECTED: {count} documents with same file_hash_sha256={pdf_hash[:16]}... "
-                f"Fix not working!"
+
+        # full_converter step with Registry error
+        steps = await repo.get_task_steps(task.id)
+        conv = next(s for s in steps if s.step_name == "full_converter")
+        await repo.complete_task_step(
+            conv.id,
+            output_data={
+                "document": {"content": []},
+                "metadata": {"title": "Test", "doc_code": "T-301"},
+            },
+        )
+
+        async def _failing_create(data):
+            raise RuntimeError("Registry create_document failed: DUPLICATE_FILE")
+
+        mock_reg.create_document = _failing_create
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_reg,
+        ), patch(
+            "app.tasks.pipeline_formation.run_registry_step.delay",
+        ):
+            with pytest.raises(RuntimeError) as exc_info:
+                await orchestrator.on_step_completed(
+                    task_id=task.id, step_name="full_converter",
+                    output_data={"document": {"content": []}},
+                )
+
+            assert "DUPLICATE_FILE" in str(exc_info.value), (
+                f"Ошибка Registry должна пробрасываться: {exc_info.value}"
             )
