@@ -456,8 +456,7 @@ def run_registry_step(
                        Already contains document metadata (doc_code, title, era, ...)
                        inside document_data["metadata"].
         metadata: Converter response metadata (schema, task_id, created_at, parser).
-                  Merged into document_data["metadata"] — document metadata takes priority
-                  for overlapping keys so doc_code/title are never lost.
+                  NOT passed to Registry (not part of validated_v3 schema).
     """
     if trace_id:
         set_trace_id(trace_id)
@@ -476,13 +475,10 @@ def run_registry_step(
                         extra={"task_id": task_id, "draft_id": draft_id},
                     )
                     # Build payload in Registry format (section 3.3 API spec)
-                    # Nest metadata inside document if provided separately
-                    # Merge: response_metadata (schema/task_id/parser) 
-                    # with document metadata (doc_code/title/era/source_type)
-                    # preserving both — they have different key sets
-                    if metadata:
-                        existing_doc_meta = document_data.get("metadata", {})
-                        document_data["metadata"] = {**metadata, **existing_doc_meta}
+                    # NOTE: We do NOT merge converter response metadata (schema, task_id,
+                    # created_at, parser) into document_data["metadata"]. Registry's
+                    # POST /documents validates against validated_v3 schema and rejects
+                    # unknown fields in document.metadata with HTTP 400.
 
                     # Fallback: если конвертер не извлёк doc_code,
                     # генерируем из title (как делает approve_draft)
@@ -497,6 +493,17 @@ def run_registry_step(
                             f"Converter returned empty doc_code, generated fallback: {fallback_code}",
                             extra={"task_id": task_id, "draft_id": draft_id},
                         )
+                    # Sanitize: strip section_id from content items.
+                    # Registry assigns its own section_id; sending it causes HTTP 400.
+                    content = document_data.get("content", [])
+                    if content:
+                        cleaned = []
+                        for item in content:
+                            if isinstance(item, dict):
+                                item.pop("section_id", None)
+                                cleaned.append(item)
+                        document_data["content"] = cleaned
+
                     doc_payload = {
                         "draft_id": draft_id,
                         "document_id": current_doc_id,  # upsert: обновляем существующий документ, а не создаём новый

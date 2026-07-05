@@ -15,7 +15,7 @@ Integration test: полный цикл draft → approve → full pipeline → 
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.pipeline import TaskRepository
@@ -114,25 +114,46 @@ class TestFullPipelineCompletion:
         orchestrator = PipelineOrchestrator(db_session)
 
         # Step 1: approve_draft (Registry creates document)
+        # Use MagicMock for .delay() so we can assert calls
+        parser_delay = MagicMock()
+        converter_delay = MagicMock()
+        registry_delay = MagicMock()
+        rag_delay = MagicMock()
+        activate_delay = MagicMock()
+
         with patch(
             "app.core.pipeline.orchestrator.RegistryServiceClient",
             return_value=registry_mock,
         ), patch(
             "app.tasks.pipeline_formation.run_parser_full_step.delay",
+            parser_delay,
         ), patch(
             "app.tasks.pipeline_formation.run_converter_full_step.delay",
+            converter_delay,
         ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
+            registry_delay,
         ), patch(
             "app.tasks.pipeline_formation.run_rag_index_step.delay",
+            rag_delay,
         ), patch(
             "app.tasks.pipeline_indexation.run_activate_document_step.delay",
+            activate_delay,
         ):
             result = await orchestrator.approve_draft(
                 draft_id=200, task_id=task.id,
             )
         assert result["document_id"] == 200
         assert result["version_id"] == 1
+
+        # Verify Celery dispatch: approve triggers full_ocr (parser), not converter/registry/rag
+        file_key = setup["file_key"]
+        parser_delay.assert_called_once_with(
+            task.id, 200, file_key, trace_id="",
+        )
+        converter_delay.assert_not_called()
+        registry_delay.assert_not_called()
+        rag_delay.assert_not_called()
 
         # Verify task is in full stage
         updated = await repo.get_task(task.id)
@@ -151,14 +172,21 @@ class TestFullPipelineCompletion:
         )
 
         # on_step_completed → dispatch full_converter
+        converter_delay_2 = MagicMock()
         with patch(
             "app.tasks.pipeline_formation.run_converter_full_step.delay",
+            converter_delay_2,
         ):
             await orchestrator.on_step_completed(
                 task_id=task.id,
                 step_name="full_ocr",
                 output_data={"full_result": {"text": "parsed content"}},
             )
+        # Verify converter was dispatched after full_ocr completes
+        converter_delay_2.assert_called_once()
+        call_args = converter_delay_2.call_args
+        assert call_args[0][0] == task.id  # task_id
+        assert call_args[0][1] == 200  # draft_id
 
         # Step 3: complete full_converter step
         steps = await repo.get_task_steps(task.id)
@@ -176,8 +204,10 @@ class TestFullPipelineCompletion:
             },
         )
 
+        registry_delay_2 = MagicMock()
         with patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
+            registry_delay_2,
         ):
             await orchestrator.on_step_completed(
                 task_id=task.id,
@@ -186,6 +216,8 @@ class TestFullPipelineCompletion:
                     "document": {"content": [{"id": 1, "text": "section1"}]},
                 },
             )
+        # Verify registry step was dispatched after full_converter completes
+        registry_delay_2.assert_called_once()
 
         # Step 4: complete registry_creation step
         steps = await repo.get_task_steps(task.id)
@@ -203,14 +235,18 @@ class TestFullPipelineCompletion:
             },
         )
 
+        rag_delay_2 = MagicMock()
         with patch(
             "app.tasks.pipeline_formation.run_rag_index_step.delay",
+            rag_delay_2,
         ):
             await orchestrator.on_step_completed(
                 task_id=task.id,
                 step_name="registry_creation",
                 output_data={"document_id": 200},
             )
+        # Verify RAG index was dispatched after registry completes
+        rag_delay_2.assert_called_once()
 
         # Step 5: complete rag_index step
         steps = await repo.get_task_steps(task.id)
@@ -229,17 +265,21 @@ class TestFullPipelineCompletion:
         #   - task → COMPLETED
         #   - document status → "validating"
         #   - dispatch run_activate_document_step
+        activate_delay_2 = MagicMock()
         with patch(
             "app.core.pipeline.orchestrator.RegistryServiceClient",
             return_value=registry_mock,
         ), patch(
             "app.tasks.pipeline_indexation.run_activate_document_step.delay",
+            activate_delay_2,
         ):
             await orchestrator.on_step_completed(
                 task_id=task.id,
                 step_name="rag_index",
                 output_data={},
             )
+        # Verify background activation was dispatched after rag_index completes
+        activate_delay_2.assert_called_once()
 
         # Verify task is COMPLETED
         final_task = await repo.get_task(task.id)
