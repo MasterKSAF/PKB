@@ -35,6 +35,19 @@ class RichDocumentNestedDocument(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
+
+class RichDocumentNamespace(BaseModel):
+    namespace_id: str = Field(min_length=1)
+    title: str | None = None
+    page_start: int | None = Field(default=None, ge=0)
+    page_end: int | None = Field(default=None, ge=0)
+    start_heading_id: str | None = None
+    start_item_index: int | None = Field(default=None, ge=0)
+    end_item_index_exclusive: int | None = Field(default=None, ge=0)
+    ordinal: int | None = Field(default=None, ge=1)
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
 class RichDocumentImage(BaseModel):
     image_id: str | None = None
     caption: str | None = None
@@ -102,6 +115,7 @@ class RichDocumentCrossReference(BaseModel):
 
 
 class RichDocumentStructure(BaseModel):
+    namespaces: list[RichDocumentNamespace] = Field(default_factory=list)
     document_boundaries: list[RichDocumentBoundary] = Field(default_factory=list)
     table_of_contents: list[RichDocumentTableOfContentsItem] = Field(default_factory=list)
     nested_documents: list[RichDocumentNestedDocument] = Field(default_factory=list)
@@ -114,6 +128,7 @@ class RichDocumentStructure(BaseModel):
 
     quality_report: dict[str, Any] | None = None
     correction_proposals: list[dict[str, Any]] = Field(default_factory=list)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
 class RichDocumentPackageArtifact(BaseModel):

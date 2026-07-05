@@ -6,6 +6,7 @@ from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentFormula,
     RichDocumentImage,
     RichDocumentNestedDocument,
+    RichDocumentNamespace,
     RichDocumentPackage,
     RichDocumentPackageArtifact,
     RichDocumentPackageAssemblyRequest,
@@ -15,6 +16,9 @@ from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentTable,
     RichDocumentTableCell,
     RichDocumentTableOfContentsItem,
+)
+from convertor_validator_service_lama.services.document_structure_assembler import (
+    assemble_document_structure_from_parse_items,
 )
 
 
@@ -106,7 +110,11 @@ def assemble_rich_document_package(
                 raw_response=validation_result.raw_response,
             )
 
-    document_structure = build_document_structure_from_artifacts(artifacts)
+    document_structure = build_document_structure_from_artifacts(
+        artifacts,
+        parse_items=parse_result.items,
+        parse_page_count=_parse_page_count(parse_result.metadata, parse_result.job_metadata),
+    )
 
     package = RichDocumentPackage(
         parse_job_id=parse_result.job_id,
@@ -126,8 +134,30 @@ def assemble_rich_document_package(
 
 def build_document_structure_from_artifacts(
     artifacts: dict[str, RichDocumentPackageArtifact],
+    *,
+    parse_items: list[dict[str, Any]] | None = None,
+    parse_page_count: int | None = None,
 ) -> RichDocumentStructure:
+    parse_item_structure = _build_parse_item_structure(
+        parse_items=parse_items or [],
+        page_count=parse_page_count,
+    )
+
+    parse_namespaces = _build_namespaces_from_rows(
+        parse_item_structure.get("namespaces", [])
+    )
+    parse_sections = _build_sections_from_rows(
+        parse_item_structure.get("sections", [])
+    )
+
+    extract_sections = _build_sections(artifacts.get("sections"))
+
+    diagnostics: dict[str, Any] = {}
+    if parse_item_structure:
+        diagnostics["parse_item_structure"] = parse_item_structure.get("diagnostics", {})
+
     return RichDocumentStructure(
+        namespaces=parse_namespaces,
         document_boundaries=_build_document_boundaries(
             artifacts.get("document_boundaries")
         ),
@@ -137,7 +167,7 @@ def build_document_structure_from_artifacts(
         nested_documents=_build_nested_documents(
             artifacts.get("nested_documents")
         ),
-        sections=_build_sections(artifacts.get("sections")),
+        sections=extract_sections or parse_sections,
         tables=_build_tables(artifacts.get("tables")),
         images=_build_images_from_artifact(artifacts.get("images")),
         formulas=_build_formulas_from_artifact(artifacts.get("formulas")),
@@ -148,7 +178,80 @@ def build_document_structure_from_artifacts(
         correction_proposals=_build_correction_proposals(
             artifacts.get("correction_proposals")
         ),
+        diagnostics=diagnostics,
     )
+
+
+def _build_parse_item_structure(
+    *,
+    parse_items: list[dict[str, Any]],
+    page_count: int | None,
+) -> dict[str, Any]:
+    if not parse_items:
+        return {}
+
+    return assemble_document_structure_from_parse_items(
+        parse_items,
+        page_count=page_count,
+    )
+
+
+def _parse_page_count(
+    metadata: dict[str, Any],
+    job_metadata: dict[str, Any],
+) -> int | None:
+    candidates = (
+        job_metadata.get("pdf-pages"),
+        job_metadata.get("page_count"),
+        job_metadata.get("pages"),
+        metadata.get("page_count"),
+        metadata.get("pages_count"),
+        metadata.get("pdf_pages"),
+    )
+
+    for value in candidates:
+        if isinstance(value, bool):
+            continue
+
+        if isinstance(value, int):
+            return value
+
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+
+    pages = metadata.get("pages")
+    if isinstance(pages, list):
+        return len(pages)
+
+    return None
+
+
+def _build_namespaces_from_rows(rows: list[Any]) -> list[RichDocumentNamespace]:
+    namespaces: list[RichDocumentNamespace] = []
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        namespace_id = _first_str(row.get("namespace_id"), row.get("id"))
+        if namespace_id is None:
+            continue
+
+        namespaces.append(
+            RichDocumentNamespace(
+                namespace_id=namespace_id,
+                title=_first_str(row.get("title"), row.get("name")),
+                page_start=_first_int(row.get("page_start")),
+                page_end=_first_int(row.get("page_end")),
+                start_heading_id=_first_str(row.get("start_heading_id")),
+                start_item_index=_first_int(row.get("start_item_index")),
+                end_item_index_exclusive=_first_int(row.get("end_item_index_exclusive")),
+                ordinal=_first_int(row.get("ordinal")),
+                raw=row,
+            )
+        )
+
+    return namespaces
 
 
 def _build_document_boundaries(
@@ -267,7 +370,12 @@ def _build_sections(
         preferred_keys=("sections", "items", "data"),
     )
 
+    return _build_sections_from_rows(rows)
+
+
+def _build_sections_from_rows(rows: list[Any]) -> list[RichDocumentSection]:
     sections: list[RichDocumentSection] = []
+
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -286,18 +394,51 @@ def _build_sections(
                 ),
                 clause=_first_str(row.get("clause"), row.get("number")),
                 title=_first_str(row.get("title"), row.get("heading")),
-                level=_first_int(row.get("level"), row.get("depth")),
-                path=_first_str(row.get("path"), row.get("section_path")),
+                level=_first_int(
+                    row.get("level"),
+                    row.get("depth"),
+                    row.get("markdown_level"),
+                ),
+                path=_first_str(
+                    row.get("namespaced_path"),
+                    row.get("path"),
+                    row.get("section_path"),
+                ),
                 page_start=_first_int(row.get("page_start"), row.get("page")),
                 page_end=_first_int(row.get("page_end"), row.get("page")),
-                bbox=_bbox(row.get("bbox")),
-                section_type=_first_str(row.get("section_type"), row.get("type")),
-                content=row.get("content", row.get("text")),
+                bbox=_bbox(row.get("bbox")) or _bbox_from_source_spans(
+                    row.get("source_spans")
+                ),
+                section_type=_first_str(
+                    row.get("section_type"),
+                    row.get("type"),
+                    row.get("kind"),
+                ),
+                content=row.get("content", row.get("content_text", row.get("text"))),
                 raw=row,
             )
         )
 
     return sections
+
+
+def _bbox_from_source_spans(value: Any) -> list[float] | None:
+    if not isinstance(value, list):
+        return None
+
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+
+        normalized_bbox = row.get("normalized_bbox")
+        if not isinstance(normalized_bbox, dict):
+            continue
+
+        keys = ("x", "y", "w", "h")
+        if all(isinstance(normalized_bbox.get(key), (int, float)) for key in keys):
+            return [float(normalized_bbox[key]) for key in keys]
+
+    return None
 
 
 def _build_tables(
@@ -562,6 +703,12 @@ def _first_str(*values: Any) -> str | None:
     for value in values:
         if isinstance(value, str) and value.strip():
             return value.strip()
+
+        if isinstance(value, bool):
+            continue
+
+        if isinstance(value, int):
+            return str(value)
 
     return None
 
