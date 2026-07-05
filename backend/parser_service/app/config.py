@@ -67,7 +67,8 @@ class Settings(BaseSettings):
 
     # OpenTelemetry
     otel_endpoint: str = Field("localhost:4317", alias="OTEL_EXPORTER_OTLP_ENDPOINT")
-
+    disable_telemetry: bool = Field(False, alias="DISABLE_TELEMETRY") 
+    
     # Лимиты параллельности и очереди
     max_concurrent_full_pipelines: int = Field(5, alias="MAX_CONCURRENT_FULL_PIPELINES")
     max_concurrent_preview_tasks: int = Field(30, alias="MAX_CONCURRENT_PREVIEW_TASKS")
@@ -100,6 +101,14 @@ class Settings(BaseSettings):
     hybrid_startup_timeout: int = Field(30, alias="HYBRID_STARTUP_TIMEOUT")
     hybrid_auto_start: bool = Field(True, alias="HYBRID_AUTO_START")
 
+    # ---------- ПЕРЕКЛЮЧАТЕЛЬ ПАРСЕРА ----------
+    use_docling_parser: bool = Field(False, alias="USE_DOCLING_PARSER")
+
+    # ---------- НАСТРОЙКИ DOCLING ----------
+    docling_num_threads: int = Field(4, alias="DOCLING_NUM_THREADS")
+    docling_batch_size: int = Field(5, alias="DOCLING_BATCH_SIZE")
+    docling_do_ocr: bool = Field(False, alias="DOCLING_DO_OCR")
+    docling_table_structure: bool = Field(True, alias="DOCLING_TABLE_STRUCTURE")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

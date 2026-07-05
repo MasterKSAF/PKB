@@ -138,11 +138,41 @@ class ParseStep(PipelineStep):
         parser = ParserFactory.get_parser(ctx.mime_type)
         if parser is None:
             raise ValueError(f"No parser for MIME {ctx.mime_type}")
-        
+
         ctx.options["original_file_name"] = ctx.original_file_name
-        
+
+        # ---- ДОБАВЛЯЕМ: передаём max_pages в options для DoclingParser ----
+        if ctx.max_pages is not None:
+            ctx.options["max_pages"] = ctx.max_pages
+
+        # ── Preview mode: обрезаем PDF до max_pages страниц ──────────────
+        # Чтобы CLI парсер не обрабатывал весь документ (что может висеть >300с),
+        # передаём только первые max_pages страниц.
+        # ctx.total_pages НЕ затираем — он хранит оригинальное количество страниц
+        # для корректного определения preview_not_supported ниже.
+        file_bytes = ctx.file_bytes
+        _original_total = None
+        if ctx.max_pages is not None and ctx.mime_type == "application/pdf" and file_bytes:
+            try:
+                reader = PdfReader(io.BytesIO(file_bytes))
+                total = len(reader.pages)
+                if total > ctx.max_pages:
+                    _original_total = total
+                    writer = PdfWriter()
+                    for i in range(ctx.max_pages):
+                        writer.add_page(reader.pages[i])
+                    buf = io.BytesIO()
+                    writer.write(buf)
+                    file_bytes = buf.getvalue()
+                    logger.info(
+                        "Truncated PDF from %d to %d pages for preview (task %d)",
+                        total, ctx.max_pages, ctx.task_id,
+                    )
+            except Exception as e:
+                logger.warning("Failed to truncate PDF for preview: %s", e)
+
         ctx.parse_result = await parser.parse(
-            ctx.file_bytes,
+            file_bytes,
             ctx.options,
             ctx.task_id,
             total_pages=getattr(ctx, "total_pages", None),
@@ -150,14 +180,18 @@ class ParseStep(PipelineStep):
         if ctx.parse_result.temp_dir:
             ctx.temp_dir = ctx.parse_result.temp_dir
         logger.debug("Parsing completed, total_pages=%d", ctx.parse_result.total_pages)
-        if ctx.max_pages is not None and ctx.parse_result.total_pages > ctx.max_pages:
-            ctx.parse_result.total_pages = ctx.max_pages
-            ctx.parse_result.images = [
-                img for img in ctx.parse_result.images if img[0] <= ctx.max_pages
-            ]
-            if not ctx.track_progress and ctx.parse_result.total_pages > ctx.max_pages:
-                ctx.preview_not_supported = True
-            logger.debug("Truncated to %d pages", ctx.max_pages)
+        # Определяем реальное количество страниц: если PDF обрезали до max_pages,
+        # то parse_result.total_pages = max_pages, но оригинал мог быть больше.
+        if ctx.max_pages is not None:
+            _actual_total = max(ctx.parse_result.total_pages, _original_total or 0)
+            if _actual_total > ctx.max_pages:
+                ctx.parse_result.total_pages = ctx.max_pages
+                ctx.parse_result.images = [
+                    img for img in ctx.parse_result.images if img[0] <= ctx.max_pages
+                ]
+                if not ctx.track_progress:
+                    ctx.preview_not_supported = True
+                logger.debug("Truncated to %d pages (original %d)", ctx.max_pages, _actual_total)
 
         # Если preview (track_progress=False), удаляем временную папку сразу
         if not ctx.track_progress and ctx.temp_dir and os.path.exists(ctx.temp_dir):

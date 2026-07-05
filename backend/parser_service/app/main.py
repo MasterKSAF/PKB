@@ -11,26 +11,39 @@ from app.core.telemetry import setup_observability, instrument_fastapi
 from app.config import settings
 
 # Настраиваем OpenTelemetry
-try:
-    from app.core.telemetry import setup_observability, instrument_fastapi as _instrument_fastapi
-    from app.config import settings
- 
-    _tracer_provider, _, _logger = setup_observability(
-        service_name="parser_service",
-        otlp_endpoint=settings.otel_endpoint,
-    )
-    _otel_enabled = True
-except Exception:
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    _logger = logging.getLogger("parser_service")
-    _logger.warning("OpenTelemetry init failed — running without observability")
+# Инициализируем логгер на случай, если телеметрия отключена
+import logging
+_logger = logging.getLogger("parser_service")
+
+# ---- Проверяем, отключена ли телеметрия ----
+if settings.disable_telemetry:
+    _logger.info("Telemetry is disabled by configuration (DISABLE_TELEMETRY=True)")
     _tracer_provider = None
     _otel_enabled = False
- 
+
     def _instrument_fastapi(app, tp):
         pass
- 
+else:
+    # Настраиваем OpenTelemetry (если не отключена)
+    try:
+        from app.core.telemetry import setup_observability, instrument_fastapi as _instrument_fastapi
+        from app.config import settings
+
+        _tracer_provider, _, _logger = setup_observability(
+            service_name="parser_service",
+            otlp_endpoint=settings.otel_endpoint,
+        )
+        _otel_enabled = True
+    except Exception:
+        logging.basicConfig(level=logging.INFO)
+        _logger = logging.getLogger("parser_service")
+        _logger.warning("OpenTelemetry init failed — running without observability")
+        _tracer_provider = None
+        _otel_enabled = False
+
+        def _instrument_fastapi(app, tp):
+            pass
+
 logger = _logger
 
 # === ОСТАЛЬНЫЕ ИМПОРТЫ ===
@@ -47,8 +60,9 @@ from app.core.exception_handlers import (
 from app.core.exceptions import ParserServiceError
 from app.core.task_store import task_store
 from app.core.minio_client import minio_client
-from app.core.hybrid_server import HybridServer  # <--- ВАЖНЫЙ ИМПОРТ
+from app.core.hybrid_server import HybridServer
 from app.dependencies import init_services, get_pipeline_service
+
 # Событие для graceful shutdown
 shutdown_event = asyncio.Event()
 hybrid_server = None  # глобальная ссылка для остановки
@@ -58,7 +72,7 @@ hybrid_server = None  # глобальная ссылка для останов�
 async def lifespan(app: FastAPI):
     """
     Управляет жизненным циклом приложения:
-    - запуск гибридного сервера
+    - запуск гибридного сервера (только если не используется Docling-парсер)
     - создание бакетов MinIO
     - запуск фоновой очистки задач
     - запуск воркера очереди
@@ -67,21 +81,25 @@ async def lifespan(app: FastAPI):
     global hybrid_server
     logger.info("Starting application lifespan")
 
-    # Запуск гибридного сервера
-    hybrid_server = HybridServer(
-        host=settings.hybrid_host,
-        port=settings.hybrid_port,
-        startup_timeout=settings.hybrid_startup_timeout,
-    )
-    if settings.hybrid_auto_start:
-        if not hybrid_server.start():
-            logger.error("Failed to start hybrid server, disabling hybrid mode")
-            # Отключаем гибридный режим, чтобы парсер работал без --hybrid
-            settings.parser_use_hybrid = False
+    # ---- Запуск гибридного сервера ТОЛЬКО если не используется Docling ----
+    if not settings.use_docling_parser:
+        hybrid_server = HybridServer(
+            host=settings.hybrid_host,
+            port=settings.hybrid_port,
+            startup_timeout=settings.hybrid_startup_timeout,
+        )
+        if settings.hybrid_auto_start:
+            if not hybrid_server.start():
+                logger.error("Failed to start hybrid server, disabling hybrid mode")
+                # Отключаем гибридный режим, чтобы парсер работал без --hybrid
+                settings.parser_use_hybrid = False
+            else:
+                logger.info("Hybrid server started")
         else:
-            logger.info("Hybrid server started")
+            logger.info("Hybrid server auto-start disabled")
     else:
-        logger.info("Hybrid server auto-start disabled")
+        logger.info("Docling parser is enabled, hybrid server not started")
+        hybrid_server = None  # не используется
 
     # Инициализируем сервисы (DI) с shutdown_event
     init_services(shutdown_event)
@@ -119,10 +137,16 @@ async def lifespan(app: FastAPI):
         pass
     logger.debug("Cleanup task cancelled")
 
-    # Остановка гибридного сервера
+    # Остановка гибридного сервера (если он был запущен)
     if hybrid_server:
         hybrid_server.stop()
         logger.info("Hybrid server stopped")
+
+    # Завершаем ProcessPoolExecutor
+    from app.core.executor import shutdown_executor
+    logger.info("Shutting down ProcessPoolExecutor...")
+    shutdown_executor()
+    logger.info("ProcessPoolExecutor shut down")
 
     await asyncio.sleep(2)
     logger.info("Shutdown complete")
@@ -138,6 +162,7 @@ app = FastAPI(
 # Инструментирование FastAPI для сбора трейсов
 if _otel_enabled:
     _instrument_fastapi(app, _tracer_provider)
+
 # Подключение роутера API
 app.include_router(v1_router, prefix=settings.api_prefix)
 
