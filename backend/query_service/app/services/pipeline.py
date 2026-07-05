@@ -359,7 +359,6 @@ async def run_pipeline(
             return
 
         await _set_status(session_factory, message_id, "enriching_citations")
-        used_indices: list[int] = list(range(len(chunks)))
         try:
             final_text, used_indices = await asyncio.wait_for(
                 asyncio.to_thread(_enrich_citations, llm_text, chunks),
@@ -369,6 +368,10 @@ async def run_pipeline(
             warnings.append("Обогащение цитат недоступно.")
             logger.warning("citation enrichment skipped", extra={"message_id": message_id}, exc_info=True)
             final_text = llm_text
+            used_indices = sorted({
+                int(m.group(1)) for m in _SOURCE_REF_RE.finditer(llm_text)
+                if int(m.group(1)) < len(chunks)
+            })
 
         used_chunks = [chunks[i] for i in used_indices if i < len(chunks)] or chunks
 
