@@ -18,6 +18,10 @@ class ParserServiceClient(ServiceClient):
             service_name="parser",
             service_url=settings.services.PARSER_SERVICE_URL,
             mock_mode=settings.services.PARSER_SERVICE_MOCK,
+            # Parser может обрабатывать PDF до 300+ секунд (parser_timeout=300),
+            # поэтому read_timeout должен быть больше parser_timeout,
+            # чтобы HTTP-клиент не отвалился раньше.
+            read_timeout=600,
         )
 
     async def _generate_mock(

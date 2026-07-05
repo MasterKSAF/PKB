@@ -68,7 +68,7 @@ def _extract_document_id(raw_json: dict[str, Any]) -> int | None:
 async def convert(
     *,
     task_id: int,
-    version_id: int,
+    version_id: int | None = None,
     raw_json: dict[str, Any],
     document_id: int | None = None,
     use_llm: bool = False,

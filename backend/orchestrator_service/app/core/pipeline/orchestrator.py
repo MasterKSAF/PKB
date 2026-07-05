@@ -923,7 +923,6 @@ class PipelineOrchestrator:
     ) -> None:
         """Handle completion of a full processing step."""
         trace_id = task.trace_id or ""
-        version_id = getattr(task, 'version_id', None)
 
         if step_name == "full_ocr":
             await self.task_repo.update_task_status(
@@ -956,12 +955,12 @@ class PipelineOrchestrator:
                     "celery_task": "tasks.pipeline.run_converter_full_step",
                     "queue": "pipeline",
                     "params": {"task_id": task.id, "draft_id": task.draft_id,
-                               "file_key": file_key, "version_id": version_id},
+                               "file_key": file_key},
                 },
             )
             run_converter_full_step.delay(
                 task.id, task.draft_id, file_key, trace_id=trace_id,
-                raw_json=full_result, version_id=version_id,
+                raw_json=full_result,
             )
 
         elif step_name == "full_converter":

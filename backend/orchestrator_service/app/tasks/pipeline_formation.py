@@ -394,7 +394,6 @@ async def process_parser_full_result(
 def run_converter_full_step(
     self, task_id: int, draft_id: int, file_key: str,
     trace_id: str = "", raw_json: Optional[dict] = None,
-    version_id: int = 1,
 ):
     """Full Converter step — convert and validate full document."""
     if trace_id:
@@ -405,7 +404,7 @@ def run_converter_full_step(
         async def _do_converter_full():
             client = ConverterValidatorClient()
             try:
-                body = {"file_key": file_key, "draft_id": draft_id, "task_id": task_id, "version_id": version_id}
+                body = {"file_key": file_key, "draft_id": draft_id, "task_id": task_id}
                 if raw_json:
                     body["raw_json"] = raw_json
                 return await client.convert_full(body)

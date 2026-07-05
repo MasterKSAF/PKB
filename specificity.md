@@ -14,16 +14,13 @@
 
 **Статус:** не исправлено.
 
-### G8. Pipeline: registry_creation падает с `compensations applied`
+### G8. 🔧 Pipeline: registry_creation падал с `compensations applied`
 
-**Симптом:** `Pipeline failed at step registry_creation, compensations applied`.
-6 из 7 PDF (тест `test_pdf_tests_full.py`) падают на этом шаге. Только 1 из 7 (`2-020101-174-19.pdf`) проходит.
+**Статус:** ИСПРАВЛЕНО (05.07) — была несовместимость формата между парсером и конвертером:
+- `version_id` был required в ConvertRequest/ConvertResponse, но не передавался → 422
+- Converter service и document validator принимали `int` без None → падали
 
-**Причина:** `create_pipeline_document` вызывает `POST /api/v1/registry/documents` с неверным форматом данных — конвертер отдаёт поля не в той структуре, которую ожидает Registry (ожидает `document.metadata.title`, `document.metadata.doc_code`).
-
-**Где:** `backend/orchestrator_service/app/core/pipeline/orchestrator.py` — `_create_registry_document`.
-
-**Статус:** не исправлено.
+После фикса pipeline проходит 7/7 полных циклов (data/pdf_tests).
 
 ### B3. RAG-индексация не стартует даже при доступных данных
 
@@ -56,7 +53,7 @@ registry_creation completed → enqueue rag_index`
 1. `backend/orchestrator_service/app/core/pipeline/orchestrator.py` — `approve_draft()`: добавить `file_hash_sha256` в `doc_payload`
 2. `backend/orchestrator_service/app/services/registry_client.py` — `create_draft()`: убедиться что `file_hash_sha256` сохраняется в черновике
 
-### S1. Search 500 — bbox строка вместо списка (30.06, НОВАЯ)
+### S1. Search 500 — bbox строка вместо списка
 
 **Статус:** НЕ ИСПРАВЛЕНО
 

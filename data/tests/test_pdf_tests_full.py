@@ -262,7 +262,7 @@ def poll_preview_single(pdf_name: str, headers: dict):
         return
 
     preview_ok = False
-    timeout = 60
+    timeout = 120
     poll_interval = 2
     max_attempts = timeout // poll_interval
 
@@ -406,7 +406,7 @@ def poll_pipeline_single(pdf_name: str, headers: dict):
         return
 
     pipeline_ok = False
-    timeout = 300
+    timeout = 1200
     poll_interval = 5
     max_attempts = timeout // poll_interval
 

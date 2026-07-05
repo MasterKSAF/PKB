@@ -97,13 +97,13 @@ def _compute_fingerprint(
     except MetadataValidationError:
         # doc_code/title могут отсутствовать (циркулярные письма, не-ГОСТы).
         # Создаём fallback fingerprint из task_id.
-        fallback_raw = f"{task_id}:{version_id}:no_doc_code"
+        fallback_raw = f"{task_id}:{version_id or '0'}:no_doc_code"
         title_hash = _sha256_hex(fallback_raw)
         title_key = f"fallback:{fallback_raw}"
 
     file_hash = source.get("file_hash_sha256") or ""
     if not file_hash:
-        file_hash = _sha256_hex(f"{task_id}:{version_id}")
+        file_hash = _sha256_hex(f"{task_id}:{version_id or '0'}")
 
     return {
         "file_hash_sha256": file_hash,
@@ -116,7 +116,7 @@ async def validate_document(
     document: dict[str, Any],
     *,
     task_id: int,
-    version_id: int,
+    version_id: int | None = None,
     document_id: int | None = None,
 ) -> dict[str, Any]:
     preview_meta = extract_preview_metadata({"document": document})

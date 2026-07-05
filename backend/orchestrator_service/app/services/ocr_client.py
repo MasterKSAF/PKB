@@ -22,6 +22,8 @@ class OCRServiceClient(ServiceClient):
             service_name="ocr",
             service_url=settings.services.OCR_SERVICE_URL,
             mock_mode=settings.services.OCR_SERVICE_MOCK,
+            # OCR идёт на тот же Parser-сервис, таймаут должен быть таким же
+            read_timeout=600,
         )
 
     async def _generate_mock(
