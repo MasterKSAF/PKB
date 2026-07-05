@@ -1,41 +1,33 @@
-# Переход на продвинутый MD с картинками для просмотра документов — ВЫПОЛНЕНО
+# План сессии: Registry errors + Mock FSM + approve flow
 
-## Backend (registry_service)
+## ✅ 1. Создать MockRegistryClient (утилита для тестов)
+- [x] `tests/shared/mock_registry_client.py` с FSM-валидацией (409 при approved/discarded)
 
-### `get_page_blocks_md()` — document.py
-- Для image-блоков `content` содержит `![alt](/api/v1/files/{image_key})` (вместо пустой строки)
+## ✅ 2. Убрать глушение Registry errors (17 блоков)
+- [x] `_on_preview_completed`: 5 блоков try/except
+- [x] `approve_draft`: 4 блока try/except  
+- [x] `confirm_draft`: 2 блока try/except
+- [x] `reject_draft`: 1 блок try/except
+- [x] `stop_duplicate_draft`: 1 блок try/except
+- [x] `run_registry_step` (pipeline_formation.py): 1 блок try/except
+- [x] `registry_creation` handler: 2 блока try/except (get_document_sections, save sections)
+- [x] `rag_index` handler: 1 блок try/except (update_document_status)
 
-### `/documents/{id}/pages/{n}/content_md` — routes.py
-- Поле `markdown` собирает content блоков (картинки уже встроены в content)
+## ✅ 3. Рефакторинг approve → converter → registry
+- [x] `approve_draft()`: убрать create_document, DUPLICATE_FILE, sync, document_id/version_id
+- [x] `_on_full_step_completed("full_converter")`: добавить create_document + sync
+- [x] Обновить возврат approve_draft → document_id=None
+- [x] Удалён мёртвый код DUPLICATE_FILE_AFTER_APPROVE в decide_draft
 
-### `/documents/{id}/content_md` — routes.py (новый)
-- Весь документ одной MD-строкой со всеми страницами
+## ✅ 4. Обновить тесты
+- [x] Вписать MockRegistryClient в test_pipeline_formation.py
+- [x] Обновить TestApproveDraftPartial/Full — approve не создаёт документ
+- [x] Добавить тест: on_step_completed("full_converter") → создаёт документ
+- [x] Исправить test_celery_tasks.py::TestRunRegistryStep
 
-### `/registry/drafts/{draft_id}/preview` — routes.py
-- Передан `files_base_url='/api/v1/files'` для `draft_blocks_to_markdown`
-
-## Gateway
-- Добавлен роут `/documents/{id}/content_md` → Registry
-
-## Frontend
-
-### Готовые документы (content_md)
-- `utils/markdownBuilder.ts` — сборка content блоков в MD
-- `sourceApi.preview()` — использует `markdown` из сервера, режет относительные пути → абсолютные
-- `DocumentRegistryPanel.tsx` — ReactMarkdown с `& img` стилями
-- `KnowledgeBase.tsx` — ReactMarkdown + fallback
-- `Chat.tsx` — ReactMarkdown в превью
-- `SourcePreviewDialog.tsx` — ReactMarkdown с картинками
-
-### Черновики (draft/preview)
-- `DraftPreview.previewMd` — поле для markdown первых 3 страниц
-- `KnowledgeProcessing.tsx` — ReactMarkdown для рендера + resolve URL картинок
-
-### Разрешение URL картинок
-- Сервер генерирует `/api/v1/files/{key}`
-- Фронтенд режет `/api/v1/files/` → `{VITE_API_BASE_URL}/files/` на всех путях
-
-## Проверка
-- TypeScript: `tsc --noEmit` — чисто
-- Python: `ast.parse()` — синтаксис корректен
-- Тесты не запускались (pre-existing ошибка FastAPI on_startup)
+## ❌ Осталось (не входило в задачу)
+- `test_draft_to_document_flow.py` — ждёт document_id от approve
+- `test_draft_to_indexation_flow.py` — ждёт document_id от approve
+- `test_draft_to_version.py` — ждёт document_id от approve
+- `pipeline_indexation.py` — pre-existing баг job_id
+- `test_celery_tasks.py::TestRunOcrPreviewStep::test_failure_path_triggers_retry` — pre-existing

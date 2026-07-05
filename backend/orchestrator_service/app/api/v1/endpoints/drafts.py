@@ -1303,30 +1303,6 @@ async def decide_draft(
                         }
                     },
                 )
-            # DUPLICATE_FILE_AFTER_APPROVE — race condition with Registry
-            if "DUPLICATE_FILE_AFTER_APPROVE" in err_msg:
-                # Extract conflict_document_id from error message
-                conflict_id = None
-                _marker = "conflict_document_id="
-                _pos = err_msg.find(_marker)
-                if _pos != -1:
-                    _rest = err_msg[_pos + len(_marker):]
-                    _end = _rest.find(" ")
-                    _val = _rest[:_end] if _end != -1 else _rest
-                    try:
-                        conflict_id = int(_val)
-                    except (ValueError, TypeError):
-                        pass
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "error": {
-                            "code": "DUPLICATE_FILE_AFTER_APPROVE",
-                            "message": "Документ с таким файлом уже существует",
-                            "details": {"conflict_document_id": conflict_id},
-                        }
-                    },
-                )
             # Other ValueErrors — re-raise as 500
             raise
 

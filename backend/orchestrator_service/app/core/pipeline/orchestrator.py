@@ -723,18 +723,12 @@ class PipelineOrchestrator:
                 "Converter validation failed — setting review_required",
                 extra={"task_id": task.id, "draft_id": task.draft_id},
             )
-            try:
-                registry = RegistryServiceClient()
-                await registry.update_draft_status(
-                    draft_id=task.draft_id,
-                    status="review_required",
-                )
-                await registry.close()
-            except Exception as e:
-                logger.warning(
-                    f"Failed to set draft status to review_required: {e}",
-                    extra={"draft_id": task.draft_id},
-                )
+            registry = RegistryServiceClient()
+            await registry.update_draft_status(
+                draft_id=task.draft_id,
+                status="review_required",
+            )
+            await registry.close()
             await self.task_repo.update_task_status(
                 task_id=task.id,
                 stage=TaskStage.DECISION.value,
@@ -774,19 +768,13 @@ class PipelineOrchestrator:
                     "Discarding draft due to low quality",
                     extra={"draft_id": task.draft_id, "task_id": task.id},
                 )
-                try:
-                    registry = RegistryServiceClient()
-                    await registry.update_draft_status(
-                        draft_id=task.draft_id,
-                        status="discarded",
-                        error_code="QUALITY_TOO_LOW",
-                    )
-                    await registry.close()
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to set draft status to discarded: {e}",
-                        extra={"draft_id": task.draft_id},
-                    )
+                registry = RegistryServiceClient()
+                await registry.update_draft_status(
+                    draft_id=task.draft_id,
+                    status="discarded",
+                    error_code="QUALITY_TOO_LOW",
+                )
+                await registry.close()
                 await self.task_repo.update_task_status(
                     task_id=task.id,
                     stage=TaskStage.DECISION.value,
@@ -799,18 +787,12 @@ class PipelineOrchestrator:
                     "Review required due to quality thresholds",
                     extra={"draft_id": task.draft_id, "task_id": task.id},
                 )
-                try:
-                    registry = RegistryServiceClient()
-                    await registry.update_draft_status(
-                        draft_id=task.draft_id,
-                        status="review_required",
-                    )
-                    await registry.close()
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to set draft status to review_required: {e}",
-                        extra={"draft_id": task.draft_id},
-                    )
+                registry = RegistryServiceClient()
+                await registry.update_draft_status(
+                    draft_id=task.draft_id,
+                    status="review_required",
+                )
+                await registry.close()
                 await self.task_repo.update_task_status(
                     task_id=task.id,
                     stage=TaskStage.DECISION.value,
@@ -838,32 +820,20 @@ class PipelineOrchestrator:
 
         # Update draft metadata via Registry
         if preview_metadata:
-            try:
-                registry_meta = RegistryServiceClient()
-                await registry_meta.update_draft_metadata(
-                    draft_id=task.draft_id,
-                    preview_metadata=preview_metadata,
-                )
-                await registry_meta.close()
-            except Exception as e:
-                logger.warning(
-                    f"Failed to save preview_metadata: {e}",
-                    extra={"draft_id": task.draft_id},
-                )
+            registry_meta = RegistryServiceClient()
+            await registry_meta.update_draft_metadata(
+                draft_id=task.draft_id,
+                preview_metadata=preview_metadata,
+            )
+            await registry_meta.close()
 
         # Update draft status to ready_for_approve via Registry
-        try:
-            registry = RegistryServiceClient()
-            await registry.update_draft_status(
-                draft_id=task.draft_id,
-                status=DraftState.READY_FOR_APPROVE.value,
-            )
-            await registry.close()
-        except Exception as e:
-            logger.warning(
-                f"Failed to update draft status to ready_for_approve: {e}",
-                extra={"draft_id": task.draft_id},
-            )
+        registry = RegistryServiceClient()
+        await registry.update_draft_status(
+            draft_id=task.draft_id,
+            status=DraftState.READY_FOR_APPROVE.value,
+        )
+        await registry.close()
 
     def _check_auto_approve(self, task, steps) -> str:
         """Evaluate quality thresholds and return recommended action.
@@ -1009,7 +979,52 @@ class PipelineOrchestrator:
                     document_data = s.output_data.get("document")
                     metadata = s.output_data.get("metadata")
                     break
-            document_id = getattr(task, 'document_id', None) or task.draft_id
+
+            # --- Create document in Registry (moved from approve_draft) ---
+            meta = metadata or {}
+            doc_payload = {
+                "title": meta.get("title") or f"Draft {task.draft_id}",
+                "doc_code": meta.get("doc_code") or f"DRAFT-{task.draft_id}",
+                "era": meta.get("era"),
+                "source_type": meta.get("source_type"),
+                "jurisdiction": meta.get("jurisdiction"),
+                "mks_oks_code": meta.get("mks_oks_code"),
+                "okstu_code": meta.get("okstu_code"),
+                "issuing_body": meta.get("issuing_body"),
+                "udk_code": meta.get("udk_code"),
+                "draft_id": task.draft_id,
+                "status": "uploaded",
+            }
+            registry_doc = RegistryServiceClient()
+            doc_result = await registry_doc.create_document(doc_payload)
+            doc_data = doc_result.get("data", {})
+            document_id = doc_data.get("document_id") or doc_data.get("id")
+            if not document_id:
+                raise ValueError(
+                    f"Registry create_document returned no document_id: {doc_result}"
+                )
+            # Parse version_id
+            raw_vid = doc_data.get("version_id")
+            if raw_vid is not None:
+                try:
+                    version_id = int(str(raw_vid).lstrip("v").split("-")[0])
+                except (ValueError, IndexError):
+                    version_id = int(raw_vid) if isinstance(raw_vid, (int, float)) else None
+            else:
+                version_id = None
+
+            task.document_id = document_id
+            task.version_id = version_id
+            await self.db.flush()
+
+            # Sync document_id to Registry draft
+            await registry_doc.update_draft_status(
+                draft_id=task.draft_id,
+                status=DraftState.APPROVED.value,
+                document_id=document_id,
+            )
+            await registry_doc.close()
+
             logger.info(
                 "Enqueuing registry creation step",
                 extra={
@@ -1059,21 +1074,15 @@ class PipelineOrchestrator:
 
             # Priority 2: читаем из Registry API
             if not sections:
-                try:
-                    registry = RegistryServiceClient()
-                    sec_result = await registry.get_document_sections(document_id)
-                    sec_data = sec_result.get("data", {})
-                    sections = sec_data.get("sections", [])
-                    await registry.close()
-                    if sections:
-                        logger.info(
-                            f"Got {len(sections)} sections via get_document_sections",
-                            extra={"task_id": task.id, "draft_id": task.draft_id},
-                        )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to read sections from Registry: {e}",
-                        extra={"draft_id": task.draft_id, "document_id": document_id},
+                registry = RegistryServiceClient()
+                sec_result = await registry.get_document_sections(document_id)
+                sec_data = sec_result.get("data", {})
+                sections = sec_data.get("sections", [])
+                await registry.close()
+                if sections:
+                    logger.info(
+                        f"Got {len(sections)} sections via get_document_sections",
+                        extra={"task_id": task.id, "draft_id": task.draft_id},
                     )
 
             # Priority 3: fallback к конвертеру (content[] → section format с ручным ID)
@@ -1111,25 +1120,18 @@ class PipelineOrchestrator:
                     s['document_id'] = document_id
 
                 # Сохраняем sections в Registry (upsert по document_id)
-                # Если Registry не поддерживает — логируем предупреждение
-                try:
-                    reg_save = RegistryServiceClient()
-                    await reg_save.create_document({
-                        "document_id": document_id,
-                        "draft_id": task.draft_id,
-                        "document": {"sections": sections},
-                    })
-                    await reg_save.close()
-                    logger.info(
-                        f"Saved {len(sections)} sections to Registry via upsert",
-                        extra={"task_id": task.id, "draft_id": task.draft_id,
-                               "document_id": document_id},
-                    )
-                except Exception as save_err:
-                    logger.warning(
-                        f"Failed to save sections to Registry: {save_err}",
-                        extra={"draft_id": task.draft_id, "document_id": document_id},
-                    )
+                reg_save = RegistryServiceClient()
+                await reg_save.create_document({
+                    "document_id": document_id,
+                    "draft_id": task.draft_id,
+                    "document": {"sections": sections},
+                })
+                await reg_save.close()
+                logger.info(
+                    f"Saved {len(sections)} sections to Registry via upsert",
+                    extra={"task_id": task.id, "draft_id": task.draft_id,
+                           "document_id": document_id},
+                )
 
             logger.info(
                 "Enqueuing RAG index step",
@@ -1158,18 +1160,12 @@ class PipelineOrchestrator:
             # Update document status after successful indexing
             # Valid transition from "uploaded" is "validating"
             document_id = getattr(task, 'document_id', None) or task.draft_id
-            try:
-                registry = RegistryServiceClient()
-                await registry.update_document_status(
-                    document_id=document_id,
-                    status="validating",
-                )
-                await registry.close()
-            except Exception as e:
-                logger.warning(
-                    f"Failed to update document status to validating: {e}",
-                    extra={"draft_id": task.draft_id, "document_id": document_id},
-                )
+            registry = RegistryServiceClient()
+            await registry.update_document_status(
+                document_id=document_id,
+                status="validating",
+            )
+            await registry.close()
 
             # Schedule background activation: later check with RAG and activate
             try:
@@ -1225,15 +1221,11 @@ class PipelineOrchestrator:
 
         # --- Step 0: Collect draft metadata from Registry ---
         registry = RegistryServiceClient()
-        try:
-            draft_result = await registry.get_draft(draft_id)
-            draft_data = draft_result.get("data", {})
-            preview_result = await registry.get_draft_preview(draft_id)
-            preview_data = preview_result.get("data", {})
-        except Exception as exc:
-            logger.error(f"Failed to get draft data from Registry: {exc}")
-            draft_data = {}
-            preview_data = {}
+        draft_result = await registry.get_draft(draft_id)
+        draft_data = draft_result.get("data", {})
+        preview_result = await registry.get_draft_preview(draft_id)
+        preview_data = preview_result.get("data", {})
+        await registry.close()
 
         # --- Check BUSINESS_KEY_DRIFT (§5): compare preview metadata with current ---
         preview_title_hash = preview_data.get("title_hash_sha256")
@@ -1260,171 +1252,50 @@ class PipelineOrchestrator:
                     f"conflict: title_hash_sha256"
                 )
 
-        # Build document payload from draft + preview + overrides
-        # file_hash_sha256 берём из draft_data (Registry сохранил при create_draft)
-        file_hash_sha256 = draft_data.get("file_hash_sha256")
-        doc_payload = {
-            "title": preview_data.get("title") or draft_data.get("title_key", f"Draft {draft_id}"),
-            "doc_code": preview_data.get("doc_code") or draft_data.get("document_key", f"DRAFT-{draft_id}"),
-            "era": preview_data.get("era"),
-            "source_type": preview_data.get("source_type"),
-            "jurisdiction": preview_data.get("jurisdiction"),
-            "mks_oks_code": preview_data.get("mks_oks_code"),
-            "okstu_code": preview_data.get("okstu_code"),
-            "issuing_body": preview_data.get("issuing_body"),
-            "udk_code": preview_data.get("udk_code"),
-            "draft_id": draft_id,
-            "status": "uploaded",
-        }
-        # Передаём file_hash_sha256 из Registry черновика для детекции дублей
-        if file_hash_sha256:
-            logger.info(
-                f"Including file_hash_sha256 from draft data in doc_payload",
-                extra={"draft_id": draft_id, "task_id": task_id},
-            )
-            doc_payload["file_hash_sha256"] = file_hash_sha256
-        # Apply user overrides on top
-        if metadata_overrides:
-            doc_payload.update(metadata_overrides)
-
-        # --- Step 1: Create document in Registry (OR-13) ---
-        conflict_document_id = None
-        try:
-            doc_result = await registry.create_document(doc_payload)
-            doc_data = doc_result.get("data", {})
-            document_id: Optional[int] = doc_data.get("document_id") if doc_data.get("document_id") is not None else doc_data.get("id")
-            if not document_id:
-                # Check if error indicates DUPLICATE_FILE conflict
-                error_info = doc_result.get("error", {})
-                if error_info.get("code") == "DUPLICATE_FILE":
-                    conflict_document_id = error_info.get("details", {}).get("conflict_document_id")
-                    # Handle below
-                else:
-                    raise ValueError(
-                        f"Registry create_document returned no document_id. "
-                        f"Response: {doc_result}"
-                    )
-            # version_id может быть 'v1-75' (строка) или числом
-            raw_vid = doc_data.get("version_id")
-            if raw_vid is not None:
-                try:
-                    version_id = int(str(raw_vid).lstrip("v").split("-")[0])
-                except (ValueError, IndexError):
-                    version_id = int(raw_vid) if isinstance(raw_vid, (int, float)) else None
-            else:
-                version_id = None
-            is_new_document: bool = doc_data.get("is_new_document", True)
-        except Exception as exc:
-            logger.error(
-                f"Failed to create document in Registry: {exc}",
-                extra={"draft_id": draft_id, "task_id": task_id},
-            )
-            raise ValueError(f"Registry create_document failed: {exc}")
-        finally:
-            await registry.close()
-
-        # Handle DUPLICATE_FILE conflict (race condition, doc §5)
-        if conflict_document_id is not None:
-            # Compensation: mark draft as discarded
-            logger.warning(
-                f"DUPLICATE_FILE conflict for draft {draft_id}, "
-                f"conflict_document_id={conflict_document_id}",
-                extra={"draft_id": draft_id, "task_id": task_id},
-            )
-            try:
-                reg_comp = RegistryServiceClient()
-                await reg_comp.update_draft_status(
-                    draft_id=draft_id,
-                    status=DraftState.DISCARDED.value,
-                    error_code="DUPLICATE_FILE_AFTER_APPROVE",
-                )
-                await reg_comp.close()
-            except Exception as comp_err:
-                logger.warning(
-                    f"Failed to compensate draft {draft_id}: {comp_err}",
-                    extra={"draft_id": draft_id, "task_id": task_id},
-                )
-
-            # Record superseded_by_document_id on task
-            task.superseded_by_document_id = conflict_document_id
-            await self.db.flush()
-
-            # Signal back to endpoint (which will convert to HTTPException)
-            raise ValueError(
-                f"DUPLICATE_FILE_AFTER_APPROVE: document already exists. "
-                f"conflict_document_id={conflict_document_id}"
-            )
-
-        # Store document_id and version_id on task for later steps
-        task.document_id = document_id
-        task.version_id = version_id
-        await self.db.flush()
-
-        # --- Step 1a: Sync document_id back to Registry draft ---
-        try:
-            registry_sync = RegistryServiceClient()
-            await registry_sync.update_draft_status(
-                draft_id=draft_id,
-                status=DraftState.APPROVED.value,
-                document_id=document_id,
-            )
-            await registry_sync.close()
-        except Exception as sync_err:
-            logger.warning(
-                f"Failed to sync document_id={document_id} to Registry draft {draft_id}: {sync_err}",
-                extra={"draft_id": draft_id, "document_id": document_id},
-            )
-
         # --- Save preview snapshot to Registry (P1F-4 / CV-5) ---
-        try:
-            # Collect preview metadata from steps
-            steps = await self.task_repo.get_task_steps(task_id)
-            # Priority (low → high):
-            #   0. Upload step: form-provided metadata_fields (POST /drafts)
-            #   1. OCR/Parser extracted metadata
-            #   2. Converter validated metadata
-            #   3. User metadata_overrides (PATCH /decide)
-            upload_step = next(
-                (s for s in steps if s.step_name == "upload"), None
-            )
-            preview_step = next(
-                (s for s in steps if s.step_name == "preview_ocr"), None
-            )
-            converter_step = next(
-                (s for s in steps if s.step_name == "preview_converter"), None
-            )
-            # Start with metadata_fields from upload form (if any)
-            snapshot_metadata = {}
-            if upload_step and upload_step.input_data:
-                form_meta = upload_step.input_data.get("metadata_fields", {})
-                if form_meta:
-                    snapshot_metadata.update(form_meta)
-            # Then OCR/Parser extracted metadata (overrides form fields)
-            if preview_step and preview_step.output_data:
-                ocr_meta = preview_step.output_data.get("metadata", {})
-                if ocr_meta:
-                    snapshot_metadata.update(ocr_meta)
-            # Then Converter validated metadata (highest from processing)
-            if converter_step and converter_step.output_data:
-                conv_meta = converter_step.output_data.get("metadata", {})
-                if conv_meta:
-                    snapshot_metadata.update(conv_meta)
-            # Finally, user metadata_overrides on top
-            if metadata_overrides:
-                snapshot_metadata.update(metadata_overrides)
+        # Collect preview metadata from steps
+        steps = await self.task_repo.get_task_steps(task_id)
+        # Priority (low → high):
+        #   0. Upload step: form-provided metadata_fields (POST /drafts)
+        #   1. OCR/Parser extracted metadata
+        #   2. Converter validated metadata
+        #   3. User metadata_overrides (PATCH /decide)
+        upload_step = next(
+            (s for s in steps if s.step_name == "upload"), None
+        )
+        preview_step = next(
+            (s for s in steps if s.step_name == "preview_ocr"), None
+        )
+        converter_step = next(
+            (s for s in steps if s.step_name == "preview_converter"), None
+        )
+        # Start with metadata_fields from upload form (if any)
+        snapshot_metadata = {}
+        if upload_step and upload_step.input_data:
+            form_meta = upload_step.input_data.get("metadata_fields", {})
+            if form_meta:
+                snapshot_metadata.update(form_meta)
+        # Then OCR/Parser extracted metadata (overrides form fields)
+        if preview_step and preview_step.output_data:
+            ocr_meta = preview_step.output_data.get("metadata", {})
+            if ocr_meta:
+                snapshot_metadata.update(ocr_meta)
+        # Then Converter validated metadata (highest from processing)
+        if converter_step and converter_step.output_data:
+            conv_meta = converter_step.output_data.get("metadata", {})
+            if conv_meta:
+                snapshot_metadata.update(conv_meta)
+        # Finally, user metadata_overrides on top
+        if metadata_overrides:
+            snapshot_metadata.update(metadata_overrides)
 
-            registry_snap = RegistryServiceClient()
-            await registry_snap.create_draft_snapshot(draft_id, snapshot_metadata)
-            await registry_snap.close()
-            logger.info(
-                "Preview snapshot saved",
-                extra={"draft_id": draft_id, "task_id": task_id},
-            )
-        except Exception as snap_err:
-            logger.warning(
-                f"Failed to save preview snapshot: {snap_err}",
-                extra={"draft_id": draft_id, "task_id": task_id},
-            )
+        registry_snap = RegistryServiceClient()
+        await registry_snap.create_draft_snapshot(draft_id, snapshot_metadata)
+        await registry_snap.close()
+        logger.info(
+            "Preview snapshot saved",
+            extra={"draft_id": draft_id, "task_id": task_id},
+        )
 
         await self.task_repo.update_task_status(
             task_id=task_id,
@@ -1503,7 +1374,7 @@ class PipelineOrchestrator:
                 step_name="registry_creation",
                 step_index=5,
                 service_name="Registry",
-                input_data={"draft_id": draft_id, "document_id": document_id},
+                input_data={"draft_id": draft_id, "document_id": None},
             )
 
         # Create rag_index step (if not exists)
@@ -1513,7 +1384,7 @@ class PipelineOrchestrator:
                 step_name="rag_index",
                 step_index=6,
                 service_name="RAG Builder",
-                input_data={"draft_id": draft_id, "document_id": document_id},
+                input_data={"draft_id": draft_id, "document_id": None},
             )
 
         # Refresh steps after potential creation
@@ -1535,9 +1406,9 @@ class PipelineOrchestrator:
                 },
             )
             return {
-                "document_id": document_id,
-                "version_id": version_id,
-                "is_new_document": is_new_document,
+                "document_id": None,
+                "version_id": None,
+                "is_new_document": False,
                 "queued": True,
             }
 
@@ -1591,9 +1462,9 @@ class PipelineOrchestrator:
                 )
 
         return {
-            "document_id": document_id,
-            "version_id": version_id,
-            "is_new_document": is_new_document,
+            "document_id": None,
+            "version_id": None,
+            "is_new_document": False,
             "queued": False,
         }
 
@@ -1622,18 +1493,12 @@ class PipelineOrchestrator:
         )
 
         # Update draft status
-        try:
-            registry = RegistryServiceClient()
-            await registry.update_draft_status(
-                draft_id=draft_id,
-                status=DraftState.DISCARDED.value,
-            )
-            await registry.close()
-        except Exception as e:
-            logger.warning(
-                f"Failed to update draft status: {e}",
-                extra={"draft_id": draft_id},
-            )
+        registry = RegistryServiceClient()
+        await registry.update_draft_status(
+            draft_id=draft_id,
+            status=DraftState.DISCARDED.value,
+        )
+        await registry.close()
 
         # Try to process queued tasks if a slot freed up
         await self._drain_queue()
@@ -1689,53 +1554,32 @@ class PipelineOrchestrator:
             )
 
         # --- Verify draft is in review_required status ---
-        try:
-            reg_check = RegistryServiceClient()
-            draft_check = await reg_check.get_draft(draft_id)
-            await reg_check.close()
-            draft_status = draft_check.get("data", {}).get("status", "")
-            if draft_status != "review_required":
-                raise ValueError(
-                    f"Confirm requires draft status 'review_required', "
-                    f"current status: {draft_status}"
-                )
-        except ValueError:
-            raise
-        except Exception as e:
-            logger.warning(
-                f"Failed to verify draft status for confirm: {e}",
-                extra={"draft_id": draft_id, "task_id": task_id},
+        reg_check = RegistryServiceClient()
+        draft_check = await reg_check.get_draft(draft_id)
+        await reg_check.close()
+        draft_status = draft_check.get("data", {}).get("status", "")
+        if draft_status != "review_required":
+            raise ValueError(
+                f"Confirm requires draft status 'review_required', "
+                f"current status: {draft_status}"
             )
 
         # --- Save metadata_overrides to Registry if provided ---
         if metadata_overrides:
-            try:
-                registry_meta = RegistryServiceClient()
-                await registry_meta.update_draft_metadata(
-                    draft_id=draft_id,
-                    preview_metadata=metadata_overrides,
-                )
-                await registry_meta.close()
-            except Exception as e:
-                logger.warning(
-                    f"Failed to save metadata_overrides: {e}",
-                    extra={"draft_id": draft_id, "task_id": task_id},
-                )
+            registry_meta = RegistryServiceClient()
+            await registry_meta.update_draft_metadata(
+                draft_id=draft_id,
+                preview_metadata=metadata_overrides,
+            )
+            await registry_meta.close()
 
         # --- Update draft status to validation ---
-        try:
-            registry = RegistryServiceClient()
-            await registry.update_draft_status(
-                draft_id=draft_id,
-                status="validation",
-            )
-            await registry.close()
-        except Exception as e:
-            logger.error(
-                f"Failed to set draft status to validation: {e}",
-                extra={"draft_id": draft_id, "task_id": task_id},
-            )
-            raise ValueError(f"Failed to set validation status: {e}")
+        registry = RegistryServiceClient()
+        await registry.update_draft_status(
+            draft_id=draft_id,
+            status="validation",
+        )
+        await registry.close()
 
         # --- Trigger full OCR/Parser + Converter cycle ---
         from app.tasks.pipeline_formation import (
@@ -1868,18 +1712,12 @@ class PipelineOrchestrator:
         )
 
         # Update draft status to discarded via Registry
-        try:
-            registry = RegistryServiceClient()
-            await registry.update_draft_status(
-                draft_id=draft_id,
-                status=DraftState.DISCARDED.value,
-            )
-            await registry.close()
-        except Exception as e:
-            logger.warning(
-                f"Failed to update draft status to discarded: {e}",
-                extra={"draft_id": draft_id},
-            )
+        registry = RegistryServiceClient()
+        await registry.update_draft_status(
+            draft_id=draft_id,
+            status=DraftState.DISCARDED.value,
+        )
+        await registry.close()
 
         # Try to process queued tasks if a slot freed up
         await self._drain_queue()

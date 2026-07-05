@@ -516,19 +516,13 @@ def run_registry_step(
                 # --- Step 2: Read sections with assigned IDs from Registry ---
                 # Always try to read sections, even if document_data was empty
                 # (document already exists from approve step)
-                try:
-                    sections_result = await client.get_document_sections(current_doc_id)
-                    sections_data = sections_result.get("data", {})
-                    saved_sections = sections_data.get("sections", [])
-                    logger.info(
-                        f"Document sections read from Registry: doc={current_doc_id} sections={len(saved_sections)}",
-                        extra={"task_id": task_id, "draft_id": draft_id},
-                    )
-                except Exception as sec_exc:
-                    logger.warning(
-                        f"Failed to read sections from Registry: {sec_exc}",
-                        extra={"task_id": task_id, "draft_id": draft_id},
-                    )
+                sections_result = await client.get_document_sections(current_doc_id)
+                sections_data = sections_result.get("data", {})
+                saved_sections = sections_data.get("sections", [])
+                logger.info(
+                    f"Document sections read from Registry: doc={current_doc_id} sections={len(saved_sections)}",
+                    extra={"task_id": task_id, "draft_id": draft_id},
+                )
 
                 # --- Step 3: Update draft status (idempotent) ---
                 await client.update_draft_status(

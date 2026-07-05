@@ -217,6 +217,9 @@ class TestRunRegistryStep:
         mock_client.update_draft_status = AsyncMock(return_value={
             "data": {"status": "approved", "document_id": 42}
         })
+        mock_client.get_document_sections = AsyncMock(return_value={
+            "data": {"sections": []}
+        })
         mock_client.close = AsyncMock()
 
         notify_completed = AsyncMock()
@@ -246,7 +249,10 @@ class TestRunRegistryStep:
         assert args[0] == 3
         assert args[1] == "registry_creation"
         assert args[2] == {"draft_id": DRAFT_ID, "document_id": 42}
-        assert args[3] == {"registry_id": 42, "version_id": 421, "status": "registered"}
+        assert args[3] == {
+            "registry_id": 42, "version_id": 421, "status": "registered",
+            "document_id": 42, "sections": [],
+        }
 
         assert result == {
             "status": "completed",
