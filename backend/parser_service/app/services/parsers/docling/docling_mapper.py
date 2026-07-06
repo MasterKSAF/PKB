@@ -18,6 +18,7 @@ import os
 from standardizer import JsonStandardizer
 from normalizer import Normalizer, ParseResult
 from quality_metrics import assess_quality_from_json
+from text_cleaner import soft_clean_line, is_garbage_line, process_extracted_text
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ def _update_image_keys(json_result: dict, images_dir: str) -> None:
         fpath = os.path.join(images_dir, fname)
         if os.path.exists(fpath):
             block['image_key'] = rel_path
+            block['_temp_path'] = fpath
             updated += 1
     if updated:
         print(f"  Updated {updated} image blocks with image_key",
@@ -176,7 +178,7 @@ def enrich_docling_document(doc, pdf_path: str):
     for pno in sorted(doc.pages.keys()):
         page = pdf[pno - 1]
         page_h = page.rect.height
-        blocks = page.get_text('dict')['blocks']
+        blocks = page.get_text('dict', sort=True)['blocks']
 
         page_doc_text = doc_fulltext_by_page.get(pno, '')
 
@@ -198,6 +200,11 @@ def enrich_docling_document(doc, pdf_path: str):
 
                 # Минимальные фильтры: только номера строк и пустые
                 if _re.match(r'^\.?\d+\s*$', ttext.strip()):
+                    continue
+
+                # Фильтрация мусора для сырого текста PyMuPDF
+                ttext_cleaned_enrich = soft_clean_line(ttext)
+                if is_garbage_line(ttext_cleaned_enrich):
                     continue
 
                 is_caption = 'рис' in ttext.lower() and len(ttext) <= 80
@@ -223,7 +230,7 @@ def enrich_docling_document(doc, pdf_path: str):
                     charspan=(0, len(ttext)),
                 )
 
-                doc.add_text(label=label, text=ttext, prov=prov)
+                doc.add_text(label=label, text=ttext_cleaned_enrich, prov=prov)
                 added_count += 1
 
                 # Сохраняем bbox для enrich-элемента
@@ -243,13 +250,18 @@ def enrich_docling_document(doc, pdf_path: str):
 def _create_converter():
     """Создаёт DocumentConverter с фиксированными pipeline_options."""
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.pipeline_options import (
+        PdfPipelineOptions,
+        TableFormerMode,
+    )
     from docling.document_converter import DocumentConverter, PdfFormatOption
 
     pipeline_options = PdfPipelineOptions()
     pipeline_options.do_ocr = False
     pipeline_options.do_table_structure = True
-    pipeline_options.table_structure_options.do_cell_matching = True
+    pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
+    pipeline_options.table_structure_options.do_cell_matching = False
+    pipeline_options.do_formula_enrichment = True
     pipeline_options.accelerator_options.num_threads = 4
     pipeline_options.layout_batch_size = 2
     pipeline_options.table_batch_size = 2
@@ -487,14 +499,19 @@ def _try_pipeline(pdf_path: str, max_pages: Optional[int] = None, page_start: in
         from docling.datamodel.base_models import InputFormat
         from docling.datamodel.document import InputDocument
         from docling.backend.docling_parse_v2_backend import DoclingParseV2DocumentBackend
-        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.datamodel.pipeline_options import (
+            PdfPipelineOptions,
+            TableFormerMode,
+        )
         from docling.datamodel.settings import DocumentLimits
         from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
 
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_ocr = False
         pipeline_options.do_table_structure = True
-        pipeline_options.table_structure_options.do_cell_matching = True
+        pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
+        pipeline_options.table_structure_options.do_cell_matching = False
+        pipeline_options.do_formula_enrichment = True
         pipeline_options.accelerator_options.num_threads = 4
         pipeline_options.layout_batch_size = 2
         pipeline_options.table_batch_size = 2
@@ -601,7 +618,7 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
         if pno < 1 or pno > len(doc):
             continue
         page = doc[pno - 1]
-        blocks = page.get_text('dict')['blocks']
+        blocks = page.get_text('dict', sort=True)['blocks']
         text_blocks = []
         for b in blocks:
             if b['type'] == 0:  # text
@@ -639,8 +656,10 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
         if bbox_h < 20:
             all_text = " ".join(t for _, t in page_text_blocks[p])
             if all_text:
-                kid["content"] = all_text
-                enriched += 1
+                cleaned = process_extracted_text(all_text)
+                if cleaned:
+                    kid["content"] = cleaned
+                    enriched += 1
             continue
 
         matching = []
@@ -653,8 +672,10 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
             matching.sort(key=lambda x: x[0])
             text = " ".join(t for _, t in matching).strip()
             if text:
-                kid["content"] = text
-                enriched += 1
+                cleaned = process_extracted_text(text)
+                if cleaned:
+                    kid["content"] = cleaned
+                    enriched += 1
 
     if enriched:
         print(f"  Enriched: {enriched} empty blocks filled",
@@ -671,7 +692,7 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
         if pno < 1 or pno > len(_doc):
             continue
         page = _doc[pno - 1]
-        blocks = page.get_text('dict')['blocks']
+        blocks = page.get_text('dict', sort=True)['blocks']
         
         # Весь текст Docling на этой странице
         page_doc_text = ' '.join(
@@ -691,13 +712,16 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
                 if t_norm in page_doc_norm:
                     continue
                 # Строка есть в PDF, но не в Docling — добавляем
+                ttext_cleaned = soft_clean_line(ttext)
+                if is_garbage_line(ttext_cleaned):
+                    continue
                 tb = [round(line['bbox'][0], 1), round(line['bbox'][1], 1),
                       round(line['bbox'][2], 1), round(line['bbox'][3], 1)]
                 kid = {
                     'type': 'paragraph',
                     'page number': pno,
                     'bounding box': tb,
-                    'content': ttext,
+                    'content': ttext_cleaned,
                 }
                 kids.append(kid)
                 added_footer += 1
@@ -716,7 +740,7 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
         if pno < 1 or pno > len(_doc2):
             continue
         page = _doc2[pno - 1]
-        blocks = page.get_text('dict')['blocks']
+        blocks = page.get_text('dict', sort=True)['blocks']
         
         page_doc_text = ' '.join(
             k.get('content', '') for k in kids
@@ -739,11 +763,14 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
                     continue
                 tb = [round(line['bbox'][0], 1), round(line['bbox'][1], 1),
                       round(line['bbox'][2], 1), round(line['bbox'][3], 1)]
+                ttext_cleaned = soft_clean_line(ttext)
+                if is_garbage_line(ttext_cleaned):
+                    continue
                 kid = {
                     'type': 'paragraph',
                     'page number': pno,
                     'bounding box': tb,
-                    'content': ttext,
+                    'content': ttext_cleaned,
                 }
                 kids.append(kid)
                 added_captions += 1

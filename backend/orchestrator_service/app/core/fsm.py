@@ -15,6 +15,7 @@ class DraftState(str, Enum):
     UPLOADED = "uploaded"
     PREVIEWING = "previewing"
     READY_FOR_APPROVE = "ready_for_approve"
+    PROCESSING = "processing"
     APPROVED = "approved"
     DISCARDED = "discarded"
 
@@ -23,7 +24,8 @@ class DraftState(str, Enum):
 DRAFT_TRANSITIONS: dict[DraftState, set[DraftState]] = {
     DraftState.UPLOADED: {DraftState.PREVIEWING},
     DraftState.PREVIEWING: {DraftState.READY_FOR_APPROVE},
-    DraftState.READY_FOR_APPROVE: {DraftState.APPROVED, DraftState.DISCARDED},
+    DraftState.READY_FOR_APPROVE: {DraftState.PROCESSING, DraftState.DISCARDED},
+    DraftState.PROCESSING: {DraftState.APPROVED, DraftState.DISCARDED},
     # Terminal states
     DraftState.APPROVED: set(),
     DraftState.DISCARDED: set(),

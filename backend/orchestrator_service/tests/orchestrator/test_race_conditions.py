@@ -133,6 +133,49 @@ class TestDuplicateDetectionInCreateDraft:
             pass
 
 
+class TestDoubleApproveRace:
+    """Double-click: повторный approve на том же черновике.
+
+    Первый approve проходит, task.pipeline_stage → FULL.
+    Второй approve должен упасть с ValueError (stage guard + FOR UPDATE re-check).
+    """
+
+    async def test_second_approve_raises_valueerror(
+        self, db_session: AsyncSession,
+    ):
+        repo = TaskRepository(db_session)
+        task = await repo.create_task(
+            draft_id=201, pipeline_type="formation", total_steps=3,
+        )
+        task.pipeline_stage = "decision"
+        task.full_completed = True
+        await db_session.flush()
+
+        mock_registry = AsyncMock()
+        mock_registry.get_draft.return_value = {
+            "data": {"title_key": "test-doc", "status": "ready_for_approve"},
+        }
+        mock_registry.get_draft_preview.return_value = {"data": {}}
+        mock_registry.create_draft_snapshot.return_value = {"data": {}}
+        mock_registry.update_draft_status.return_value = {"data": {}}
+
+        with patch(
+            "app.core.pipeline.orchestrator.RegistryServiceClient",
+            return_value=mock_registry,
+        ):
+            orchestrator = PipelineOrchestrator(db_session)
+
+            # First approve — should succeed
+            result = await orchestrator.approve_draft(draft_id=201, task_id=task.id)
+            assert "document_id" in result
+
+            # Second approve — must fail (stage already FULL)
+            with pytest.raises(ValueError) as exc_info:
+                await orchestrator.approve_draft(draft_id=201, task_id=task.id)
+
+            assert "already in stage" in str(exc_info.value)
+
+
 class TestApproveDraftRegistryError:
     """Ошибка Registry при approve (get_draft / get_draft_preview).
 

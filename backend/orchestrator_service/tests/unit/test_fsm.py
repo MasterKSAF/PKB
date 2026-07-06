@@ -13,12 +13,16 @@ class TestDraftFSM:
     def test_valid_transitions(self):
         assert DraftFSM.can_transition(DraftState.UPLOADED, DraftState.PREVIEWING)
         assert DraftFSM.can_transition(DraftState.PREVIEWING, DraftState.READY_FOR_APPROVE)
-        assert DraftFSM.can_transition(DraftState.READY_FOR_APPROVE, DraftState.APPROVED)
+        assert DraftFSM.can_transition(DraftState.READY_FOR_APPROVE, DraftState.PROCESSING)
         assert DraftFSM.can_transition(DraftState.READY_FOR_APPROVE, DraftState.DISCARDED)
+        assert DraftFSM.can_transition(DraftState.PROCESSING, DraftState.APPROVED)
+        assert DraftFSM.can_transition(DraftState.PROCESSING, DraftState.DISCARDED)
 
     def test_invalid_transitions(self):
         assert not DraftFSM.can_transition(DraftState.UPLOADED, DraftState.APPROVED)
         assert not DraftFSM.can_transition(DraftState.UPLOADED, DraftState.DISCARDED)
+        assert not DraftFSM.can_transition(DraftState.UPLOADED, DraftState.PROCESSING)
+        assert not DraftFSM.can_transition(DraftState.READY_FOR_APPROVE, DraftState.APPROVED)
         assert not DraftFSM.can_transition(DraftState.APPROVED, DraftState.UPLOADED)
         assert not DraftFSM.can_transition(DraftState.DISCARDED, DraftState.READY_FOR_APPROVE)
 
@@ -31,7 +35,7 @@ class TestDraftFSM:
 
     def test_allowed_transitions_from(self):
         allowed = DraftFSM.allowed_transitions_from(DraftState.READY_FOR_APPROVE)
-        assert sorted(allowed) == sorted([DraftState.APPROVED.value, DraftState.DISCARDED.value])
+        assert sorted(allowed) == sorted([DraftState.PROCESSING.value, DraftState.DISCARDED.value])
 
     def test_allowed_transitions_from_unknown(self):
         assert DraftFSM.allowed_transitions_from("unknown") == []
