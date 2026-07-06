@@ -14,9 +14,9 @@ from app.core.config import settings
 from app.core.logging_config import setup_logging
 from app.core.otel import setup_otel
 from app.core.trace import get_trace_id, set_trace_id, set_user_id, reset_trace_id
-from app.db.base import engine, Base
+from app.db.base import engine
+from app.db.retry_db import init_database
 from app.services.task_poller import start_poller, stop_poller
-from sqlalchemy import text
 
 
 @asynccontextmanager
@@ -33,22 +33,8 @@ async def lifespan(app: FastAPI):
             "db": settings.DATABASE_URL[:30] + "...",
         },
     )
-    async with engine.begin() as conn:
-        # Ensure pipeline schema exists
-        if settings.DATABASE_URL.startswith("sqlite"):
-            # SQLite: attach in-memory database as pipeline schema
-            try:
-                await conn.execute(text("ATTACH DATABASE ':memory:' AS pipeline"))
-            except Exception:
-                pass  # already attached
-        else:
-            # PostgreSQL: create schema if not exists
-            try:
-                await conn.execute(text("CREATE SCHEMA IF NOT EXISTS pipeline"))
-            except Exception:
-                pass  # non-fatal
-        # Create all tables if they don't exist
-        await conn.run_sync(Base.metadata.create_all)
+    # Initialise database schema with retry on transient connection errors
+    await init_database()
     # Initialize OpenTelemetry
     try:
         setup_otel(app)
