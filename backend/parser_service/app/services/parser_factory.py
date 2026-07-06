@@ -1,13 +1,12 @@
 """
 Фабрика парсеров: возвращает подходящий парсер по MIME-типу.
-Поддерживает мок-режим через настройку USE_MOCK_PARSER.
+По умолчанию для PDF используется DoclingParser.
 """
 
 import logging
 from typing import Optional
 from app.services.parsers.base import BaseParser, ParseResult
-from app.services.parsers.pdf_parser import PdfParser
-from app.services.parsers.docling_parser import DoclingParser  # новый импорт
+from app.services.parsers.docling_parser import DoclingParser
 from app.config import settings
 import json
 import os
@@ -18,33 +17,21 @@ logger = logging.getLogger(__name__)
 class ParserFactory:
     """Фабрика, возвращающая экземпляр парсера для заданного MIME-типа."""
 
-    _parsers = {
-        "application/pdf": PdfParser,
-    }
-
     @classmethod
     def get_parser(cls, mime_type: str) -> Optional[BaseParser]:
         """
         Возвращает экземпляр парсера для указанного MIME-типа.
-        Если включён Docling-парсер, возвращает DoclingParser для PDF.
+        Для PDF всегда использует DoclingParser (или мок в тестовом режиме).
         """
-        # ---- Переключение на Docling ----
-        if settings.use_docling_parser and mime_type == "application/pdf":
-            logger.debug("Using DoclingParser (USE_DOCLING_PARSER=True)")
+        if mime_type == "application/pdf":
+            if settings.use_mock_parser:
+                logger.debug("Using MockPdfParser")
+                return MockPdfParser()
+            logger.debug("Using DoclingParser")
             return DoclingParser()
 
-        # ---- Старый путь (мок или ODL) ----
-        if settings.use_mock_parser:
-            logger.debug("Using MockPdfParser")
-            return MockPdfParser()
-
-        parser_class = cls._parsers.get(mime_type)
-        if parser_class:
-            logger.debug("Returning parser for MIME %s: %s", mime_type, parser_class.__name__)
-            return parser_class()
-        else:
-            logger.warning("No parser registered for MIME %s", mime_type)
-            return None
+        logger.warning("No parser registered for MIME %s", mime_type)
+        return None
 
 
 class MockPdfParser(BaseParser):

@@ -2,12 +2,13 @@
 Тесты для фабрики парсеров.
 """
 from app.services.parser_factory import ParserFactory
-from app.services.parsers.pdf_parser import PdfParser
+from app.services.parsers.docling_parser import DoclingParser
+from app.services.parser_factory import MockPdfParser
 
 
 def test_get_pdf_parser():
     parser = ParserFactory.get_parser("application/pdf")
-    assert isinstance(parser, PdfParser)
+    assert isinstance(parser, DoclingParser)
 
 
 def test_get_unsupported_mime():

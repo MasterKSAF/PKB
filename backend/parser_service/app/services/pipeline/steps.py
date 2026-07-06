@@ -332,7 +332,16 @@ class TransformStep(PipelineStep):
 
         full_json = ctx.parse_result.full_json
 
-        if "document" in full_json and "quality" in full_json:
+        # Проверка: уже стандартизированный JSON (ODL или Docling)
+        is_standardized = (
+            ("document" in full_json and "quality" in full_json)
+            or (
+                "content" in full_json
+                and "document" in full_json["content"]
+                and "quality" in full_json["content"]
+            )
+        )
+        if is_standardized:
             logger.debug("JSON already standardized, skipping transformation")
             ctx.final_json = full_json
             return ctx

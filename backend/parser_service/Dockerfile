@@ -8,14 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Установка системных зависимостей:
-# - openjdk-11-jre-headless: для работы opendataloader-pdf
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    default-jre-headless \
     libmagic1 \
     && rm -rf /var/lib/apt/lists/*
-
-# Установка Java 11 в PATH (обычно уже прописан)
-ENV JAVA_HOME=/usr/lib/jvm/default-jre
 
 # Создание непривилегированного пользователя
 RUN groupadd -r parser && useradd -r -g parser parser
@@ -30,6 +25,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Копирование всего исходного кода (с учётом .dockerignore)
 COPY --chown=parser:parser ./app /app/app
+
+# Создание кэш-директории для HuggingFace/HuggingFace Hub (Docling)
+RUN mkdir -p /home/parser/.cache/huggingface && chown -R parser:parser /home/parser
+
+# Кэш для Docling (модели layout/table)
+ENV XDG_CACHE_HOME=/home/parser/.cache
 
 # Переключение на непривилегированного пользователя
 USER parser

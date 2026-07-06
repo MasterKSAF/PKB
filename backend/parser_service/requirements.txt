@@ -11,10 +11,7 @@ python-dotenv==1.2.2
 # зависимости aiohttp и botocore будут подтянуты автоматически
 yara-python
 
-opendataloader-pdf==2.4.7
-opendataloader-pdf[hybrid]
-
-docling 
+docling
 docling-core
 
 pytest==9.0.3

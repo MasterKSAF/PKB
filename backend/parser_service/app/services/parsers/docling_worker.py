@@ -29,7 +29,8 @@ def init_worker():
     pass
 
 
-def parse_pdf_worker(file_bytes: bytes, max_pages: Optional[int], page_start: int) -> Dict[str, Any]:
+def parse_pdf_worker(file_bytes: bytes, max_pages: Optional[int], page_start: int,
+                     images_dir: Optional[str] = None) -> Dict[str, Any]:
     """
     Вызывается в отдельном процессе для парсинга PDF.
     Создаёт временную папку, записывает файл, вызывает convert_via_docling_md.
@@ -63,6 +64,7 @@ def parse_pdf_worker(file_bytes: bytes, max_pages: Optional[int], page_start: in
             pdf_path=abs_path,
             max_pages=max_pages,
             page_start=page_start,
+            images_dir=images_dir,
         )
         return result
 
