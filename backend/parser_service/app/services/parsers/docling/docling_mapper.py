@@ -35,6 +35,8 @@ def _save_docling_pictures(doc, images_dir: str) -> Dict[Tuple[int, int], str]:
         {(page_no, seq): filename} — карта для привязки к JSON-блокам.
     """
     import os
+    import base64
+    import io as _io
     from PIL import Image
 
     os.makedirs(images_dir, exist_ok=True)
@@ -43,15 +45,31 @@ def _save_docling_pictures(doc, images_dir: str) -> Dict[Tuple[int, int], str]:
 
     for picture in doc.pictures:
         page_no = picture.prov[0].page_no if picture.prov else 1
-        if not (hasattr(picture, 'image') and picture.image is not None):
+        img_ref = getattr(picture, 'image', None)
+        if img_ref is None:
             continue
+
+        # Пробуем получить PIL Image разными способами
+        pil_img = None
+        if isinstance(img_ref, Image.Image):
+            pil_img = img_ref
+        elif hasattr(img_ref, 'pil_image'):
+            try:
+                val = img_ref.pil_image
+                if isinstance(val, Image.Image):
+                    pil_img = val
+            except Exception:
+                pass
+        if pil_img is None:
+            continue
+
         counter_per_page.setdefault(page_no, 0)
         counter_per_page[page_no] += 1
         seq = counter_per_page[page_no]
         fname = f"page_{page_no}_{seq}.png"
         fpath = os.path.join(images_dir, fname)
         try:
-            picture.image.save(fpath, format='PNG')
+            pil_img.save(fpath, format='PNG')
             saved[(page_no, seq)] = fname
         except Exception as e:
             logger.warning("Failed to save picture page=%d seq=%d: %s", page_no, seq, e)
@@ -539,7 +557,7 @@ def _merge_pages(target, source):
         elif item_type == "TableItem" and hasattr(item, "data") and item.data is not None:
             target.add_table(data=item.data, prov=prov)
         elif item_type == "PictureItem":
-            target.add_picture(prov=prov)
+            target.add_picture(prov=prov, image=getattr(item, 'image', None))
         else:
             target.add_text(label=label, text=text or "", prov=prov)
 

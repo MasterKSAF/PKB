@@ -464,7 +464,7 @@ def _merge_pages(target, source):
         elif item_type == "TableItem" and hasattr(item, "data") and item.data is not None:
             target.add_table(data=item.data, prov=prov)
         elif item_type == "PictureItem":
-            target.add_picture(prov=prov)
+            target.add_picture(prov=prov, image=getattr(item, 'image', None))
         else:
             target.add_text(label=label, text=text or "", prov=prov)
 
