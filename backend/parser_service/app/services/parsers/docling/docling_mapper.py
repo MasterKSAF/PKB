@@ -23,7 +23,7 @@ from text_cleaner import soft_clean_line, is_garbage_line, process_extracted_tex
 logger = logging.getLogger(__name__)
 
 # ============================================================
-# Новый MD-конвейер: DocumentConverter -> enrich(DoclingDocument) -> export_to_markdown -> md_to_json
+# Новый HTML-конвейер: DocumentConverter -> enrich(DoclingDocument) -> export_to_html -> html_to_json
 # ============================================================
 
 
@@ -283,7 +283,7 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
                             converter: Optional[Any] = None) -> Dict[str, Any]:
     """
     Новый конвейер:
-      DocumentConverter → enrich(DoclingDocument) → export_to_markdown() → md_to_json()
+      DocumentConverter → enrich(DoclingDocument) → export_to_html() → html_to_json()
 
     Параметры (совместимы со старым _try_pipeline):
         pdf_path: путь к PDF
@@ -295,7 +295,7 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
         JSON в формате opendataloader
     """
     from docling_core.types.doc.base import ImageRefMode
-    from md_to_json import md_to_document_json
+    from html_to_json import html_to_document_json
 
     file_name = Path(pdf_path).name
     file_bytes = Path(pdf_path).read_bytes()
@@ -341,23 +341,21 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
     # Enrich на уровне DoclingDocument (возвращает карту bbox)
     doc, bbox_map = enrich_docling_document(doc, pdf_path)
 
-    # Export каждой страницы отдельно (чтобы избежать склейки страниц в MD)
+    # Export каждой страницы отдельно (чтобы избежать склейки страниц в HTML)
     import re as _re
-    page_mds = []
+    page_htmls = []
     for pno in sorted(doc.pages.keys()):
-        md_text = doc.export_to_markdown(
+        html_text = doc.export_to_html(
             page_no=pno,
-            compact_tables=True,
             image_mode=ImageRefMode.REFERENCED,
-            traverse_pictures=True,
         )
-        if md_text and md_text.strip():
-            page_mds.append((pno, md_text.strip()))
+        if html_text and html_text.strip():
+            page_htmls.append((pno, html_text.strip()))
 
-    if not page_mds:
-        raise RuntimeError("No markdown generated")
+    if not page_htmls:
+        raise RuntimeError("No HTML generated")
 
-    json_result = md_to_document_json(page_mds, file_name)
+    json_result = html_to_document_json(page_htmls, file_name)
 
     # ---- Проставляем image_key из сохранённых картинок ----
     if images_dir:
@@ -461,7 +459,7 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
     if 'source' in json_result.get('content', {}).get('document', {}):
         json_result['content']['document']['source']['file_hash_sha256'] = file_hash
 
-    print(f"  Converted via MD pipeline: pages={len(doc.pages)}, page_mds={len(page_mds)}, blocks={len(json_result['content']['document']['block'])}",
+    print(f"  Converted via HTML pipeline: pages={len(doc.pages)}, page_htmls={len(page_htmls)}, blocks={len(json_result['content']['document']['block'])}",
           file=sys.stderr, flush=True)
 
     return json_result
