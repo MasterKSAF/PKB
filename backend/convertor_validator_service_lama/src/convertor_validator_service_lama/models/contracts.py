@@ -143,3 +143,45 @@ class RichDocumentPackagePlanResponse(BaseModel):
     package_name: str = "rich_document_package.json"
     final_correction_policy: str = "python_validator_assembler_applies_final_corrections"
     artifacts: list[RichDocumentArtifactPlanItem] = Field(default_factory=list)
+
+class DocumentStructureWorkflowStageSummary(BaseModel):
+    stage_id: str
+    stage_type: str
+    namespace_id: str | None = None
+    scope_title: str | None = None
+    scope_type: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
+    window_index: int | None = None
+    windows_count: int | None = None
+    items_count: int | None = None
+    items_preview_count: int | None = None
+    source_item_index_start: int | None = None
+    source_item_index_end: int | None = None
+    markdown_excerpt_chars: int = 0
+
+
+class DocumentStructureWorkflowDryRunRequest(BaseModel):
+    parse_result_payload: dict[str, Any] = Field(default_factory=dict)
+    numbering_scopes: list[dict[str, Any]] | None = None
+    overview_max_items: int = Field(default=180, ge=1)
+    scope_max_items: int = Field(default=350, ge=1)
+    scope_max_window_items: int = Field(default=300, ge=1)
+    scope_overlap_items: int = Field(default=20, ge=0)
+    item_text_chars: int = Field(default=700, ge=1)
+    markdown_excerpt_chars: int = Field(default=12_000, ge=1)
+
+
+class DocumentStructureWorkflowDryRunResponse(BaseModel):
+    service: str = "convertor_validator_service_lama"
+    mode: Literal["document_structure_workflow_dry_run"] = "document_structure_workflow_dry_run"
+    parse_job_id: str | None = None
+    page_count: int | None = None
+    items_count: int = 0
+    stages_count: int = 0
+    requires_overview_agent_output: bool = True
+    overview_items_preview_count: int = 0
+    overview_page_overview_count: int = 0
+    overview_markdown_excerpt_chars: int = 0
+    scope_inputs_count: int = 0
+    scope_stage_summaries: list[DocumentStructureWorkflowStageSummary] = Field(default_factory=list)
