@@ -1348,14 +1348,6 @@ class PipelineOrchestrator:
             progress_percent=50,
         )
 
-        # Sync draft status to Registry so UI hides the approve button (P1F-14)
-        registry_sync = RegistryServiceClient()
-        await registry_sync.update_draft_status(
-            draft_id=draft_id,
-            status=DraftState.APPROVED.value,
-        )
-        await registry_sync.close()
-
         from app.tasks.pipeline_formation import (
             run_ocr_full_step,
             run_parser_full_step,
