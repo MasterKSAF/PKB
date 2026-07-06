@@ -42,6 +42,27 @@ async def _create_task_with_upload_step(
     return task
 
 
+async def _create_active_task_with_step(
+    db: AsyncSession, draft_id: int,
+) -> TaskModel:
+    """Create a task with a minimal pending step so count_active_tasks counts it."""
+    repo = TaskRepository(db)
+    task = await repo.create_task(
+        draft_id=draft_id, pipeline_type="formation", total_steps=4,
+    )
+    task.status = TaskStatus.ACTIVE.value
+    await db.flush()
+    # Create a pending step — required for count_active_tasks
+    await repo.create_task_step(
+        task_id=task.id,
+        step_name="upload",
+        step_index=0,
+        service_name="Orchestrator",
+        input_data={"file_key": "test.pdf", "draft_id": draft_id},
+    )
+    return task
+
+
 @pytest.mark.asyncio
 class TestCountActiveTasks:
     """Tests for TaskRepository.count_active_tasks."""
@@ -52,24 +73,24 @@ class TestCountActiveTasks:
         assert count == 0
 
     async def test_counts_active_tasks(self, db_session: AsyncSession):
+        await _create_active_task_with_step(db_session, 1)
+        await _create_active_task_with_step(db_session, 2)
         repo = TaskRepository(db_session)
-        await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
-        await repo.create_task(draft_id=2, pipeline_type="formation", total_steps=4)
         count = await repo.count_active_tasks()
         assert count == 2
 
     async def test_excludes_completed(self, db_session: AsyncSession):
         repo = TaskRepository(db_session)
-        t1 = await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
-        t2 = await repo.create_task(draft_id=2, pipeline_type="formation", total_steps=4)
+        t1 = await _create_active_task_with_step(db_session, 1)
+        t2 = await _create_active_task_with_step(db_session, 2)
         await repo.update_task_status(t1.id, status="completed")
         count = await repo.count_active_tasks()
         assert count == 1  # t1 is terminal, t2 is active
 
     async def test_excludes_failed(self, db_session: AsyncSession):
         repo = TaskRepository(db_session)
-        t1 = await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
-        t2 = await repo.create_task(draft_id=2, pipeline_type="formation", total_steps=4)
+        t1 = await _create_active_task_with_step(db_session, 1)
+        t2 = await _create_active_task_with_step(db_session, 2)
         await repo.update_task_status(t1.id, status="failed")
         count = await repo.count_active_tasks()
         assert count == 1
@@ -102,14 +123,11 @@ class TestHasFreeSlot:
         assert await orchestrator._has_free_slot() is True
 
     async def test_returns_false_when_limit_reached(self, db_session: AsyncSession):
-        repo = TaskRepository(db_session)
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
-        # Fill up to the limit
+        # Fill up to the limit with tasks that have steps (counted as active)
         for i in range(limit):
-            await repo.create_task(
-                draft_id=i + 1,
-                pipeline_type="formation",
-                total_steps=4,
+            await _create_active_task_with_step(
+                db_session, i + 1,
             )
         orchestrator = PipelineOrchestrator(db_session)
         assert await orchestrator._has_free_slot() is False
@@ -121,8 +139,8 @@ class TestHasFreeSlot:
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
         tasks = []
         for i in range(limit):
-            t = await repo.create_task(
-                draft_id=i + 1, pipeline_type="formation", total_steps=4,
+            t = await _create_active_task_with_step(
+                db_session, i + 1,
             )
             tasks.append(t)
         # Complete the last task — frees a slot
@@ -219,10 +237,10 @@ class TestStartPipelineQueuing:
     ):
         repo = TaskRepository(db_session)
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
-        # Fill up to the limit with active tasks
+        # Fill up to the limit with active tasks (with steps)
         for i in range(limit):
-            await repo.create_task(
-                draft_id=i + 2, pipeline_type="formation", total_steps=4,
+            await _create_active_task_with_step(
+                db_session, draft_id=i + 2,
             )
 
         # Now try to start a new pipeline
@@ -249,11 +267,11 @@ class TestStartPipelineQueuing:
         repo = TaskRepository(db_session)
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
 
-        # Fill slots with active tasks
+        # Fill slots with active tasks (with steps)
         active_tasks = []
         for i in range(limit):
-            t = await repo.create_task(
-                draft_id=i + 2, pipeline_type="formation", total_steps=4,
+            t = await _create_active_task_with_step(
+                db_session, draft_id=i + 2,
             )
             active_tasks.append(t)
 
@@ -294,10 +312,10 @@ class TestApproveDraftQueuing:
         repo = TaskRepository(db_session)
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
 
-        # Fill slots with active tasks
+        # Fill slots with active tasks (with steps)
         for i in range(limit):
-            await repo.create_task(
-                draft_id=i + 1, pipeline_type="formation", total_steps=4,
+            await _create_active_task_with_step(
+                db_session, draft_id=i + 1,
             )
 
         # Create a task to attempt approve on

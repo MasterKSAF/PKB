@@ -79,8 +79,8 @@ class TestRunParserPreviewStep:
 
         assert result == {"status": "completed", "step": "preview_ocr", "task_id": 1}
 
-    def test_failure_path_triggers_retry(self):
-        """When Parser raises, the task calls notify_failed and retries."""
+    def test_failure_mid_retry_does_not_notify(self):
+        """When Parser raises mid-retry, notify_failed is NOT called (only on last retry)."""
         mock_client = AsyncMock()
         mock_client.process.side_effect = Exception("Parser service down")
         mock_client.close = AsyncMock()
@@ -105,6 +105,44 @@ class TestRunParserPreviewStep:
                         task_id=1, draft_id=DRAFT_ID, file_key="drafts/10/file.pdf",
                     )
             finally:
+                retry_patcher.stop()
+
+        # retries=0 < max_retries=3 : notify should NOT be called
+        notify_failed.assert_not_awaited()
+        mock_retry.assert_called_once()
+
+    def test_failure_notifies_on_last_retry(self):
+        """When Parser raises on the LAST attempt, notify_failed IS called."""
+        mock_client = AsyncMock()
+        mock_client.process.side_effect = Exception("Parser service down")
+        mock_client.close = AsyncMock()
+
+        notify_failed = AsyncMock()
+
+        with patch(
+            "app.tasks.pipeline_formation.ParserServiceClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_failed",
+            notify_failed,
+        ):
+            from app.tasks.pipeline_formation import run_parser_preview_step
+
+            # Simulate last retry attempt: retries = max_retries
+            task_instance = run_parser_preview_step.run.__self__
+            original_retries = task_instance.request.retries
+            task_instance.request.retries = task_instance.max_retries
+
+            mock_retry, retry_patcher = _patch_task_retry(
+                run_parser_preview_step, exc_to_raise=RuntimeError("retry-called"),
+            )
+            try:
+                with pytest.raises(RuntimeError, match="retry-called"):
+                    run_parser_preview_step.run(
+                        task_id=1, draft_id=DRAFT_ID, file_key="drafts/10/file.pdf",
+                    )
+            finally:
+                task_instance.request.retries = original_retries
                 retry_patcher.stop()
 
         notify_failed.assert_awaited_once_with(
@@ -153,7 +191,7 @@ class TestRunConverterFullStep:
 
         mock_client.convert_full.assert_awaited_once_with(
             {"file_key": "drafts/10/file.pdf", "draft_id": DRAFT_ID,
-             "task_id": 3, "version_id": 1},
+             "task_id": 3},
         )
 
         notify_completed.assert_awaited_once()
@@ -168,7 +206,11 @@ class TestRunConverterFullStep:
         assert result == {"status": "completed", "step": "full_converter", "task_id": 3}
 
     def test_failure_path_triggers_retry(self):
-        """When Converter full raises, task calls notify_failed and retries."""
+        """When Converter full raises, task retries but does NOT notify mid-retry.
+
+        _notify_step_failed is called only on the last retry attempt
+        (retries >= max_retries).
+        """
         mock_client = AsyncMock()
         mock_client.convert_full.side_effect = Exception("Converter full error")
         mock_client.close = AsyncMock()
@@ -193,6 +235,44 @@ class TestRunConverterFullStep:
                         task_id=3, draft_id=DRAFT_ID, file_key="drafts/10/file.pdf",
                     )
             finally:
+                retry_patcher.stop()
+
+        # retries=0 < max_retries=3 : notify should NOT be called
+        notify_failed.assert_not_awaited()
+        mock_retry.assert_called_once()
+
+    def test_failure_path_notifies_on_last_retry(self):
+        """When Converter full raises on the LAST attempt, notify_failed IS called."""
+        mock_client = AsyncMock()
+        mock_client.convert_full.side_effect = Exception("Converter full error")
+        mock_client.close = AsyncMock()
+
+        notify_failed = AsyncMock()
+
+        with patch(
+            "app.tasks.pipeline_formation.ConverterValidatorClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_failed",
+            notify_failed,
+        ):
+            from app.tasks.pipeline_formation import run_converter_full_step
+
+            # Simulate last retry attempt: retries = max_retries
+            task_instance = run_converter_full_step.run.__self__
+            original_retries = task_instance.request.retries
+            task_instance.request.retries = task_instance.max_retries
+
+            mock_retry, retry_patcher = _patch_task_retry(
+                run_converter_full_step, exc_to_raise=RuntimeError("retry-called"),
+            )
+            try:
+                with pytest.raises(RuntimeError, match="retry-called"):
+                    run_converter_full_step.run(
+                        task_id=3, draft_id=DRAFT_ID, file_key="drafts/10/file.pdf",
+                    )
+            finally:
+                task_instance.request.retries = original_retries
                 retry_patcher.stop()
 
         notify_failed.assert_awaited_once_with(
@@ -249,14 +329,14 @@ class TestRunParserFullStep:
             orchestrator_task_id=4,
             step_name="full_ocr",
             external_service="parser",
-            external_task_id=123,
+            external_task_id='parser-task-123',
             context_data={"draft_id": DRAFT_ID, "file_key": "drafts/10/file.pdf"},
         )
 
         assert result == {"status": "pending", "step": "full_ocr", "task_id": 4, "parser_task_id": "parser-task-123"}
 
-    def test_failure_path_triggers_retry(self):
-        """When Parser full raises, task calls notify_failed and retries."""
+    def test_failure_mid_retry_does_not_notify(self):
+        """When Parser full raises mid-retry, notify_failed is NOT called."""
         mock_client = AsyncMock()
         mock_client.process.side_effect = Exception("Parser full error")
         mock_client.close = AsyncMock()
@@ -283,6 +363,44 @@ class TestRunParserFullStep:
             finally:
                 retry_patcher.stop()
 
+        # retries=0 < max_retries=3 : notify should NOT be called
+        notify_failed.assert_not_awaited()
+        mock_retry.assert_called_once()
+
+    def test_failure_notifies_on_last_retry(self):
+        """When Parser full raises on the LAST attempt, notify_failed IS called."""
+        mock_client = AsyncMock()
+        mock_client.process.side_effect = Exception("Parser full error")
+        mock_client.close = AsyncMock()
+
+        notify_failed = AsyncMock()
+
+        with patch(
+            "app.tasks.pipeline_formation.ParserServiceClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_failed",
+            notify_failed,
+        ):
+            from app.tasks.pipeline_formation import run_parser_full_step
+
+            # Simulate last retry attempt: retries = max_retries
+            task_instance = run_parser_full_step.run.__self__
+            original_retries = task_instance.request.retries
+            task_instance.request.retries = task_instance.max_retries
+
+            mock_retry, retry_patcher = _patch_task_retry(
+                run_parser_full_step, exc_to_raise=RuntimeError("retry-called"),
+            )
+            try:
+                with pytest.raises(RuntimeError, match="retry-called"):
+                    run_parser_full_step.run(
+                        task_id=4, draft_id=DRAFT_ID, file_key="drafts/10/file.pdf",
+                    )
+            finally:
+                task_instance.request.retries = original_retries
+                retry_patcher.stop()
+
         notify_failed.assert_awaited_once_with(
             4, "full_ocr", "PARSER_ERROR", "Parser full error",
         )
@@ -297,8 +415,8 @@ class TestRunParserFullStep:
 class TestRunOcrFullStepFailure:
     """Failure path for run_ocr_full_step (happy path already tested)."""
 
-    def test_failure_triggers_retry(self):
-        """OCR full failure calls notify_failed and retries."""
+    def test_failure_mid_retry_does_not_notify(self):
+        """When OCR full raises mid-retry, notify_failed is NOT called."""
         mock_client = AsyncMock()
         mock_client.process.side_effect = Exception("OCR full error")
         mock_client.close = AsyncMock()
@@ -325,6 +443,44 @@ class TestRunOcrFullStepFailure:
             finally:
                 retry_patcher.stop()
 
+        # retries=0 < max_retries=3 : notify should NOT be called
+        notify_failed.assert_not_awaited()
+        mock_retry.assert_called_once()
+
+    def test_failure_notifies_on_last_retry(self):
+        """When OCR full raises on the LAST attempt, notify_failed IS called."""
+        mock_client = AsyncMock()
+        mock_client.process.side_effect = Exception("OCR full error")
+        mock_client.close = AsyncMock()
+
+        notify_failed = AsyncMock()
+
+        with patch(
+            "app.tasks.pipeline_formation.OCRServiceClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_failed",
+            notify_failed,
+        ):
+            from app.tasks.pipeline_formation import run_ocr_full_step
+
+            # Simulate last retry attempt: retries = max_retries
+            task_instance = run_ocr_full_step.run.__self__
+            original_retries = task_instance.request.retries
+            task_instance.request.retries = task_instance.max_retries
+
+            mock_retry, retry_patcher = _patch_task_retry(
+                run_ocr_full_step, exc_to_raise=RuntimeError("retry-called"),
+            )
+            try:
+                with pytest.raises(RuntimeError, match="retry-called"):
+                    run_ocr_full_step.run(
+                        task_id=5, draft_id=DRAFT_ID, file_key="drafts/10/file.pdf",
+                    )
+            finally:
+                task_instance.request.retries = original_retries
+                retry_patcher.stop()
+
         notify_failed.assert_awaited_once_with(
             5, "full_ocr", "OCR_ERROR", "OCR full error",
         )
@@ -342,6 +498,7 @@ class TestRunRegistryStepFailure:
     def test_failure_triggers_retry(self):
         """Registry step failure calls notify_failed and retries."""
         mock_client = AsyncMock()
+        mock_client.get_document_sections.return_value = {"data": {"sections": [{"id": 1}]}}
         mock_client.update_draft_status.side_effect = Exception("Registry error")
         mock_client.close = AsyncMock()
 
@@ -423,7 +580,7 @@ class TestRunRagIndexStep:
             from app.tasks.pipeline_indexation import run_rag_index_step
 
             result = run_rag_index_step.run(
-                job_id="job-1", document_id=str(DOCUMENT_ID),
+                job_id=1, document_id=str(DOCUMENT_ID),
             )
 
         # Verify Registry was called
@@ -443,7 +600,7 @@ class TestRunRagIndexStep:
         # Verify external task was saved
         mock_ext_repo.create.assert_awaited_once()
 
-        assert result == {"status": "pending", "step": "rag_index", "job_id": "job-1"}
+        assert result == {"status": "pending", "step": "rag_index", "job_id": 1}
         # No integrity check from the task anymore — Poller handles it
         mock_rag.check_index.assert_not_called()
 
@@ -461,7 +618,7 @@ class TestRunRagIndexStep:
         from app.tasks.pipeline_indexation import run_rag_index_step
 
         result = run_rag_index_step.run(
-            job_id="job-skip", document_id="99",
+            job_id=99, document_id="99",
         )
 
         assert result["status"] == "skipped"
@@ -517,7 +674,7 @@ class TestRunRagIndexStep:
             from app.tasks.pipeline_indexation import run_rag_index_step
 
             result = run_rag_index_step.run(
-                job_id="job-int-fail", document_id="50",
+                job_id=1, document_id="50",
             )
 
         # Integrity check is NOT called from the task anymore
@@ -566,7 +723,7 @@ class TestRunRagIndexStep:
             try:
                 with pytest.raises(RuntimeError, match="retry-called"):
                     run_rag_index_step.run(
-                        job_id="job-build-fail", document_id="51",
+                        job_id=1, document_id="51",
                     )
             finally:
                 retry_patcher.stop()

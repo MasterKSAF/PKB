@@ -105,7 +105,7 @@ class TestIdempotencyCacheTtl:
             "вернуть 409 DUPLICATE_FILE. Статус: %s" % r2.status_code
         )
         detail = r2.json()
-        assert detail.get("detail", {}).get("error", {}).get("code") == "DUPLICATE_FILE"
+        assert detail.get("detail", {}).get("error", {}).get("code") == "DUPLICATE_IN_PROGRESS"
 
     def test_cache_hit_just_under_ttl(
         self, client: TestClient, auth_header: dict

@@ -62,8 +62,8 @@ class TestRunConverterPreviewStep:
         mock_client.convert_preview.assert_awaited_once()
         notify_completed.assert_awaited_once()
 
-    def test_error_calls_notify_failed(self):
-        """При ошибке конвертации вызывается _notify_step_failed."""
+    def test_error_calls_notify_on_last_retry(self):
+        """При ошибке конвертации _notify_step_failed вызывается только на последней попытке (retries >= max_retries)."""
         mock_client = AsyncMock()
         mock_client.convert_preview.side_effect = Exception("Converter error")
         mock_client.close = AsyncMock()
@@ -79,6 +79,49 @@ class TestRunConverterPreviewStep:
         ):
             from app.tasks.pipeline_formation import run_converter_preview_step
 
+            # Simulate last retry: retries = max_retries (=3)
+            task_instance = run_converter_preview_step.run.__self__
+            original_retries = task_instance.request.retries
+            task_instance.request.retries = task_instance.max_retries
+
+            mock_retry, patcher = _patch_task_retry(
+                run_converter_preview_step,
+                exc_to_raise=RuntimeError("retry-called"),
+            )
+
+            try:
+                with pytest.raises(RuntimeError, match="retry-called"):
+                    run_converter_preview_step.run(
+                        task_id=1, draft_id=10, file_key="test.pdf"
+                    )
+            finally:
+                task_instance.request.retries = original_retries
+                patcher.stop()
+
+        notify_failed.assert_awaited_once()
+        args, _ = notify_failed.await_args
+        assert args[0] == 1
+        assert args[1] == "preview_converter"
+        assert args[2] == "CONVERTER_ERROR"
+
+    def test_error_mid_retry_does_not_notify(self):
+        """На промежуточной попытке (retries < max_retries) _notify_step_failed НЕ вызывается."""
+        mock_client = AsyncMock()
+        mock_client.convert_preview.side_effect = Exception("Converter error")
+        mock_client.close = AsyncMock()
+
+        notify_failed = AsyncMock()
+
+        with patch(
+            "app.tasks.pipeline_formation.ConverterValidatorClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_failed",
+            notify_failed,
+        ):
+            from app.tasks.pipeline_formation import run_converter_preview_step
+
+            # Default: retries = 0 < max_retries
             mock_retry, patcher = _patch_task_retry(
                 run_converter_preview_step,
                 exc_to_raise=RuntimeError("retry-called"),
@@ -91,9 +134,5 @@ class TestRunConverterPreviewStep:
 
             patcher.stop()
 
-        notify_failed.assert_awaited_once()
-        args, _ = notify_failed.await_args
-        assert args[0] == 1  # task_id
-        assert args[1] == "preview_converter"  # step_name
-        assert args[2] == "CONVERTER_ERROR"  # error_code
-        assert "Converter error" in args[3]  # error_message
+        notify_failed.assert_not_awaited()
+        mock_retry.assert_called_once()

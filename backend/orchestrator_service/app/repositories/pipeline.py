@@ -233,30 +233,8 @@ class TaskRepository:
     ) -> list[TaskStep]:
         """Find running steps exceeding absolute execution timeout (H1).
 
-        Unlike get_stale_running_steps, this ignores health-check and returns
-        steps that must be killed regardless of service liveness.
-        """
-        from datetime import timedelta
-
-        threshold = datetime.now(timezone.utc) - timedelta(seconds=max_execution_seconds)
-        result = await self.db.execute(
-            select(TaskStep).where(
-                and_(
-                    TaskStep.status == "running",
-                    TaskStep.started_at < threshold,
-                    TaskStep.deleted_at.is_(None),
-                )
-            )
-        )
-        return list(result.scalars().all())
-
-    async def get_stale_running_steps_for_hard_kill(
-        self, max_execution_seconds: int = 1800
-    ) -> list[TaskStep]:
-        """Find running steps exceeding absolute execution timeout (H1).
-
         Unlike get_stale_running_steps, this ignores health-check and
-        directly returns steps that must be killed.
+        returns steps that must be killed regardless of service liveness.
         """
         from datetime import timedelta
 

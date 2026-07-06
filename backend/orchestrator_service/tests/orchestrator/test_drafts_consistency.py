@@ -278,10 +278,10 @@ class TestBoundaryConditions:
         """file_size = MAX_FILE_SIZE_BYTES — ровно на границе (< vs <=).
 
         Используем патч константы, чтобы не генерировать 100 MB данных."""
-        import app.api.v1.endpoints.drafts as drafts_module
-        original = drafts_module.MAX_FILE_SIZE_BYTES
+        from app.core.config import settings
+        original = settings.validation.MAX_FILE_SIZE_BYTES
         boundary = 1024 * 10  # 10 KB для теста
-        drafts_module.MAX_FILE_SIZE_BYTES = boundary
+        settings.validation.MAX_FILE_SIZE_BYTES = boundary
 
         try:
             content = b"X" * boundary  # ровно MAX
@@ -298,16 +298,16 @@ class TestBoundaryConditions:
                 f"Got {response.status_code}, body={response.text[:200]}"
             )
         finally:
-            drafts_module.MAX_FILE_SIZE_BYTES = original
+            settings.validation.MAX_FILE_SIZE_BYTES = original
 
     def test_file_size_one_byte_over_max(
         self, client: TestClient, auth_header: dict
     ):
         """file_size = MAX + 1 → 413."""
-        import app.api.v1.endpoints.drafts as drafts_module
-        original = drafts_module.MAX_FILE_SIZE_BYTES
+        from app.core.config import settings
+        original = settings.validation.MAX_FILE_SIZE_BYTES
         boundary = 1024 * 10
-        drafts_module.MAX_FILE_SIZE_BYTES = boundary
+        settings.validation.MAX_FILE_SIZE_BYTES = boundary
 
         try:
             content = b"X" * (boundary + 1)
@@ -322,7 +322,7 @@ class TestBoundaryConditions:
                 f"got {response.status_code}"
             )
         finally:
-            drafts_module.MAX_FILE_SIZE_BYTES = original
+            settings.validation.MAX_FILE_SIZE_BYTES = original
 
     def test_metadata_json_null(
         self, client: TestClient, auth_header: dict

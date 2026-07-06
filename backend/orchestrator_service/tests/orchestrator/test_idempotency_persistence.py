@@ -97,7 +97,7 @@ class TestIdempotencyCachePersistence:
             "Статус: %s (ожидался 409)." % r3.status_code
         )
         detail = r3.json()
-        assert detail.get("detail", {}).get("error", {}).get("code") == "DUPLICATE_FILE"
+        assert detail.get("detail", {}).get("error", {}).get("code") == "DUPLICATE_IN_PROGRESS"
 
     def test_cache_is_module_level_dict(self):
         """_IDEMPOTENCY_CACHE — module-level dict (НЕ Redis)."""

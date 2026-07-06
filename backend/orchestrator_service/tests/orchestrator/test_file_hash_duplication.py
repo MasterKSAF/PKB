@@ -194,18 +194,7 @@ class TestFileHashDuplication:
                 output_data={"full_result": {"text": "parsed"}},
             )
 
-        # complete full_converter step
-        steps = await repo.get_task_steps(task.id)
-        conv = next(s for s in steps if s.step_name == "full_converter")
-        await repo.complete_task_step(
-            conv.id,
-            output_data={
-                "document": {"content": []},
-                "metadata": {"title": "Test Doc", "doc_code": "TEST-300"},
-            },
-        )
-
-        # on_step_completed("full_converter") захватывает create_document
+        # on_step_completed("full_converter") — передаём metadata для create_document
         captured = {}
         original_create = mock_reg.create_document
 
@@ -225,6 +214,7 @@ class TestFileHashDuplication:
                 task_id=task.id, step_name="full_converter",
                 output_data={
                     "document": {"content": []},
+                    "metadata": {"title": "Test Doc", "doc_code": "TEST-300"},
                 },
             )
 
@@ -302,16 +292,9 @@ class TestFileHashDuplication:
                 output_data={"full_result": {"text": "parsed"}},
             )
 
-        # full_converter step with Registry error
-        steps = await repo.get_task_steps(task.id)
-        conv = next(s for s in steps if s.step_name == "full_converter")
-        await repo.complete_task_step(
-            conv.id,
-            output_data={
-                "document": {"content": []},
-                "metadata": {"title": "Test", "doc_code": "T-301"},
-            },
-        )
+        # full_converter step — on_step_completed сам завершит его с metadata
+        captured = {}
+        original_create = mock_reg.create_document
 
         async def _failing_create(data):
             raise RuntimeError("Registry create_document failed: DUPLICATE_FILE")
@@ -327,7 +310,10 @@ class TestFileHashDuplication:
             with pytest.raises(RuntimeError) as exc_info:
                 await orchestrator.on_step_completed(
                     task_id=task.id, step_name="full_converter",
-                    output_data={"document": {"content": []}},
+                    output_data={
+                        "document": {"content": []},
+                        "metadata": {"title": "Test", "doc_code": "T-301"},
+                    },
                 )
 
             assert "DUPLICATE_FILE" in str(exc_info.value), (

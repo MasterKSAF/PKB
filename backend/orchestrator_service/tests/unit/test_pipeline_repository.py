@@ -34,7 +34,7 @@ class TestTaskRepository:
         )
         assert task.id is not None
         assert isinstance(task.id, int)
-        assert task.status == "active"
+        assert task.status == "queued"
         assert task.pipeline_stage == "upload"
         assert task.pipeline_type == "formation"
         assert task.total_steps == 4

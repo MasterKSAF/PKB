@@ -526,6 +526,12 @@ class PipelineOrchestrator:
                 f"Step {step_name} already completed, skipping completion",
                 extra={"task_id": task_id, "step": step_name},
             )
+            # Return early — downstream dispatch (converter, preview_completed,
+            # full_step_completed, drain_queue) already happened when this
+            # step first completed.  Re-entering would re-submit converter
+            # or re-trigger preview_completed side-effects (Registry update,
+            # OCR fallback, auto-approve).
+            return
 
         # Calculate progress
         total_steps = task.total_steps or 3
@@ -2014,6 +2020,18 @@ class PipelineOrchestrator:
                 error_code="PENDING_TIMEOUT",
                 error_message=f"Step pending for >{pending_timeout}s",
             )
+            try:
+                await self.on_step_failed(
+                    step.task_id,
+                    step.step_name,
+                    "PENDING_TIMEOUT",
+                    f"Step pending for >{pending_timeout}s",
+                )
+            except Exception as e:
+                logger.error(
+                    f"Cleanup on_step_failed for pending step {step.id} failed: {e}",
+                    extra={"step_id": step.id, "task_id": step.task_id},
+                )
             cleaned += 1
 
         # Handle stale running steps — hard kill (H1: absolute execution timeout)
@@ -2032,6 +2050,18 @@ class PipelineOrchestrator:
                 error_code="STEP_HARD_TIMEOUT",
                 error_message=f"Step running for >{max_exec_time}s (hard limit)",
             )
+            try:
+                await self.on_step_failed(
+                    step.task_id,
+                    step.step_name,
+                    "STEP_HARD_TIMEOUT",
+                    f"Step running for >{max_exec_time}s (hard limit)",
+                )
+            except Exception as e:
+                logger.error(
+                    f"Cleanup on_step_failed for hard-kill step {step.id} failed: {e}",
+                    extra={"step_id": step.id, "task_id": step.task_id},
+                )
             cleaned += 1
 
         # Handle stale running steps (B2: check if service is alive)
@@ -2061,6 +2091,18 @@ class PipelineOrchestrator:
                 error_code="SERVICE_DEAD",
                 error_message=f"Service {step.service_name} unreachable, step ran >{running_timeout}s",
             )
+            try:
+                await self.on_step_failed(
+                    step.task_id,
+                    step.step_name,
+                    "SERVICE_DEAD",
+                    f"Service {step.service_name} unreachable, step ran >{running_timeout}s",
+                )
+            except Exception as e:
+                logger.error(
+                    f"Cleanup on_step_failed for service-dead step {step.id} failed: {e}",
+                    extra={"step_id": step.id, "task_id": step.task_id},
+                )
             cleaned += 1
 
         # Handle absolute timeout tasks (P3S-1)

@@ -204,7 +204,8 @@ def run_converter_preview_step(
 
     except Exception as exc:
         logger.error(f"Converter preview failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "preview_converter", "CONVERTER_ERROR", str(exc)))
+        if self.request.retries >= self.max_retries:
+            _run_async(_notify_step_failed(task_id, "preview_converter", "CONVERTER_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 
@@ -432,7 +433,8 @@ def run_converter_full_step(
 
     except Exception as exc:
         logger.error(f"Converter full failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "full_converter", "CONVERTER_ERROR", str(exc)))
+        if self.request.retries >= self.max_retries:
+            _run_async(_notify_step_failed(task_id, "full_converter", "CONVERTER_ERROR", str(exc)))
         raise self.retry(exc=exc)
 
 
