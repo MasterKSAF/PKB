@@ -44,7 +44,7 @@ from gateway.rate_limiter import (
     check_idor_rate_limit,
     check_rate_limit,
 )
-from gateway.routers import proxy_router
+from gateway.routers import gateway_file_proxy, gateway_catch_all
 
 # ---------------------------------------------------------------------------
 # OpenTelemetry (CM-6) — graceful fallback если пакет не установлен
@@ -433,6 +433,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 or path == "/api/v1/system/mode"
                 or path == "/api/v1/system/diagnostics"
                 or path.startswith("/api/v1/system/diagnostics/")
+                or path.startswith("/api/v1/files/")
             ):
                 if not user_context["is_authenticated"]:
                     _log_access_denied(request, "UNAUTHORIZED", "Требуется аутентификация")
@@ -1142,10 +1143,23 @@ async def gateway_diagnostics(request: Request, rest_of_path: str = ""):
 
 
 # ---------------------------------------------------------------------------
-# Proxy router — catch-all для всех /api/v1/* запросов к сервисам
-# --------------------------------------------------------------------------
+# Proxy routes — files (MinIO) proxy first, then catch-all for other /api/v1/*
+# ---------------------------------------------------------------------------
+# NOTE: Маршруты регистрируются напрямую, а не через APIRouter, потому что
+# app.include_router(APIRouter) создаёт _IncludedRouter в Starlette 1.3.1,
+# который не обрабатывает запросы к {path:path} маршрутам корректно.
+# Регистрируем более специфичный маршрут файлов перед catch-all.
 
-app.include_router(proxy_router)
+app.add_api_route(
+    "/api/v1/files/{file_key:path}",
+    gateway_file_proxy,
+    methods=["GET"],
+)
+app.add_api_route(
+    "/api/v1/{path:path}",
+    gateway_catch_all,
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+)
 
 
 # ---------------------------------------------------------------------------

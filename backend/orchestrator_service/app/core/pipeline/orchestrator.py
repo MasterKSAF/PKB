@@ -265,6 +265,10 @@ class PipelineOrchestrator:
 
         return dequeued
 
+    async def drain_queue(self) -> int:
+        """Public wrapper for _drain_queue, used by QueueDrainPoller."""
+        return await self._drain_queue()
+
     async def start_pipeline(
         self, draft_id: int, task_id: int, file_key: str, mime_type: str,
         metadata_fields: Optional[dict] = None,

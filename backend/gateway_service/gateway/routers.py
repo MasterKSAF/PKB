@@ -37,9 +37,11 @@ async def gateway_file_proxy(request: Request, file_key: str) -> Response:
 
     Определяет bucket MinIO по префиксу ключа:
       - previews/* → images
+      - .png/.jpg/.gif → images
       - иначе → documents
     """
-    bucket = gw_config.minio_image_bucket if file_key.startswith("previews/") else gw_config.minio_bucket
+    _is_image = file_key.startswith("previews/") or file_key.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"))
+    bucket = gw_config.minio_image_bucket if _is_image else gw_config.minio_bucket
     try:
         minio_response = await fetch_from_minio(file_key, bucket=bucket)
         content_type = minio_response.headers.get("content-type", "application/octet-stream")
@@ -57,6 +59,24 @@ async def gateway_file_proxy(request: Request, file_key: str) -> Response:
         )
     except Exception as exc:
         logger.warning(f"MinIO proxy error for {file_key}: {exc}")
+        # Fallback: try the other bucket
+        fallback_bucket = gw_config.minio_bucket if _is_image else gw_config.minio_image_bucket
+        if fallback_bucket != bucket:
+            try:
+                minio_response = await fetch_from_minio(file_key, bucket=fallback_bucket)
+                content_type = minio_response.headers.get("content-type", "application/octet-stream")
+                return StreamingResponse(
+                    content=minio_response.iter_bytes(),
+                    status_code=minio_response.status_code,
+                    media_type=content_type,
+                    headers={
+                        "Content-Disposition": minio_response.headers.get("content-disposition", "inline"),
+                        "Content-Length": minio_response.headers.get("content-length", ""),
+                        "Accept-Ranges": "bytes",
+                    },
+                )
+            except Exception:
+                pass
         return JSONResponse(
             status_code=404,
             content=_error(
