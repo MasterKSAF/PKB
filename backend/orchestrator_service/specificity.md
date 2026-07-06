@@ -328,6 +328,14 @@ preview_converter — running/pending → 409 PREVIEW_IN_PROGRESS.
 
 ### 3.17. Health-check с коротким timeout (06.07)
 - `_check_service_health`: timeout снижен с 5s до 3s.
+
+### 3.18. cleanup_stale_tasks — batch commits между группами (06.07)
+- `cleanup_stale_tasks` теперь коммитит результаты после каждой логической группы
+  (stale tasks → pending steps → hard kill → health-check → timeout → validation → locks),
+  а не одним транзакционным блоком.
+- Health-check-запросы (`_check_service_health`) выполняются ПОСЛЕ коммита предыдущих
+  батчей, не удерживая транзакцию и row-locks на время HTTP-вызова.
+- При ошибке в одном батче предыдущие батчи сохраняются.
 - Fallback URL (`/api/v1/health`) пробуется только при 404 на первом `/health`.
 - При сетевых ошибках на первом URL — попытка второго, на втором — сразу False.
 

@@ -184,6 +184,7 @@ class PipelineOrchestrator:
     async def _drain_queue(self) -> int:
         """Process queued tasks if execution slots are available.
 
+        Uses try_activate_next_queued_task for atomic slot-check + activate (§3.1).
         FIFO order: picks oldest queued task (by created_at) and dispatches
         its Celery tasks. Continues until all slots are filled or queue is empty.
 
@@ -191,8 +192,8 @@ class PipelineOrchestrator:
             int: Number of tasks dequeued and activated.
         """
         dequeued = 0
-        while await self._has_free_slot():
-            queued_task = await self.task_repo.get_next_queued_task()
+        while True:
+            queued_task = await self.task_repo.try_activate_next_queued_task()
             if not queued_task:
                 break
 
@@ -218,7 +219,9 @@ class PipelineOrchestrator:
                         "draft_id": queued_task.draft_id,
                     },
                 )
-                # Skip this task (leave as queued) and try next
+                # Activate anyway — cleanup_stale_tasks will catch malformed tasks.
+                # Don't rollback here: this transaction may include changes from
+                # the caller (e.g. on_step_completed already flushed progress).
                 continue
 
             logger.info(
@@ -230,11 +233,7 @@ class PipelineOrchestrator:
                 },
             )
 
-            # Switch to active
-            await self.task_repo.update_task_status(
-                queued_task.id,
-                status=TaskStatus.ACTIVE.value,
-            )
+            # Task already ACTIVE (set inside try_activate_next_queued_task)
 
             # Choose dispatcher based on pipeline stage
             if queued_task.pipeline_stage in (
@@ -382,8 +381,12 @@ class PipelineOrchestrator:
         )
 
         # ── Check free slot and dispatch or queue ───────────────────
-        if await self._has_free_slot():
-            # Ensure task is active
+        # Atomic slot check: count active tasks WITH FOR UPDATE to prevent
+        # concurrent slot overflow (§3.1)
+        active_count = await self.task_repo.count_active_tasks(for_update=True)
+        limit = settings.pipeline.MAX_CONCURRENT_TASKS
+        if active_count < limit:
+            # Slot available — activate and dispatch immediately
             if task.status != TaskStatus.ACTIVE.value:
                 await self.task_repo.update_task_status(
                     task_id=task_id,
@@ -394,7 +397,7 @@ class PipelineOrchestrator:
             await self._enqueue_celery_tasks(task, file_key)
 
             # Update progress
-            await self.task_repo.update_task_status(
+            await self.task_repo.update_task_progress(
                 task_id=task_id,
                 progress_percent=10,
             )
@@ -416,7 +419,7 @@ class PipelineOrchestrator:
                 "Pipeline preview queued (no free slot)",
                 extra={
                     "draft_id": draft_id, "task_id": task_id,
-                    "active_tasks": await self.task_repo.count_active_tasks(),
+                    "active_tasks": active_count,
                 },
             )
             return False
@@ -538,8 +541,8 @@ class PipelineOrchestrator:
         completed_steps = len({s.step_name for s in steps if s.status == "completed"})
         progress = min(int((completed_steps / total_steps) * 100), 99)
 
-        await self.task_repo.update_task_status(
-            task_id=task_id,
+        await self.task_repo.update_task_progress(
+            task_id=task.id,
             progress_percent=progress,
         )
 
@@ -938,7 +941,7 @@ class PipelineOrchestrator:
         trace_id = task.trace_id or ""
 
         if step_name == "full_ocr":
-            await self.task_repo.update_task_status(
+            await self.task_repo.update_task_progress(
                 task_id=task.id,
                 progress_percent=65,
             )
@@ -977,7 +980,7 @@ class PipelineOrchestrator:
             )
 
         elif step_name == "full_converter":
-            await self.task_repo.update_task_status(
+            await self.task_repo.update_task_progress(
                 task_id=task.id,
                 progress_percent=85,
             )
@@ -1063,7 +1066,7 @@ class PipelineOrchestrator:
 
         elif step_name == "registry_creation":
             # Registry done — now dispatch RAG indexing
-            await self.task_repo.update_task_status(
+            await self.task_repo.update_task_progress(
                 task_id=task.id,
                 progress_percent=90,
             )
@@ -2028,6 +2031,10 @@ class PipelineOrchestrator:
             )
             cleaned += 1
 
+        # Commit batch 1: stale tasks before moving to steps
+        if stale_tasks:
+            await self.db.commit()
+
         # Handle stale pending steps (P3S-1)
         pending_timeout = settings.pipeline.PENDING_STATE_TIMEOUT
         stale_steps = await self.task_repo.get_stale_pending_steps(pending_timeout)
@@ -2050,6 +2057,10 @@ class PipelineOrchestrator:
                     extra={"step_id": step.id, "task_id": step.task_id},
                 )
             cleaned += 1
+
+        # Commit batch 2: pending steps before hard kill
+        if stale_steps:
+            await self.db.commit()
 
         # Handle stale running steps — hard kill (H1: absolute execution timeout)
         # Runs BEFORE health-check: kills steps that exceed MAX_STEP_EXECUTION_TIME
@@ -2081,7 +2092,12 @@ class PipelineOrchestrator:
                 )
             cleaned += 1
 
+        # Commit batch 3: hard-kill before health-check (save progress)
+        if stale_hard_kill:
+            await self.db.commit()
+
         # Handle stale running steps (B2: check if service is alive)
+        # NOTE: health checks run AFTER commit to keep transaction short
         running_timeout = settings.pipeline.RUNNING_STEP_TIMEOUT
         stale_running = await self.task_repo.get_stale_running_steps(running_timeout)
         for step in stale_running:
@@ -2122,6 +2138,10 @@ class PipelineOrchestrator:
                 )
             cleaned += 1
 
+        # Commit batch 4: stale-running health-check results
+        if stale_running:
+            await self.db.commit()
+
         # Handle absolute timeout tasks (P3S-1)
         abs_timeout = settings.pipeline.ABSOLUTE_TASK_TIMEOUT_HOURS
         timed_out_tasks = await self.task_repo.get_absolute_timeout_tasks(abs_timeout)
@@ -2136,6 +2156,10 @@ class PipelineOrchestrator:
                 error_message=f"Task exceeded absolute timeout of {abs_timeout}h",
             )
             cleaned += 1
+
+        # Commit batch 5: absolute timeout before stale validation
+        if timed_out_tasks:
+            await self.db.commit()
 
         # Handle stale validation tasks (C2: rag_index completed but activation stuck)
         validating_timeout = settings.pipeline.VALIDATING_STATE_TIMEOUT
@@ -2157,6 +2181,10 @@ class PipelineOrchestrator:
             )
             cleaned += 1
 
+        # Commit batch 6: stale validation before stale locks
+        if stale_validating:
+            await self.db.commit()
+
         # Handle stale locks (M4: extracted to TaskRepository)
         released_locks = await self.task_repo.release_stale_locks(max_seconds=max_time)
         for lock in released_locks:
@@ -2166,6 +2194,8 @@ class PipelineOrchestrator:
                 extra={"task_id": lock["id"], "old_worker": lock["locked_by"]},
             )
         cleaned += len(released_locks)
+
+        # Commit batch 7: stale locks (no explicit commit needed — get_db_context commits at exit)
 
         if cleaned:
             logger.warning(f"Cleaned up {cleaned} stale pipeline items")

@@ -6,8 +6,8 @@ Covers:
 2. PipelineOrchestrator._has_free_slot() — returns bool
 3. start_pipeline() queues when limit reached, dispatches when slot free
 4. approve_draft() queues when limit reached
-5. _drain_queue() processes queued tasks FIFO
-6. get_next_queued_task() FIFO ordering with SKIP LOCKED
+5. _drain_queue() processes queued tasks FIFO via try_activate_next_queued_task
+6. try_activate_next_queued_task() atomic slot-check + FIFO activation with SKIP LOCKED
 """
 
 import pytest
@@ -165,24 +165,29 @@ class TestHasFreeSlot:
 
 
 @pytest.mark.asyncio
-class TestGetNextQueuedTask:
-    """Tests for TaskRepository.get_next_queued_task."""
+class TestTryActivateNextQueuedTask:
+    """Tests for TaskRepository.try_activate_next_queued_task (§3.1)."""
 
     async def test_returns_none_when_empty(self, db_session: AsyncSession):
         repo = TaskRepository(db_session)
-        assert await repo.get_next_queued_task() is None
+        assert await repo.try_activate_next_queued_task() is None
 
-    async def test_returns_oldest_queued(self, db_session: AsyncSession):
+    async def test_activates_oldest_queued(self, db_session: AsyncSession):
         repo = TaskRepository(db_session)
         t1 = await repo.create_task(draft_id=1, pipeline_type="formation", total_steps=4)
         t2 = await repo.create_task(draft_id=2, pipeline_type="formation", total_steps=4)
         await repo.update_task_status(t1.id, status=TaskStatus.QUEUED.value)
         await repo.update_task_status(t2.id, status=TaskStatus.QUEUED.value)
 
-        # Should return the oldest (t1, smaller id = earlier created_at)
-        next_task = await repo.get_next_queued_task()
+        # Should activate the oldest (t1, smaller id = earlier created_at)
+        next_task = await repo.try_activate_next_queued_task()
         assert next_task is not None
         assert next_task.id == t1.id
+        assert next_task.status == TaskStatus.ACTIVE.value
+
+        # t2 should still be queued
+        t2_updated = await repo.get_task(t2.id)
+        assert t2_updated.status == TaskStatus.QUEUED.value
 
     async def test_ignores_active_tasks(self, db_session: AsyncSession):
         repo = TaskRepository(db_session)
@@ -191,9 +196,10 @@ class TestGetNextQueuedTask:
         await repo.update_task_status(t1.id, status=TaskStatus.QUEUED.value)
         # t2 stays active
 
-        next_task = await repo.get_next_queued_task()
+        next_task = await repo.try_activate_next_queued_task()
         assert next_task is not None
         assert next_task.id == t1.id
+        assert next_task.status == TaskStatus.ACTIVE.value
 
     async def test_ignores_terminal_tasks(self, db_session: AsyncSession):
         repo = TaskRepository(db_session)
@@ -202,9 +208,43 @@ class TestGetNextQueuedTask:
         await repo.update_task_status(t1.id, status=TaskStatus.QUEUED.value)
         await repo.update_task_status(t2.id, status=TaskStatus.COMPLETED.value)
 
-        next_task = await repo.get_next_queued_task()
+        next_task = await repo.try_activate_next_queued_task()
         assert next_task is not None
         assert next_task.id == t1.id
+        assert next_task.status == TaskStatus.ACTIVE.value
+
+    async def test_returns_none_when_limit_reached(
+        self, db_session: AsyncSession
+    ):
+        """When max concurrent tasks is reached, returns None."""
+        repo = TaskRepository(db_session)
+        limit = settings.pipeline.MAX_CONCURRENT_TASKS
+
+        # Create active tasks up to the limit
+        for i in range(limit):
+            t = await repo.create_task(
+                draft_id=i, pipeline_type="formation", total_steps=4
+            )
+            await repo.update_task_status(t.id, status=TaskStatus.ACTIVE.value)
+            step = await repo.create_task_step(
+                task_id=t.id,
+                step_name="preview_ocr",
+                step_index=1,
+                service_name="Parser Service",
+            )
+            await repo.start_task_step(step.id)
+
+        # One more task, queued (should not be activated)
+        extra = await repo.create_task(
+            draft_id=limit, pipeline_type="formation", total_steps=4
+        )
+        await repo.update_task_status(extra.id, status=TaskStatus.QUEUED.value)
+
+        # All slots taken — should return None
+        result = await repo.try_activate_next_queued_task()
+        assert result is None, (
+            f"Expected None when {limit} slots full, got task {result.id if result else None}"
+        )
 
 
 @pytest.mark.asyncio

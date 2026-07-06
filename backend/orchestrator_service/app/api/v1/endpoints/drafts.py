@@ -1208,7 +1208,7 @@ async def decide_draft(
         )
 
     if request.action in ("approve", "reject", "proceed", "force_new_version"):
-        if task.pipeline_stage not in ("decision", "upload", "preview"):
+        if task.pipeline_stage not in (TaskStage.DECISION.value, TaskStage.UPLOAD.value, TaskStage.PREVIEW.value):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -1257,7 +1257,7 @@ async def decide_draft(
                 )
 
     if request.action == "confirm":
-        if task.pipeline_stage not in ("decision",):
+        if task.pipeline_stage not in (TaskStage.DECISION.value,):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -1272,7 +1272,7 @@ async def decide_draft(
             )
 
     if request.action == "stop_duplicate":
-        if task.pipeline_stage not in ("preview", "decision"):
+        if task.pipeline_stage not in (TaskStage.PREVIEW.value, TaskStage.DECISION.value):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={

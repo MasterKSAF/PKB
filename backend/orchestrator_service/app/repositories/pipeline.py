@@ -4,6 +4,7 @@ Task repository — CRUD operations for Task and TaskStep.
 Manages the lifecycle of pipeline task execution records.
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -13,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.pipeline import Task, TaskStep
 from app.core.fsm import TaskStatus
 from app.core.fsm import TaskStage
+
+logger = logging.getLogger(__name__)
 
 
 class TaskRepository:
@@ -25,13 +28,16 @@ class TaskRepository:
     # Task
     # ------------------------------------------------------------------
 
-    async def count_active_tasks(self) -> int:
+    async def count_active_tasks(self, for_update: bool = False) -> int:
         """Count tasks that have pending/running steps (actually consuming services).
 
         Tasks in decision stage (all steps completed, waiting for user)
         do NOT count as active — they don't consume service capacity.
         A task is considered active iff it has at least one step
         in 'pending' or 'running' status.
+
+        When ``for_update=True``, acquires FOR UPDATE row-level locks on
+        the matched Task rows to serialize concurrent slot checks (§3.1).
         """
         # Subquery: task_ids with pending or running steps
         active_step_subq = (
@@ -44,15 +50,16 @@ class TaskRepository:
             )
         ).scalar_subquery()
 
-        result = await self.db.execute(
-            select(func.count(Task.id)).where(
-                and_(
-                    Task.deleted_at.is_(None),
-                    Task.status == TaskStatus.ACTIVE.value,
-                    Task.id.in_(active_step_subq),
-                )
+        query = select(func.count(Task.id)).where(
+            and_(
+                Task.deleted_at.is_(None),
+                Task.status == TaskStatus.ACTIVE.value,
+                Task.id.in_(active_step_subq),
             )
         )
+        if for_update:
+            query = query.with_for_update()
+        result = await self.db.execute(query)
         return result.scalar() or 0
 
     async def create_task(
@@ -107,9 +114,21 @@ class TaskRepository:
         step_name: Optional[str] = None,
         step_index: Optional[int] = None,
         progress_percent: Optional[int] = None,
+        for_update: bool = True,
     ) -> Optional[Task]:
-        """Update task status and optionally current step info."""
-        task = await self.get_task_for_update(task_id)
+        """Update task status and optionally current step info.
+
+        When ``for_update=True`` (default), acquires a row-level lock (FOR UPDATE)
+        on the task row — needed for status transitions that must be atomic.
+        Pass ``for_update=False`` for progress/stage-only updates to avoid
+        lock contention under load (§5.1).
+        """
+        if for_update or status is not None:
+            # Status changes (active/completed/failed/queued) must be atomic
+            task = await self.get_task_for_update(task_id)
+        else:
+            # Progress/stage-only: no lock needed
+            task = await self.get_task(task_id)
         if task is None:
             return None
         if status is not None:
@@ -126,6 +145,32 @@ class TaskRepository:
             task.started_at = datetime.now(timezone.utc)
         if status in ("completed", "failed"):
             task.completed_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return task
+
+    async def update_task_progress(
+        self,
+        task_id: int,
+        progress_percent: int,
+    ) -> Optional[Task]:
+        """Update only progress_percent without row-level lock (§5.1)."""
+        task = await self.get_task(task_id)
+        if task is None:
+            return None
+        task.progress_percent = progress_percent
+        await self.db.flush()
+        return task
+
+    async def update_task_stage(
+        self,
+        task_id: int,
+        stage: str,
+    ) -> Optional[Task]:
+        """Update only pipeline_stage without row-level lock (§5.1)."""
+        task = await self.get_task(task_id)
+        if task is None:
+            return None
+        task.pipeline_stage = stage
         await self.db.flush()
         return task
 
@@ -582,12 +627,51 @@ class TaskRepository:
         )
         return list(result.scalars().all())
 
-    async def get_next_queued_task(self) -> Optional[Task]:
-        """Find the oldest queued task (FIFO) with row-level lock.
+    async def try_activate_next_queued_task(self) -> Optional[Task]:
+        """Atomically check slot + pick + activate oldest queued task (§3.1).
 
-        Uses SELECT ... FOR UPDATE SKIP LOCKED to safely handle
-        concurrent dequeue attempts.
+        1. Lock active-task count (FOR UPDATE) to serialize concurrent checks
+        2. If slot available, pick oldest queued (SKIP LOCKED) and activate
+        3. If slot full, return None
+
+        This prevents exceeding MAX_CONCURRENT_TASKS under parallel load.
         """
+        from app.core.config import settings
+
+        # 1. Atomically count active tasks WITH row lock to prevent
+        #    concurrent slot overflow (§3.1)
+        active_step_subq = (
+            select(TaskStep.task_id)
+            .where(
+                and_(
+                    TaskStep.status.in_(["pending", "running"]),
+                    TaskStep.deleted_at.is_(None),
+                )
+            )
+        ).scalar_subquery()
+
+        count_result = await self.db.execute(
+            select(func.count(Task.id))
+            .where(
+                and_(
+                    Task.deleted_at.is_(None),
+                    Task.status == TaskStatus.ACTIVE.value,
+                    Task.id.in_(active_step_subq),
+                )
+            )
+            .with_for_update()
+        )
+        active_count = count_result.scalar() or 0
+        limit = settings.pipeline.MAX_CONCURRENT_TASKS
+
+        if active_count >= limit:
+            logger.debug(
+                "No free slot (atomic check)",
+                extra={"active": active_count, "limit": limit},
+            )
+            return None
+
+        # 2. Pick oldest queued task (SKIP LOCKED — other workers will skip)
         result = await self.db.execute(
             select(Task)
             .where(
@@ -598,7 +682,16 @@ class TaskRepository:
             .limit(1)
             .with_for_update(skip_locked=True)
         )
-        return result.scalar_one_or_none()
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+
+        # 3. Activate atomically (same transaction)
+        task.status = TaskStatus.ACTIVE.value
+        if task.started_at is None:
+            task.started_at = datetime.now(timezone.utc)
+        await self.db.flush()
+        return task
 
     async def has_critical_notifications(self, task_id: int) -> bool:
         """Check if task has any critical notifications."""
