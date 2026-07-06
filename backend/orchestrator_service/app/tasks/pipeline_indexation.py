@@ -8,7 +8,6 @@ Steps:
 1. RAG Index — chunk document, generate embeddings, store in pgvector
 """
 
-import asyncio
 import logging
 
 from app.celery_app import celery_app
@@ -17,16 +16,9 @@ from app.core.fsm import TaskStatus
 from app.core.pipeline.orchestrator import PipelineOrchestrator
 from app.db.session import get_db_context
 from app.repositories.external_task_repo import ExternalTaskRepository
+from app.tasks.async_utils import run_async, close_async_loop
 
 logger = logging.getLogger("tasks.pipeline_2")
-
-
-def _run_async(coro):
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=120, name="tasks.pipeline.indexation.run_rag_index_step")
@@ -67,10 +59,10 @@ def run_rag_index_step(self, job_id: str, document_id: str):
         try:
             from app.services.registry_client import RegistryServiceClient
             reg_client = RegistryServiceClient()
-            sections_response = _run_async(
+            sections_response = run_async(
                 reg_client.get_document_sections(document_id=doc_id_int)
             )
-            _run_async(reg_client.close())
+            run_async(reg_client.close())
         except Exception as reg_err:
             logger.error(f"Failed to fetch sections from Registry: {reg_err}")
             raise
@@ -85,13 +77,13 @@ def run_rag_index_step(self, job_id: str, document_id: str):
         try:
             from app.services.rag_client import RAGBuilderClient
             client = RAGBuilderClient()
-            build_result = _run_async(
+            build_result = run_async(
                 client.index_document(
                     document_id=document_id,
                     sections=sections,
                 )
             )
-            _run_async(client.close())
+            run_async(client.close())
 
             # Save to external_tasks — Poller will track completion and do integrity check
             async def _save_external():
@@ -110,7 +102,7 @@ def run_rag_index_step(self, job_id: str, document_id: str):
                     )
                     await db.commit()
 
-            _run_async(_save_external())
+            run_async(_save_external())
 
             # Release lock after successful submission — Poller handles completion
             _release_lock(lock_key)
@@ -128,10 +120,12 @@ def run_rag_index_step(self, job_id: str, document_id: str):
     except Exception as exc:
         logger.error(f"RAG Index submission failed: {exc}")
         _release_lock(lock_key)
-        _run_async(
+        run_async(
             _notify_step_failed(job_id, "rag_index", "RAG_INDEX_ERROR", str(exc))
         )
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 def _release_lock(lock_key: str) -> None:
@@ -161,8 +155,8 @@ def run_reprocess_step(self, task_id: int, document_id: str):
         from app.services.rag_client import RAGBuilderClient
         client = RAGBuilderClient()
         # Delete existing index first
-        _run_async(client.delete_index(document_id))
-        _run_async(client.close())
+        run_async(client.delete_index(document_id))
+        run_async(client.close())
 
         # Resolve document_id to int
         try:
@@ -175,10 +169,10 @@ def run_reprocess_step(self, task_id: int, document_id: str):
         try:
             from app.services.registry_client import RegistryServiceClient
             reg_client = RegistryServiceClient()
-            sections_response = _run_async(
+            sections_response = run_async(
                 reg_client.get_document_sections(document_id=doc_id_int)
             )
-            _run_async(reg_client.close())
+            run_async(reg_client.close())
         except Exception as reg_err:
             logger.warning(f"Failed to fetch sections from Registry for reprocess: {reg_err}")
             sections_response = {"data": {"sections": []}}
@@ -187,13 +181,13 @@ def run_reprocess_step(self, task_id: int, document_id: str):
 
         # Trigger re-index via RAG Builder
         rag = RAGBuilderClient()
-        _run_async(
+        run_async(
             rag.index_document(
                 document_id=document_id,
                 sections=sections,
             )
         )
-        _run_async(rag.close())
+        run_async(rag.close())
 
         # Save to external_tasks — Poller will track completion
         async def _save_external():
@@ -211,15 +205,17 @@ def run_reprocess_step(self, task_id: int, document_id: str):
                 )
                 await db.commit()
 
-        _run_async(_save_external())
+        run_async(_save_external())
 
         logger.info(f"Reprocess submitted for doc {document_id}, will be polled")
         return {"status": "pending", "step": "reprocess", "task_id": task_id}
 
     except Exception as exc:
         logger.error(f"Reprocess submission failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "reprocess", "REPROCESS_ERROR", str(exc)))
+        run_async(_notify_step_failed(task_id, "reprocess", "REPROCESS_ERROR", str(exc)))
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=30, name="tasks.pipeline.run_activate_document_step")
@@ -235,10 +231,10 @@ def run_activate_document_step(self, job_id: str, document_id: int):
     try:
         rag = RAGBuilderClient()
         # Check status once (no longpoll) — if already done, handle immediately
-        status_result = _run_async(rag.get_build_status(
+        status_result = run_async(rag.get_build_status(
             document_id=document_id, longpoll=0,
         ))
-        _run_async(rag.close())
+        run_async(rag.close())
 
         final_status = status_result.get("status", "")
 
@@ -270,7 +266,7 @@ def run_activate_document_step(self, job_id: str, document_id: int):
                     )
                     await db.commit()
 
-            _run_async(_save_external())
+            run_async(_save_external())
             logger.info(
                 f"Background activation deferred to Poller for doc {document_id}",
             )
@@ -279,6 +275,8 @@ def run_activate_document_step(self, job_id: str, document_id: int):
     except Exception as e:
         logger.error(f"Background activation submission failed for doc {document_id}: {e}")
         raise self.retry(exc=e)
+    finally:
+        close_async_loop()
 
 
 def _activate_document_sync(document_id: int) -> dict:
@@ -288,8 +286,8 @@ def _activate_document_sync(document_id: int) -> dict:
 
     try:
         rag = RAGBuilderClient()
-        check_result = _run_async(rag.check_index(document_id=document_id))
-        _run_async(rag.close())
+        check_result = run_async(rag.check_index(document_id=document_id))
+        run_async(rag.close())
 
         integrity_ok = check_result.get("integrity_ok", False)
         if not integrity_ok:
@@ -301,11 +299,11 @@ def _activate_document_sync(document_id: int) -> dict:
             return {"status": "integrity_failed", "document_id": document_id}
 
         registry = RegistryServiceClient()
-        _run_async(registry.update_document_status(
+        run_async(registry.update_document_status(
             document_id=document_id,
             status="active",
         ))
-        _run_async(registry.close())
+        run_async(registry.close())
         logger.info(f"Document {document_id} activated")
         return {"status": "active", "document_id": document_id}
 

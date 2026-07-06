@@ -2,22 +2,14 @@
 Scheduled Celery tasks for pipeline housekeeping.
 """
 
-import asyncio
 import logging
 
 from app.celery_app import celery_app
 from app.core.pipeline.orchestrator import PipelineOrchestrator
 from app.db.session import get_db_context
+from app.tasks.async_utils import run_async, close_async_loop
 
 logger = logging.getLogger("tasks.scheduler")
-
-
-def _run_async(coro):
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 @celery_app.task(name="app.tasks.scheduler.cleanup_stale_tasks")
@@ -34,9 +26,12 @@ def cleanup_stale_tasks():
             count = await orchestrator.cleanup_stale_tasks()
             return count
 
-    cleaned = _run_async(_cleanup())
-    logger.info(f"Stale job cleanup complete: {cleaned} jobs marked as dead")
-    return {"cleaned": cleaned}
+    try:
+        cleaned = run_async(_cleanup())
+        logger.info(f"Stale job cleanup complete: {cleaned} jobs marked as dead")
+        return {"cleaned": cleaned}
+    finally:
+        close_async_loop()
 
 
 @celery_app.task(name="app.tasks.scheduler.integrity_check")
@@ -55,11 +50,10 @@ def integrity_check():
         checked = 0
         failed = 0
         for task in tasks:
+            client = RAGBuilderClient()
             try:
-                client = RAGBuilderClient()
                 doc_id = str(task.document_id or task.draft_id)
                 result = await client.check_index(doc_id)
-                await client.close()
 
                 if not result.get("integrity_ok", True):
                     logger.error(
@@ -84,11 +78,16 @@ def integrity_check():
             except Exception as e:
                 logger.warning(f"Background check error for task {task.id}: {e}")
                 checked += 1
+            finally:
+                await client.close()
 
         logger.info(f"Background check: {checked} checked, {failed} failed")
         return {"checked": checked, "failed": failed}
 
-    return _run_async(_check())
+    try:
+        return run_async(_check())
+    finally:
+        close_async_loop()
 
 
 @celery_app.task(name="app.tasks.scheduler.drain_pipeline_queue")
@@ -105,6 +104,9 @@ def drain_pipeline_queue():
             orchestrator = PipelineOrchestrator(db)
             await orchestrator._drain_queue()
 
-    _run_async(_drain())
-    logger.info("Pipeline queue drain complete")
-    return {"drained": True}
+    try:
+        run_async(_drain())
+        logger.info("Pipeline queue drain complete")
+        return {"drained": True}
+    finally:
+        close_async_loop()

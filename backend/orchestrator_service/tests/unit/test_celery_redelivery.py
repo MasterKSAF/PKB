@@ -152,40 +152,47 @@ class TestPoisonedMessage:
 
 
 class TestRunAsyncClosesEventLoop:
-    """`_run_async` корректно закрывает event-loop при исключении.
+    """`run_async` / `close_async_loop` корректно управляют event-loop'ом.
 
-    Эти тесты синхронные (НЕ async), т.к. _run_async сам создаёт
+    Эти тесты синхронные (НЕ async), т.к. run_async сам создаёт
     новый event loop через asyncio.new_event_loop(). При pytest-asyncio
     (asyncio_mode=auto) одновременный запуск двух loop'ов недопустим.
     """
 
-    def test_run_async_closes_loop_on_success(self):
+    def test_run_async_reuses_loop_within_task(self):
         """
-        После успешного выполнения coroutine event-loop закрыт.
+        В рамках одной задачи (до close_async_loop) loop переиспользуется.
         """
-        from app.tasks.scheduler import _run_async
+        from app.tasks.async_utils import run_async, close_async_loop
 
         async def _ok():
             return 42
 
-        # _run_async синхронно запускает coroutine.
-        result = _run_async(_ok())
-        assert result == 42
+        try:
+            result1 = run_async(_ok())
+            result2 = run_async(_ok())
+            assert result1 == 42
+            assert result2 == 42
+        finally:
+            close_async_loop()
 
-    def test_run_async_closes_loop_on_exception(self):
+    def test_run_async_raises_on_exception_and_closes_later(self):
         """
-        При исключении внутри coroutine event-loop всё равно закрыт.
-        Без этого — warning 'unclosed event loop' и утечка ресурсов.
+        При исключении coroutine loop остаётся открытым,
+        close_async_loop() в finally задачи закрывает его.
         """
-        from app.tasks.scheduler import _run_async
+        from app.tasks.async_utils import run_async, close_async_loop
 
         async def _fail():
             raise ValueError("boom")
 
         with pytest.raises(ValueError, match="boom"):
-            _run_async(_fail())
-        # Если бы _run_async не закрывал loop в `finally`,
-        # pytest выдал бы ResourceWarning. Тест проходит молча — это и есть успех.
+            try:
+                run_async(_fail())
+            except ValueError:
+                raise
+            finally:
+                close_async_loop()
 
 
 @pytest.mark.asyncio

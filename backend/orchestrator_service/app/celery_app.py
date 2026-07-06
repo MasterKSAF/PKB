@@ -74,5 +74,42 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+# ── Worker startup: release stale locks held by this worker ──────────
+@celery_app.on_after_finalize.connect
+def _release_locks_on_startup(**kwargs):
+    """Release stale DB locks held by previous instance of this worker.
+
+    Fires once in the main process before any tasks are consumed.
+    Only runs in production (skipped under pytest).
+    """
+    import sys
+    if "pytest" in sys.modules:
+        return  # skip during tests
+
+    import os
+    from app.repositories.pipeline import TaskRepository
+    from app.db.session import get_db_context
+
+    worker_id = os.environ.get("CELERY_WORKER_ID", f"worker-{os.getpid()}")
+
+    async def _cleanup():
+        async with get_db_context() as db:
+            repo = TaskRepository(db)
+            count = await repo.release_locks_by_worker(worker_id)
+            if count:
+                logger.info(
+                    "Released stale locks on worker startup",
+                    extra={"worker_id": worker_id, "count": count},
+                )
+            return count
+
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_cleanup())
+    finally:
+        loop.close()
+
+
 if __name__ == "__main__":
     celery_app.start()

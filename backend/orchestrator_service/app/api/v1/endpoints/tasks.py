@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser, get_current_user
 from app.db.base import get_db
+from app.core.fsm import TaskStage
 from app.models.pipeline import Task, TaskStep, DraftNotification
 from app.schemas.common import PaginationMeta
 from app.schemas.tasks import (
@@ -114,7 +115,7 @@ async def get_task_stats(
     status_case = case(
         (and_(Task.status == "active", Task.pipeline_stage == "upload"), "uploaded"),
         (and_(Task.status == "active", Task.pipeline_stage == "preview"), "previewing"),
-        (and_(Task.status == "active", Task.pipeline_stage == "decision"), "ready_for_approve"),
+        (and_(Task.status == "active", Task.pipeline_stage == TaskStage.DECISION.value), "ready_for_approve"),
         (and_(Task.status == "active", Task.pipeline_stage.in_(["full", "registry"])), "processing"),
         (and_(Task.status == "completed", Task.pipeline_type == "formation"), "created"),
         (and_(Task.status == "active", Task.pipeline_type == "indexation"), "indexing"),

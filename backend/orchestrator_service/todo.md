@@ -1,35 +1,30 @@
-# Текущая сессия: 2026-07-06 — Исправление 17 падающих тестов
+# Сессия: 2026-07-06 — Правки по audit.md (High/Medium/Low)
 
-## Результат: 809 passed, 0 failed
+## Результат
 
-### Сессия 1 — 5 integration-тестов (исправлено)
+### 🔴 Critical (уже исправлено в f0f8a2b7)
+- ~~§4.1 Converter: guard _notify_step_failed за retries >= max_retries~~
+- ~~§4.2 cleanup_stale_tasks: вызов on_step_failed после hard-kill~~
+- ~~§4.3 Удалён дубликат get_stale_running_steps_for_hard_kill~~
+- ~~§3.4 on_step_completed: return после already-completed~~
 
-| # | Тест | Исправление |
-|---|------|-------------|
-| 1 | `test_celery_tasks.py::test_failure_path_triggers_retry` | mid-retry→not_awaited, +last-retry→awaited |
-| 2 | `test_celery_tasks.py::test_with_document_data` | document_data с metadata как есть |
-| 3 | `test_celery_tasks.py::test_with_metadata_merge_preserves_doc_metadata` | response_metadata не мержится |
-| 4 | `test_draft_to_indexation_flow.py::test_full_pipeline_ends_with_task_completed` | убран manual complete |
-| 5 | `orchestrator.py::on_step_failed` | guard: если шаг не running, fail task вместо retry |
+### 🟠 High (сделано в этой сессии)
+- [x] §4.5 — `integrity_check`: `client.close()` в `try/finally`
+- [x] §4.10 — `_run_ocr_fallback`: UPDATE existing step row вместо CREATE (метод `reset_task_step_for_fallback`)
+- [x] §3.3 — Прогресс по уникальным `step_name`, а не строкам
+- [x] §5.4 — Worker restart: освобождать locks при старте (метод `release_locks_by_worker` + Celery сигнал)
+- [x] §4.4 — Health-check: timeout 3s, fallback URLs только на 404
 
-### Сессия 2 — 12 предсуществующих (исправлено)
+### 🟡 Medium
+- [ ] §2.1 — `StepDispatcher` интерфейс для устранения циркулярной core←tasks зависимости
+- [ ] §2.3 — Декомпозиция `orchestrator.py` (2000+ → dispatcher, health, cleanup, approver)
+- [x] §4.6 — `_run_async`: единый event-loop на Celery-task (thread-local storage через `app/tasks/async_utils.py`)
+- [ ] §6.3 — `cleanup_stale_tasks`: разбить на пачки с commit; health-check вынести из транзакции
+- [ ] §6.1 — Outbox-таблица для external side-effects (Registry, RAG)
+- [ ] §7 — Тесты: `_notify_step_*`, `BackgroundTaskPoller`, converter-retry-count
 
-| Группа | Исправление |
-|--------|-------------|
-| `test_base_client` (8 тестов) | `ServiceClient.call()`: ConnectError/CircuitBreakerError → fallback (mock_response/{}) |
-| `test_drafts::test_create_draft_file_too_large` | `settings.validation.MAX_FILE_SIZE_BYTES` вместо модуля |
-| `test_drafts::test_create_and_retrieve_all_metadata_fields` | PreviewMetadata: добавлены `document_type`, `mks_oks_code`, `okstu_code`, `udk_code` |
-| `test_drafts::test_create_without_metadata_returns_fallback` | endpoint get_draft_preview: маппинг новых полей |
-| `test_drafts::test_create_with_json_metadata_field` | ||
+### 🟢 Low (сделано)
+- [x] §8 — `"decision"` → `TaskStage.DECISION.value` (orchestrator.py + endpoints)
 
-### Файлы изменений
-
-- `app/services/base_client.py` — fallback при ConnectError/CircuitBreakerError
-- `app/schemas/drafts.py` — PreviewMetadata: +document_type, mks_oks_code, okstu_code, udk_code
-- `app/api/v1/endpoints/drafts.py` — get_draft_preview: маппинг новых полей
-- `app/core/pipeline/orchestrator.py` — on_step_failed: guard failed_step is None
-- `tests/integration/test_celery_tasks.py` — OCR retry + registry metadata fix
-- `tests/integration/test_draft_to_indexation_flow.py` — убран manual complete
-- `tests/test_base_client.py` — (уже проходят)
-- `tests/test_drafts.py` — file_too_large: settings вместо модуля
-- `tests/conftest.py` — PermissionError retry на Windows
+### 🟢 Low (осталось)
+- [ ] §4.8/4.9 — Адаптивный poll-interval и distributed lock для poller

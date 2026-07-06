@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, get_current_user
 from app.core.config import settings
+from app.core.fsm import TaskStage
 from app.core.pipeline.orchestrator import (
     PipelineOrchestrator,
 )
@@ -991,7 +992,7 @@ async def _build_preview_status(
                         override_dict = {k: str(v) for k, v in metadata_overrides.items() if v is not None}
                         preview_meta = preview_meta.model_copy(update=override_dict)
                     break
-        decision_required = task.pipeline_stage == "decision"
+        decision_required = task.pipeline_stage == TaskStage.DECISION.value
     elif any_failed:
         status_str = "failed"
         preview_meta = None

@@ -12,7 +12,6 @@ Full phase (triggered after user approve, or auto-approve):
 3. registry_creation — persist in Registry
 """
 
-import asyncio
 import logging
 from typing import Any, Dict, Optional
 
@@ -27,18 +26,9 @@ from app.services.parser_client import ParserServiceClient
 from app.services.converter_client import ConverterValidatorClient
 from app.services.rag_client import RAGBuilderClient
 from app.services.registry_client import RegistryServiceClient
+from app.tasks.async_utils import run_async, close_async_loop
 
 logger = logging.getLogger("tasks.pipeline_1")
-
-
-def _run_async(coro):
-    """Run an async coroutine synchronously from a Celery task."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 # ------------------------------------------------------------------
@@ -71,7 +61,7 @@ def run_ocr_preview_step(
             finally:
                 await client.close()
 
-        result = _run_async(_do_ocr_preview())
+        result = run_async(_do_ocr_preview())
 
         input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages, "draft_id": draft_id}
         output_data = {
@@ -81,7 +71,7 @@ def run_ocr_preview_step(
             "quality": result.get("data", {}).get("quality", {}),
         }
 
-        _run_async(_notify_step_completed(task_id, "preview_ocr", input_data, output_data))
+        run_async(_notify_step_completed(task_id, "preview_ocr", input_data, output_data))
 
         logger.info(f"OCR preview completed: task={task_id}")
         return {"status": "completed", "step": "preview_ocr", "task_id": task_id}
@@ -89,8 +79,10 @@ def run_ocr_preview_step(
     except Exception as exc:
         logger.error(f"OCR preview failed: {exc}")
         if self.request.retries >= self.max_retries:
-            _run_async(_notify_step_failed(task_id, "preview_ocr", "OCR_ERROR", str(exc)))
+            run_async(_notify_step_failed(task_id, "preview_ocr", "OCR_ERROR", str(exc)))
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 @celery_app.task(
@@ -119,7 +111,7 @@ def run_parser_preview_step(
                 await client.close()
             return result
 
-        result = _run_async(_do_parse())
+        result = run_async(_do_parse())
 
         input_data = {"file_key": file_key, "mode": "preview", "max_pages": max_pages, "draft_id": draft_id}
         # Передаём полный результат парсера для запуска конвертера
@@ -135,7 +127,7 @@ def run_parser_preview_step(
         }
 
         # The orchestrator uses "preview_ocr" as the step name for both OCR and Parser
-        _run_async(_notify_step_completed(task_id, "preview_ocr", input_data, output_data))
+        run_async(_notify_step_completed(task_id, "preview_ocr", input_data, output_data))
 
         logger.info(f"Parser preview completed: task={task_id}")
         return {"status": "completed", "step": "preview_ocr", "task_id": task_id}
@@ -143,8 +135,10 @@ def run_parser_preview_step(
     except Exception as exc:
         logger.error(f"Parser preview failed: {exc}")
         if self.request.retries >= self.max_retries:
-            _run_async(_notify_step_failed(task_id, "preview_ocr", "PARSER_ERROR", str(exc)))
+            run_async(_notify_step_failed(task_id, "preview_ocr", "PARSER_ERROR", str(exc)))
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 @celery_app.task(
@@ -175,7 +169,7 @@ def run_converter_preview_step(
             finally:
                 await client.close()
 
-        result = _run_async(_do_converter_preview())
+        result = run_async(_do_converter_preview())
 
         input_data = {"file_key": file_key, "mode": "preview", "draft_id": draft_id}
 
@@ -197,7 +191,7 @@ def run_converter_preview_step(
                 "metadata": result.get("data", {}).get("metadata", {}),
             }
 
-        _run_async(_notify_step_completed(task_id, "preview_converter", input_data, output_data))
+        run_async(_notify_step_completed(task_id, "preview_converter", input_data, output_data))
 
         logger.info(f"Converter preview completed: task={task_id}")
         return {"status": "completed", "step": "preview_converter", "task_id": task_id}
@@ -205,8 +199,10 @@ def run_converter_preview_step(
     except Exception as exc:
         logger.error(f"Converter preview failed: {exc}")
         if self.request.retries >= self.max_retries:
-            _run_async(_notify_step_failed(task_id, "preview_converter", "CONVERTER_ERROR", str(exc)))
+            run_async(_notify_step_failed(task_id, "preview_converter", "CONVERTER_ERROR", str(exc)))
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 # ------------------------------------------------------------------
@@ -235,7 +231,7 @@ def run_ocr_full_step(
             finally:
                 await client.close()
 
-        result = _run_async(_do_ocr_full())
+        result = run_async(_do_ocr_full())
 
         # Реальный API возвращает без обёртки data (см. docs/api/ocr_service_api.md)
         ocr_data = result.get("data", result)
@@ -246,15 +242,17 @@ def run_ocr_full_step(
             "status": "completed",
         }
 
-        _run_async(_notify_step_completed(task_id, "full_ocr", input_data, output_data))
+        run_async(_notify_step_completed(task_id, "full_ocr", input_data, output_data))
 
         return {"status": "completed", "step": "full_ocr", "task_id": task_id}
 
     except Exception as exc:
         logger.error(f"OCR full failed: {exc}")
         if self.request.retries >= self.max_retries:
-            _run_async(_notify_step_failed(task_id, "full_ocr", "OCR_ERROR", str(exc)))
+            run_async(_notify_step_failed(task_id, "full_ocr", "OCR_ERROR", str(exc)))
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 @celery_app.task(
@@ -312,14 +310,16 @@ def run_parser_full_step(
             finally:
                 await client.close()
 
-        result = _run_async(_submit_parser_full())
+        result = run_async(_submit_parser_full())
         return {"status": "pending", "step": "full_ocr", "task_id": task_id, "parser_task_id": result.get("task_id")}
 
     except Exception as exc:
         logger.error(f"Parser full submission failed: {exc}")
         if self.request.retries >= self.max_retries:
-            _run_async(_notify_step_failed(task_id, "full_ocr", "PARSER_ERROR", str(exc)))
+            run_async(_notify_step_failed(task_id, "full_ocr", "PARSER_ERROR", str(exc)))
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 # ------------------------------------------------------------------
@@ -412,7 +412,7 @@ def run_converter_full_step(
             finally:
                 await client.close()
 
-        result = _run_async(_do_converter_full())
+        result = run_async(_do_converter_full())
 
         input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         converter_data = result.get("data", result) if isinstance(result, dict) else {}
@@ -427,15 +427,17 @@ def run_converter_full_step(
             "status": validation.get("status", "completed"),
         }
 
-        _run_async(_notify_step_completed(task_id, "full_converter", input_data, output_data))
+        run_async(_notify_step_completed(task_id, "full_converter", input_data, output_data))
 
         return {"status": "completed", "step": "full_converter", "task_id": task_id}
 
     except Exception as exc:
         logger.error(f"Converter full failed: {exc}")
         if self.request.retries >= self.max_retries:
-            _run_async(_notify_step_failed(task_id, "full_converter", "CONVERTER_ERROR", str(exc)))
+            run_async(_notify_step_failed(task_id, "full_converter", "CONVERTER_ERROR", str(exc)))
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 @celery_app.task(
@@ -567,7 +569,7 @@ def run_registry_step(
             finally:
                 await client.close()
 
-        result = _run_async(_do_registry())
+        result = run_async(_do_registry())
         new_document_id = result.get("document_id", document_id)
         saved_sections = result.get("sections")
 
@@ -581,14 +583,16 @@ def run_registry_step(
             output_data["sections"] = saved_sections
             output_data["document_id"] = new_document_id
 
-        _run_async(_notify_step_completed(task_id, "registry_creation", input_data, output_data))
+        run_async(_notify_step_completed(task_id, "registry_creation", input_data, output_data))
 
         return {"status": "completed", "step": "registry_creation", "task_id": task_id}
 
     except Exception as exc:
         logger.error(f"Registry step failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "registry_creation", "REGISTRY_ERROR", str(exc)))
+        run_async(_notify_step_failed(task_id, "registry_creation", "REGISTRY_ERROR", str(exc)))
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 @celery_app.task(
@@ -640,13 +644,15 @@ def run_rag_index_step(
             finally:
                 await client.close()
 
-        _run_async(_submit_rag_index())
+        run_async(_submit_rag_index())
         return {"status": "pending", "step": "rag_index", "task_id": task_id}
 
     except Exception as exc:
         logger.error(f"RAG index submission failed: {exc}")
-        _run_async(_notify_step_failed(task_id, "rag_index", "RAG_INDEX_ERROR", str(exc)))
+        run_async(_notify_step_failed(task_id, "rag_index", "RAG_INDEX_ERROR", str(exc)))
         raise self.retry(exc=exc)
+    finally:
+        close_async_loop()
 
 
 # ------------------------------------------------------------------

@@ -419,6 +419,44 @@ class TaskRepository:
         await self.db.flush()
         return step
 
+    async def reset_task_step_for_fallback(
+        self,
+        task_id: int,
+        step_name: str,
+        new_service_name: str,
+    ) -> Optional[TaskStep]:
+        """Reset a completed/failed step to pending for fallback (UPDATE, not INSERT).
+
+        Finds the most recent non-deleted step with given (task_id, step_name)
+        and resets its status to 'pending', service_name to new_service_name,
+        clearing run-time fields (started_at, completed_at, error_code, error_message).
+        Returns None if no matching step found.
+        """
+        result = await self.db.execute(
+            select(TaskStep)
+            .where(
+                and_(
+                    TaskStep.task_id == task_id,
+                    TaskStep.step_name == step_name,
+                    TaskStep.deleted_at.is_(None),
+                )
+            )
+            .order_by(TaskStep.id.desc())
+            .limit(1)
+            .with_for_update()
+        )
+        step = result.scalar_one_or_none()
+        if step is None:
+            return None
+        step.service_name = new_service_name
+        step.status = "pending"
+        step.started_at = None
+        step.completed_at = None
+        step.error_code = None
+        step.error_message = None
+        await self.db.flush()
+        return step
+
     async def compensate_task_step(self, step_id: int) -> Optional[TaskStep]:
         """Mark step as compensated."""
         result = await self.db.execute(
@@ -432,6 +470,31 @@ class TaskRepository:
         step.status = "compensated"
         await self.db.flush()
         return step
+
+    async def release_locks_by_worker(self, worker_id: str) -> int:
+        """Release all locks held by a specific worker (on worker restart).
+
+        Returns the count of released tasks.
+        """
+        result = await self.db.execute(
+            select(Task).where(
+                and_(
+                    Task.locked_by == worker_id,
+                    Task.deleted_at.is_(None),
+                )
+            )
+        )
+        tasks = list(result.scalars().all())
+        for task in tasks:
+            task.locked_by = None
+            task.locked_at = None
+        if tasks:
+            await self.db.flush()
+            logger.info(
+                "Released stale locks on worker restart",
+                extra={"worker_id": worker_id, "count": len(tasks)},
+            )
+        return len(tasks)
 
     async def release_stale_locks(self, max_seconds: int = 3600) -> list[Task]:
         """Release locks on tasks that have been locked too long (M4).

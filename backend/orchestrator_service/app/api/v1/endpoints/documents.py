@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentUser, get_current_user
 from app.db.base import get_db
+from app.core.fsm import TaskStage
 from app.models.pipeline import DraftNotification, Task, TaskStep
 from app.schemas.common import PaginationMeta
 from app.schemas.documents import (
@@ -120,7 +121,7 @@ async def get_document_status(
     elif (
         formation_task
         and formation_task.status == "active"
-        and formation_task.pipeline_stage == "decision"
+        and formation_task.pipeline_stage == TaskStage.DECISION.value
     ):
         doc_status = "approval_required"
     else:
@@ -182,7 +183,7 @@ async def get_document_status(
 
     decision_block: dict = {"status": "pending"}
     if formation_task:
-        if formation_task.pipeline_stage == "decision":
+        if formation_task.pipeline_stage == TaskStage.DECISION.value:
             decision_block["status"] = "in_progress"
         elif formation_task.pipeline_stage in ("full", "registry"):
             decision_block["status"] = "completed"

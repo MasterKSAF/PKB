@@ -313,6 +313,24 @@ preview_converter — running/pending → 409 PREVIEW_IN_PROGRESS.
 
 **Код ошибки:** `PREVIEW_IN_PROGRESS` (уже определён в guide.md).
 
+### 3.15. reset_task_step_for_fallback — UPDATE вместо INSERT при OCR-fallback (06.07)
+- При OCR-fallback (`_run_ocr_fallback`) существующий failed-шаг `preview_ocr`
+  переиспользуется через UPDATE (service_name, status=pending) вместо создания новой строки.
+- Метод `TaskRepository.reset_task_step_for_fallback` ищет последний non-deleted step
+  по (task_id, step_name) и сбрасывает: service_name, status=pending, очищает
+  started_at/completed_at/error_*.
+
+### 3.16. Worker startup — release_locks_by_worker (06.07)
+- При старте Celery worker (`_release_locks_on_startup`, сигнал `on_after_finalize`)
+  освобождаются все locks, принадлежавшие предыдущему экземпляру этого worker.
+- `worker_id` — `os.environ.get("CELERY_WORKER_ID")` или `f"worker-{os.getpid()}"`.
+  Lock-очистка выполняется через `TaskRepository.release_locks_by_worker`.
+
+### 3.17. Health-check с коротким timeout (06.07)
+- `_check_service_health`: timeout снижен с 5s до 3s.
+- Fallback URL (`/api/v1/health`) пробуется только при 404 на первом `/health`.
+- При сетевых ошибках на первом URL — попытка второго, на втором — сразу False.
+
 ## 4. Проблемы при запуске (ошибки в Python-сервисах)
 
 При `docker compose up -d` контейнер `pkb-neuro` запускает 10 Python-процессов под supervisord.

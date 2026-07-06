@@ -126,9 +126,7 @@ class TestLockReleasedOnTaskError:
         orchestrator = PipelineOrchestrator(db_session)
         # Мокаем saga, чтобы не выполнять реальную компенсацию.
         from unittest.mock import AsyncMock, patch
-        with patch.object(
-            orchestrator, "_run_async", new=AsyncMock()
-        ) if hasattr(orchestrator, "_run_async") else patch(
+        with patch(
             "app.core.pipeline.saga.SagaCoordinator.compensate", new=AsyncMock()
         ):
             await orchestrator.on_step_failed(

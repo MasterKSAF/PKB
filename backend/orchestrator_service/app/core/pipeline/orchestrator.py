@@ -240,7 +240,7 @@ class PipelineOrchestrator:
             if queued_task.pipeline_stage in (
                 TaskStage.FULL.value,
                 TaskStage.REGISTRY.value,
-                "decision",
+                TaskStage.DECISION.value,
             ):
                 await self._enqueue_celery_full_tasks(queued_task, file_key)
             else:
@@ -535,7 +535,7 @@ class PipelineOrchestrator:
 
         # Calculate progress
         total_steps = task.total_steps or 3
-        completed_steps = sum(1 for s in steps if s.status == "completed")
+        completed_steps = len({s.step_name for s in steps if s.status == "completed"})
         progress = min(int((completed_steps / total_steps) * 100), 99)
 
         await self.task_repo.update_task_status(
@@ -591,20 +591,27 @@ class PipelineOrchestrator:
             return
 
         if not has_pending_ocr:
-            # Create a new preview step for OCR and start it immediately
-            ocr_step = await self.task_repo.create_task_step(
+            # Reuse the existing step row (UPDATE) instead of creating a new one
+            ocr_step = await self.task_repo.reset_task_step_for_fallback(
                 task_id=task.id,
                 step_name="preview_ocr",
-                step_index=1,
-                service_name="OCR Service",
-                input_data={
-                    "file_key": file_key,
-                    "mode": "preview",
-                    "max_pages": 3,
-                    "draft_id": task.draft_id,
-                },
+                new_service_name="OCR Service",
             )
-            # Start the step so its lifecycle is consistent: pending → running → completed
+            if ocr_step is None:
+                # No existing step — create fresh (first-time fallback path)
+                ocr_step = await self.task_repo.create_task_step(
+                    task_id=task.id,
+                    step_name="preview_ocr",
+                    step_index=1,
+                    service_name="OCR Service",
+                    input_data={
+                        "file_key": file_key,
+                        "mode": "preview",
+                        "max_pages": 3,
+                        "draft_id": task.draft_id,
+                    },
+                )
+            # Start the step: pending → running
             await self.task_repo.start_task_step(ocr_step.id)
         else:
             # Existing pending step from a previous call — start it too
@@ -1957,7 +1964,10 @@ class PipelineOrchestrator:
         await self._drain_queue()
 
     async def _check_service_health(self, service_name: str) -> bool:
-        """Check if a service is alive via HTTP health check."""
+        """Check if a service is alive via HTTP health check (P2S-5).
+
+        Uses short timeout (3s) and only probes alternative URLs on 404.
+        """
         svc = settings.services
         url_map = {
             "Parser Service": svc.PARSER_SERVICE_URL,
@@ -1971,20 +1981,27 @@ class PipelineOrchestrator:
         if not base_url:
             return True  # cannot check, assume alive
 
-        health_urls = [
+        # Try primary /health first; fall back to /api/v1/health only on 404
+        candidates = [
             f"{base_url}/health",
             f"{base_url}/api/v1/health",
-            base_url,
         ]
-        for url in health_urls:
+        for i, url in enumerate(candidates):
             try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
+                async with httpx.AsyncClient(timeout=3.0) as client:
                     r = await client.get(url)
                     if r.status_code < 500:
                         return True
+                    # 404 on first URL → try the second
+                    if r.status_code == 404 and i == 0:
+                        continue
+                    return False
             except (httpx.TimeoutException, httpx.ConnectError,
                     httpx.RequestError):
-                continue
+                # Network error → only retry if this is the first candidate
+                if i == 0:
+                    continue
+                return False
         return False
 
     async def cleanup_stale_tasks(self) -> int:

@@ -43,9 +43,9 @@ class TestReprocessCleanupFailed:
                 raise RuntimeError("RAG Builder cleanup failed: 503")
             # subsequent calls return None (don't need to execute coro)
 
-        # Мокируем _run_async, чтобы не запускать event loop
+        # Мокируем run_async, чтобы не запускать event loop
         with patch(
-            "app.tasks.pipeline_indexation._run_async",
+            "app.tasks.pipeline_indexation.run_async",
             side_effect=_run_async_side_effect,
         ), patch.object(
             run_reprocess_step, "retry",
@@ -71,7 +71,7 @@ class TestReprocessCleanupFailed:
                 raise RuntimeError("cleanup failed")
 
         with patch(
-            "app.tasks.pipeline_indexation._run_async",
+            "app.tasks.pipeline_indexation.run_async",
             side_effect=_run_async_side_effect,
         ), patch.object(
             run_reprocess_step, "retry",
