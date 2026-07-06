@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from pydantic import ValidationError
 
 from convertor_validator_service_lama.clients.llama_cloud_boundary import MissingLlamaCloudApiKeyError
 from convertor_validator_service_lama.clients.llama_extract_rest_client import (
@@ -17,6 +18,8 @@ from convertor_validator_service_lama.models.parse_job import ParseJobPollingCon
 from convertor_validator_service_lama.models.contracts import (
     DocumentStructureWorkflowDryRunRequest,
     DocumentStructureWorkflowDryRunResponse,
+    DocumentStructureWorkflowRunRequest,
+    DocumentStructureWorkflowRunResponse,
     DryRunResponse,
     ExtractPassDryRunRequest,
     ExtractPassDryRunResponse,
@@ -35,6 +38,14 @@ from convertor_validator_service_lama.models.contracts import (
 )
 from convertor_validator_service_lama.services.document_structure_workflow_dry_run import (
     build_document_structure_workflow_dry_run_response,
+)
+from convertor_validator_service_lama.services.document_structure_workflow_runtime import (
+    LlamaExtractDocumentStructureWorkflowRuntimeConfig,
+    run_llama_extract_document_structure_workflow,
+)
+from convertor_validator_service_lama.services.llama_extract_structured_json_backend import (
+    LlamaExtractStructuredJsonResultError,
+    MissingLlamaExtractParseJobIdError,
 )
 from convertor_validator_service_lama.services.lama_validator_service import (
     build_dry_run_response,
@@ -184,6 +195,63 @@ def extract_passes_plan() -> ExtractPassPlanResponse:
 
 
 @app.post(
+    "/document-structure-workflow",
+    response_model=DocumentStructureWorkflowRunResponse,
+)
+def document_structure_workflow(
+    request: DocumentStructureWorkflowRunRequest,
+) -> DocumentStructureWorkflowRunResponse:
+    polling_config = ExtractJobPollingConfig(
+        max_attempts=request.max_attempts,
+        interval_seconds=request.interval_seconds,
+    )
+
+    try:
+        result = run_llama_extract_document_structure_workflow(
+            request.parse_result_payload,
+            config=LlamaExtractDocumentStructureWorkflowRuntimeConfig(
+                parse_job_id=request.parse_job_id,
+                document_hint=request.document_hint,
+                pass_name=request.pass_name,
+                schema_name=request.schema_name,
+                expand=request.expand,
+                polling_config=polling_config,
+                include_metadata_in_instructions=(
+                    request.include_metadata_in_instructions
+                ),
+                overview_max_items=request.overview_max_items,
+                scope_max_items=request.scope_max_items,
+                scope_max_window_items=request.scope_max_window_items,
+                scope_overlap_items=request.scope_overlap_items,
+                item_text_chars=request.item_text_chars,
+                markdown_excerpt_chars=request.markdown_excerpt_chars,
+            ),
+        )
+    except (
+        MissingLlamaCloudApiKeyError,
+        MissingLlamaExtractProjectIdError,
+        MissingLlamaExtractParseJobIdError,
+    ) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LlamaExtractPollingTimeoutError as exc:
+        raise HTTPException(status_code=504, detail=str(exc)) from exc
+    except LlamaExtractJobFailedError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except (
+        LlamaExtractResponseError,
+        LlamaExtractStructuredJsonResultError,
+        ValidationError,
+        ValueError,
+    ) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return _build_document_structure_workflow_run_response(
+        request=request,
+        result=result,
+    )
+
+
+@app.post(
     "/document-structure-workflow/dry-run",
     response_model=DocumentStructureWorkflowDryRunResponse,
 )
@@ -213,3 +281,67 @@ def rich_document_package_dry_run(request: RichDocumentPackageDryRunRequest) -> 
 @app.get("/rich-document-package/plan", response_model=RichDocumentPackagePlanResponse)
 def rich_document_package_plan() -> RichDocumentPackagePlanResponse:
     return build_rich_document_package_plan_response()
+
+def _build_document_structure_workflow_run_response(
+    *,
+    request: DocumentStructureWorkflowRunRequest,
+    result,
+) -> DocumentStructureWorkflowRunResponse:
+    merged = result.merged_extraction
+    diagnostics = merged.diagnostics
+
+    return DocumentStructureWorkflowRunResponse(
+        parse_job_id=_first_str(
+            request.parse_job_id,
+            request.parse_result_payload.get("job_id"),
+        ),
+        document_profile=_enum_or_str(merged.document_profile),
+        page_count=merged.page_count,
+        numbering_scopes_count=len(merged.numbering_scopes),
+        item_classifications_count=len(merged.item_classifications),
+        sections_count=len(merged.sections),
+        issues_count=len(merged.issues),
+        scope_inputs_count=result.scope_inputs_count,
+        scope_extractions_count=result.scope_extractions_count,
+        overview_items_preview_count=_as_int(
+            diagnostics.get("workflow_overview_items_preview_count")
+        ),
+        overview_page_overview_count=_as_int(
+            diagnostics.get("workflow_page_overview_count")
+        ),
+        scope_stage_ids=[
+            item
+            for item in diagnostics.get("workflow_scope_stage_ids", [])
+            if isinstance(item, str)
+        ],
+        merged_extraction=merged.model_dump(mode="json"),
+    )
+
+
+def _enum_or_str(value) -> str:
+    enum_value = getattr(value, "value", None)
+    if isinstance(enum_value, str):
+        return enum_value
+
+    if isinstance(value, str):
+        return value
+
+    return str(value)
+
+
+def _as_int(value) -> int:
+    if isinstance(value, bool):
+        return 0
+
+    if isinstance(value, int):
+        return value
+
+    return 0
+
+
+def _first_str(*values) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    return None

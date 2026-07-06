@@ -185,3 +185,38 @@ class DocumentStructureWorkflowDryRunResponse(BaseModel):
     overview_markdown_excerpt_chars: int = 0
     scope_inputs_count: int = 0
     scope_stage_summaries: list[DocumentStructureWorkflowStageSummary] = Field(default_factory=list)
+
+class DocumentStructureWorkflowRunRequest(BaseModel):
+    parse_result_payload: dict[str, Any] = Field(default_factory=dict)
+    parse_job_id: str | None = Field(default=None, min_length=1)
+    document_hint: str | None = None
+    pass_name: LlamaExtractPassName = "sections"
+    schema_name: str = "document_structure_extraction_v1"
+    expand: list[str] = Field(default_factory=lambda: ["extract_result"])
+    max_attempts: int = Field(default=60, ge=1)
+    interval_seconds: float = Field(default=2.0, ge=0.0)
+    include_metadata_in_instructions: bool = True
+    overview_max_items: int = Field(default=180, ge=1)
+    scope_max_items: int = Field(default=350, ge=1)
+    scope_max_window_items: int = Field(default=300, ge=1)
+    scope_overlap_items: int = Field(default=20, ge=0)
+    item_text_chars: int = Field(default=700, ge=1)
+    markdown_excerpt_chars: int = Field(default=12_000, ge=1)
+
+
+class DocumentStructureWorkflowRunResponse(BaseModel):
+    service: str = "convertor_validator_service_lama"
+    mode: Literal["document_structure_workflow_run"] = "document_structure_workflow_run"
+    parse_job_id: str | None = None
+    document_profile: str = "unknown"
+    page_count: int | None = None
+    numbering_scopes_count: int = 0
+    item_classifications_count: int = 0
+    sections_count: int = 0
+    issues_count: int = 0
+    scope_inputs_count: int = 0
+    scope_extractions_count: int = 0
+    overview_items_preview_count: int = 0
+    overview_page_overview_count: int = 0
+    scope_stage_ids: list[str] = Field(default_factory=list)
+    merged_extraction: dict[str, Any] = Field(default_factory=dict)
