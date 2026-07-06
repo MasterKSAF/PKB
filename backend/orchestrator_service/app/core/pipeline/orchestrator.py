@@ -239,7 +239,6 @@ class PipelineOrchestrator:
             if queued_task.pipeline_stage in (
                 TaskStage.FULL.value,
                 TaskStage.REGISTRY.value,
-                TaskStage.DECISION.value,
             ):
                 await self._enqueue_celery_full_tasks(queued_task, file_key)
             else:
@@ -1240,7 +1239,15 @@ class PipelineOrchestrator:
             extra={"draft_id": draft_id, "task_id": task_id},
         )
 
-        # Guard: prevent double-approve (defensive, also checked in endpoint)
+        # Guard: prevent double-approve — check stage, not just status
+        if task.pipeline_stage in (
+            TaskStage.FULL.value,
+            TaskStage.REGISTRY.value,
+            TaskStage.INDEXATION.value,
+        ):
+            raise ValueError(
+                f"Cannot approve task {task_id}: already in stage {task.pipeline_stage}"
+            )
         if task.status in (TaskStatus.COMPLETED.value, TaskStatus.FAILED.value):
             raise ValueError(
                 f"Cannot approve task {task_id}: already in terminal state {task.status}"
@@ -1324,11 +1331,30 @@ class PipelineOrchestrator:
             extra={"draft_id": draft_id, "task_id": task_id},
         )
 
+        # Re-acquire with FOR UPDATE to atomically verify state (P1F-14)
+        task = await self.task_repo.get_task_for_update(task_id)
+        if task.pipeline_stage in (
+            TaskStage.FULL.value,
+            TaskStage.REGISTRY.value,
+            TaskStage.INDEXATION.value,
+        ):
+            raise ValueError(
+                f"Cannot approve task {task_id}: already in stage {task.pipeline_stage} (re-check)"
+            )
+
         await self.task_repo.update_task_status(
             task_id=task_id,
             stage=TaskStage.FULL.value,
             progress_percent=50,
         )
+
+        # Sync draft status to Registry so UI hides the approve button (P1F-14)
+        registry_sync = RegistryServiceClient()
+        await registry_sync.update_draft_status(
+            draft_id=draft_id,
+            status=DraftState.APPROVED.value,
+        )
+        await registry_sync.close()
 
         from app.tasks.pipeline_formation import (
             run_ocr_full_step,

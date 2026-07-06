@@ -8,8 +8,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Установка системных зависимостей:
+# libxcb1 — требуется Docling (DocumentConverter) для рендеринга PDF через Qt/XCB
+# libgl1, libglib2.0-0t64 — для OpenCV, используемого моделями Docling
+# libgomp1 — OpenMP, требуется torch/scipy для параллельных вычислений
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
+    libxcb1 \
+    libgl1 \
+    libglib2.0-0t64 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание непривилегированного пользователя
