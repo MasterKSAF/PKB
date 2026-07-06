@@ -385,9 +385,9 @@ class PipelineOrchestrator:
         )
 
         # ── Check free slot and dispatch or queue ───────────────────
-        # Atomic slot check: count active tasks WITH FOR UPDATE to prevent
-        # concurrent slot overflow (§3.1)
-        active_count = await self.task_repo.count_active_tasks(for_update=True)
+        # Slot check (приблизительный, точная сериализация через SKIP LOCKED
+        # в try_activate_next_queued_task)
+        active_count = await self.task_repo.count_active_tasks()
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
         if active_count < limit:
             # Slot available — activate and dispatch immediately

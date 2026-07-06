@@ -240,32 +240,12 @@ def enrich_docling_document(doc, pdf_path: str):
     return doc, bbox_map
 
 
-def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
-                            page_start: int = 1,
-                            images_dir: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Новый конвейер:
-      DocumentConverter → enrich(DoclingDocument) → export_to_markdown() → md_to_json()
-
-    Параметры (совместимы со старым _try_pipeline):
-        pdf_path: путь к PDF
-        max_pages: последняя страница (включительно, None = все)
-        page_start: начальная страница
-
-    Returns:
-        JSON в формате opendataloader
-    """
+def _create_converter():
+    """Создаёт DocumentConverter с фиксированными pipeline_options."""
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions
     from docling.document_converter import DocumentConverter, PdfFormatOption
-    from docling_core.types.doc.base import ImageRefMode
-    from md_to_json import md_to_document_json
 
-    file_name = Path(pdf_path).name
-    file_bytes = Path(pdf_path).read_bytes()
-    file_hash = hashlib.sha256(file_bytes).hexdigest()
-
-    # Pipeline options
     pipeline_options = PdfPipelineOptions()
     pipeline_options.do_ocr = False
     pipeline_options.do_table_structure = True
@@ -276,13 +256,42 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
     pipeline_options.generate_picture_images = True
     pipeline_options.generate_parsed_pages = False
 
-    converter = DocumentConverter(
+    return DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
                 pipeline_options=pipeline_options,
             )
         }
     )
+
+
+def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
+                            page_start: int = 1,
+                            images_dir: Optional[str] = None,
+                            converter: Optional[Any] = None) -> Dict[str, Any]:
+    """
+    Новый конвейер:
+      DocumentConverter → enrich(DoclingDocument) → export_to_markdown() → md_to_json()
+
+    Параметры (совместимы со старым _try_pipeline):
+        pdf_path: путь к PDF
+        max_pages: последняя страница (включительно, None = все)
+        page_start: начальная страница
+        converter: переиспользуемый DocumentConverter (если None — создаётся новый)
+
+    Returns:
+        JSON в формате opendataloader
+    """
+    from docling_core.types.doc.base import ImageRefMode
+    from md_to_json import md_to_document_json
+
+    file_name = Path(pdf_path).name
+    file_bytes = Path(pdf_path).read_bytes()
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+
+    # Используем переданный конвертер или создаём новый
+    if converter is None:
+        converter = _create_converter()
 
     # Определяем диапазон страниц
     page_end = max_pages if max_pages is not None else None

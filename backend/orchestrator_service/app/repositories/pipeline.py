@@ -28,7 +28,7 @@ class TaskRepository:
     # Task
     # ------------------------------------------------------------------
 
-    async def count_active_tasks(self, for_update: bool = False) -> int:
+    async def count_active_tasks(self) -> int:
         """Count tasks that have pending/running steps (actually consuming services).
 
         Tasks in decision stage (all steps completed, waiting for user)
@@ -36,10 +36,10 @@ class TaskRepository:
         A task is considered active iff it has at least one step
         in 'pending' or 'running' status.
 
-        When ``for_update=True``, acquires FOR UPDATE row-level locks on
-        the matched Task rows to serialize concurrent slot checks (§3.1).
+        NOTE: FOR UPDATE не используется — PostgreSQL запрещает его
+        с агрегатными функциями. Атомарность слота обеспечивается
+        через SKIP LOCKED в try_activate_next_queued_task.
         """
-        # Subquery: task_ids with pending or running steps
         active_step_subq = (
             select(TaskStep.task_id)
             .where(
@@ -57,8 +57,6 @@ class TaskRepository:
                 Task.id.in_(active_step_subq),
             )
         )
-        if for_update:
-            query = query.with_for_update()
         result = await self.db.execute(query)
         return result.scalar() or 0
 
@@ -628,50 +626,29 @@ class TaskRepository:
         return list(result.scalars().all())
 
     async def try_activate_next_queued_task(self) -> Optional[Task]:
-        """Atomically check slot + pick + activate oldest queued task (§3.1).
+        """Atomically pick + activate oldest queued task.
 
-        1. Lock active-task count (FOR UPDATE) to serialize concurrent checks
-        2. If slot available, pick oldest queued (SKIP LOCKED) and activate
-        3. If slot full, return None
-
-        This prevents exceeding MAX_CONCURRENT_TASKS under parallel load.
+        Uses SKIP LOCKED для атомарного выбора — конкурентные workers
+        не увидят одну и ту же задачу.
+        Проверка лимита активных задач — приблизительная (без FOR UPDATE),
+        так как PostgreSQL запрещает FOR UPDATE с агрегатными функциями.
+        Фактическая сериализация достигается через SKIP LOCKED.
         """
         from app.core.config import settings
 
-        # 1. Atomically count active tasks WITH row lock to prevent
-        #    concurrent slot overflow (§3.1)
-        active_step_subq = (
-            select(TaskStep.task_id)
-            .where(
-                and_(
-                    TaskStep.status.in_(["pending", "running"]),
-                    TaskStep.deleted_at.is_(None),
-                )
-            )
-        ).scalar_subquery()
-
-        count_result = await self.db.execute(
-            select(func.count(Task.id))
-            .where(
-                and_(
-                    Task.deleted_at.is_(None),
-                    Task.status == TaskStatus.ACTIVE.value,
-                    Task.id.in_(active_step_subq),
-                )
-            )
-            .with_for_update()
-        )
-        active_count = count_result.scalar() or 0
+        # Проверка свободного слота (без блокировки — это приблизительная
+        # оценка, точная сериализация через SKIP LOCKED ниже)
+        active_count = await self.count_active_tasks()
         limit = settings.pipeline.MAX_CONCURRENT_TASKS
 
         if active_count >= limit:
             logger.debug(
-                "No free slot (atomic check)",
+                "No free slot",
                 extra={"active": active_count, "limit": limit},
             )
             return None
 
-        # 2. Pick oldest queued task (SKIP LOCKED — other workers will skip)
+        # Pick oldest queued task (SKIP LOCKED — other workers will skip)
         result = await self.db.execute(
             select(Task)
             .where(

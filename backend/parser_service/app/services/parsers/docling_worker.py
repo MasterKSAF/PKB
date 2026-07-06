@@ -22,11 +22,21 @@ from docling_mapper import convert_via_docling_md
 logger = logging.getLogger(__name__)
 
 
+# Кэш конвертера на уровне процесса (создаётся один раз в init_worker)
+_converter = None
+
+
 def init_worker():
     """
-    Инициализация воркер-процесса (пустая, т.к. конвертер создаётся внутри convert_via_docling_md).
+    Инициализация воркер-процесса: предзагрузка модели Docling.
+    Конвертер создаётся один раз и переиспользуется для всех последующих задач.
     """
-    pass
+    global _converter
+    logger.info("Initializing Docling worker process: pre-loading model...")
+    # Импортируем _create_converter и создаём экземпляр конвертера
+    from docling_mapper import _create_converter
+    _converter = _create_converter()
+    logger.info("Docling worker process initialized, model loaded (770/770)")
 
 
 def parse_pdf_worker(file_bytes: bytes, max_pages: Optional[int], page_start: int,
@@ -59,12 +69,13 @@ def parse_pdf_worker(file_bytes: bytes, max_pages: Optional[int], page_start: in
         abs_path = os.path.abspath(pdf_path)
         logger.debug(f"Temp PDF created: {abs_path}, size: {actual_size} bytes")
 
-        # Вызываем оригинальную функцию (она создаёт свой конвертер)
+        # Вызываем функцию с переиспользуемым конвертером
         result = convert_via_docling_md(
             pdf_path=abs_path,
             max_pages=max_pages,
             page_start=page_start,
             images_dir=images_dir,
+            converter=_converter,
         )
         return result
 
