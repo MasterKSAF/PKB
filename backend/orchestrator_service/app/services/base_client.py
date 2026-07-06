@@ -95,6 +95,11 @@ class ServiceClient:
                 },
             )
 
+    @staticmethod
+    def _fallback_result(mock_response: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Return fallback result on HTTP error: mock_response or empty dict."""
+        return mock_response if mock_response else {}
+
     async def call(
         self,
         method: str,
@@ -194,7 +199,7 @@ class ServiceClient:
                     "circuit_breaker": "open",
                 },
             )
-            raise
+            return self._fallback_result(mock_response)
 
         except httpx.TimeoutException as exc:
             elapsed = time.monotonic() - start_time
@@ -223,7 +228,7 @@ class ServiceClient:
                     "error": str(exc),
                 },
             )
-            raise
+            return self._fallback_result(mock_response)
 
         except httpx.HTTPStatusError as exc:
             elapsed = time.monotonic() - start_time

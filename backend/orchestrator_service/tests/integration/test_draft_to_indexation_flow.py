@@ -162,15 +162,12 @@ class TestFullPipelineCompletion:
         assert updated.document_id is None
 
         # Step 2: complete full_ocr step
-        # В approve_draft full_ocr уже создан и запущен.
+        # approve_draft создаёт full_ocr как pending — стартуем его
         steps = await repo.get_task_steps(task.id)
         full_ocr = next(s for s in steps if s.step_name == "full_ocr")
-        # Симулируем старт и завершение full_ocr
-        await repo.start_task_step(full_ocr.id)
-        await repo.complete_task_step(
-            full_ocr.id,
-            output_data={"full_result": {"text": "parsed content"}},
-        )
+        if full_ocr.status == "pending":
+            await repo.start_task_step(full_ocr.id)
+        # Не делаем manual complete_task_step — on_step_completed сам завершит running шаг
 
         # on_step_completed → dispatch full_converter
         converter_delay_2 = MagicMock()
@@ -197,14 +194,8 @@ class TestFullPipelineCompletion:
             None,
         )
         assert full_converter is not None
-        await repo.start_task_step(full_converter.id)
-        await repo.complete_task_step(
-            full_converter.id,
-            output_data={
-                "document": {"content": [{"id": 1, "text": "section1"}]},
-                "metadata": {"title": "Test"},
-            },
-        )
+        if full_converter.status == "pending":
+            await repo.start_task_step(full_converter.id)
 
         registry_delay_2 = MagicMock()
         with patch(
@@ -219,6 +210,7 @@ class TestFullPipelineCompletion:
                 step_name="full_converter",
                 output_data={
                     "document": {"content": [{"id": 1, "text": "section1"}]},
+                    "metadata": {"title": "Test"},
                 },
             )
         # Verify registry step was dispatched after full_converter completes
@@ -235,14 +227,8 @@ class TestFullPipelineCompletion:
             None,
         )
         assert registry_step is not None
-        await repo.start_task_step(registry_step.id)
-        await repo.complete_task_step(
-            registry_step.id,
-            output_data={
-                "document_id": 200,
-                "sections": [{"id": 1, "section_id": 1, "text": "section1"}],
-            },
-        )
+        if registry_step.status == "pending":
+            await repo.start_task_step(registry_step.id)
 
         rag_delay_2 = MagicMock()
         with patch(
@@ -255,7 +241,10 @@ class TestFullPipelineCompletion:
             await orchestrator.on_step_completed(
                 task_id=task.id,
                 step_name="registry_creation",
-                output_data={"document_id": 200},
+                output_data={
+                    "document_id": 200,
+                    "sections": [{"id": 1, "section_id": 1, "text": "section1"}],
+                },
             )
         # Verify RAG index was dispatched after registry completes
         rag_delay_2.assert_called_once()
@@ -267,11 +256,8 @@ class TestFullPipelineCompletion:
             None,
         )
         assert rag_step is not None
-        await repo.start_task_step(rag_step.id)
-        await repo.complete_task_step(
-            rag_step.id,
-            output_data={},
-        )
+        if rag_step.status == "pending":
+            await repo.start_task_step(rag_step.id)
 
         # При rag_index → on_step_completed:
         #   - task → COMPLETED

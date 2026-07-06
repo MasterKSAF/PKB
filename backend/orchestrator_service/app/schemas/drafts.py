@@ -53,10 +53,14 @@ class PreviewMetadata(BaseModel):
     title: Optional[str] = Field(None, description="Название документа")
     doc_code: Optional[str] = Field(None, description="Обозначение документа")
     source_type: Optional[str] = Field(None, description="Тип источника: ГОСТ, ГОСТ Р, ОСТ, РД, ТУ, ISO, DNV, ASTM, OTHER")
+    document_type: Optional[str] = Field(None, description="Тип документа: normative, technical")
     year: Optional[str] = Field(None, description="Год издания")
     era: Optional[str] = Field(None, description="Эпоха: USSR, CIS, RF, CURRENT")
     jurisdiction: Optional[str] = Field(None, description="Юрисдикция: RU, EU, US, NO, INTL")
     issuing_body: Optional[str] = Field(None, description="Организация-издатель")
+    mks_oks_code: Optional[str] = Field(None, description="Код МКС/ОКС")
+    okstu_code: Optional[str] = Field(None, description="Код ОКП/ОКСТУ")
+    udk_code: Optional[str] = Field(None, description="Код УДК")
 
 
 class DraftPreviewResponse(BaseModel):

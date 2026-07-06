@@ -74,9 +74,10 @@ class TestCreateDraft:
         the size check — avoids loading 100+ MB into memory during tests.
         """
         from unittest.mock import patch
+        from app.core.config import settings
         small_content = b"x" * 2000  # 2000 bytes (>= 1024) — tiny
-        with patch(
-            "app.api.v1.endpoints.drafts.MAX_FILE_SIZE_BYTES", 50  # mock limit: 50 bytes
+        with patch.object(
+            settings.validation, "MAX_FILE_SIZE_BYTES", 50  # mock limit: 50 bytes
         ):
             response = client.post(
                 self.URL,

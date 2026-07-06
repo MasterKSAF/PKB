@@ -139,9 +139,15 @@ def db_engine():
         cursor.close()
 
     async def _init():
-        # Remove stale pipeline db
+        # Remove stale pipeline db — ignore if locked (Windows PermissionError)
         if os.path.exists(_pipeline_db_path):
-            os.remove(_pipeline_db_path)
+            for _ in range(3):
+                try:
+                    os.remove(_pipeline_db_path)
+                    break
+                except PermissionError:
+                    import time
+                    time.sleep(0.2)
         async with engine.begin() as conn:
             from sqlalchemy import text
             # Performance pragmas

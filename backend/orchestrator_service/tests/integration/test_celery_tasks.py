@@ -103,8 +103,8 @@ class TestRunOcrPreviewStep:
             "task_id": 1,
         }
 
-    def test_failure_path_triggers_retry(self):
-        """When OCR service raises, the task calls notify_failed and retries."""
+    def test_failure_mid_retry_does_not_notify(self):
+        """When OCR raises mid-retry, notify_failed is NOT called (only on last retry)."""
         mock_client = AsyncMock()
         mock_client.process.side_effect = Exception("OCR service down")
         mock_client.close = AsyncMock()
@@ -120,12 +120,11 @@ class TestRunOcrPreviewStep:
         ):
             from app.tasks.pipeline_formation import run_ocr_preview_step
 
-            # Patch self.retry on the bound task instance
             mock_retry, retry_patcher = _patch_task_retry(
-                run_ocr_preview_step, exc_to_raise=Exception("self.retry called")
+                run_ocr_preview_step, exc_to_raise=RuntimeError("retry-called"),
             )
             try:
-                with pytest.raises(Exception, match="self.retry called"):
+                with pytest.raises(RuntimeError, match="retry-called"):
                     run_ocr_preview_step.run(
                         task_id=1,
                         draft_id=DRAFT_ID,
@@ -134,12 +133,49 @@ class TestRunOcrPreviewStep:
             finally:
                 retry_patcher.stop()
 
-        # Verify failure was notified
-        notify_failed.assert_awaited_once_with(
-            1, "preview_ocr", "OCR_ERROR", "OCR service down"
-        )
+        # retries=0 < max_retries=3 : notify should NOT be called
+        notify_failed.assert_not_awaited()
+        mock_retry.assert_called_once()
 
-        # Verify retry was called on the task instance
+    def test_failure_notifies_on_last_retry(self):
+        """When OCR raises on the LAST attempt, notify_failed IS called."""
+        mock_client = AsyncMock()
+        mock_client.process.side_effect = Exception("OCR service down")
+        mock_client.close = AsyncMock()
+
+        notify_failed = AsyncMock()
+
+        with patch(
+            "app.tasks.pipeline_formation.OCRServiceClient",
+            return_value=mock_client,
+        ), patch(
+            "app.tasks.pipeline_formation._notify_step_failed",
+            notify_failed,
+        ):
+            from app.tasks.pipeline_formation import run_ocr_preview_step
+
+            # Simulate last retry attempt: retries = max_retries
+            task_instance = run_ocr_preview_step.run.__self__
+            original_retries = task_instance.request.retries
+            task_instance.request.retries = task_instance.max_retries
+
+            mock_retry, retry_patcher = _patch_task_retry(
+                run_ocr_preview_step, exc_to_raise=RuntimeError("retry-called"),
+            )
+            try:
+                with pytest.raises(RuntimeError, match="retry-called"):
+                    run_ocr_preview_step.run(
+                        task_id=1,
+                        draft_id=DRAFT_ID,
+                        file_key="drafts/10/file.pdf",
+                    )
+            finally:
+                task_instance.request.retries = original_retries
+                retry_patcher.stop()
+
+        notify_failed.assert_awaited_once_with(
+            1, "preview_ocr", "OCR_ERROR", "OCR service down",
+        )
         mock_retry.assert_called_once()
 
 
@@ -294,7 +330,9 @@ class TestRunRegistryStep:
 
         notify_completed = AsyncMock()
 
+        # document_data уже содержит metadata (doc_code) — как реальный конвертер
         document_data = {
+            "metadata": {"doc_code": "ГОСТ 1234-56"},
             "content": [
                 {"clause": "1", "type": "text", "path": "1", "page": 1,
                  "content": {"text": "Section 1"}},
@@ -302,7 +340,6 @@ class TestRunRegistryStep:
                  "content": {"text": "Section 2"}},
             ],
         }
-        metadata = {"doc_code": "ГОСТ 1234-56"}
 
         with patch(
             "app.tasks.pipeline_formation.RegistryServiceClient",
@@ -315,7 +352,7 @@ class TestRunRegistryStep:
 
             result = run_registry_step.run(
                 task_id=3, draft_id=DRAFT_ID, document_id=42, version_id=421,
-                document_data=document_data, metadata=metadata,
+                document_data=document_data,
             )
 
         # Verify: create_document called with full payload
@@ -323,9 +360,8 @@ class TestRunRegistryStep:
         payload = mock_client.create_document.await_args[0][0]
         assert payload.get("draft_id") == DRAFT_ID
         assert "document" in payload
-        # Verify metadata was nested inside document
-        assert payload["document"]["metadata"] == metadata
-        assert payload["document"]["content"] == document_data["content"]
+        # document_data передаётся как есть (response_metadata НЕ мержится)
+        assert payload["document"] == document_data
 
         # Verify: get_document_sections called to read sections with IDs
         mock_client.get_document_sections.assert_awaited_once_with(42)
@@ -353,10 +389,14 @@ class TestRunRegistryStep:
             "task_id": 3,
         }
 
-    def test_with_metadata_merge_preserves_doc_metadata(self):
-        """Registry step merges metadata instead of overwriting:
-        document_data.metadata (doc_code/title) must survive even when
-        'metadata' param (response_metadata) doesn't have doc_code.
+    def test_response_metadata_not_merged_into_document(self):
+        """Registry step does NOT merge response_metadata into document.metadata.
+
+        Converter response metadata (schema, task_id, created_at, parser)
+        must NOT be passed to Registry (Registries validated_v3 schema
+        rejects unknown fields in document.metadata with HTTP 400).
+        Only document_data["metadata"] (doc_code, title, era, source_type)
+        should be in the payload.
         """
         mock_client = AsyncMock()
         mock_client.create_document = AsyncMock(return_value={
@@ -373,7 +413,7 @@ class TestRunRegistryStep:
 
         notify_completed = AsyncMock()
 
-        # document_data уже содержит metadata с doc_code (из конвертера)
+        # document_data already contains metadata (from converter)
         document_data = {
             "source": {"file_name": "f-test.pdf", "page_count": 5},
             "metadata": {
@@ -384,7 +424,8 @@ class TestRunRegistryStep:
             },
             "content": [],
         }
-        # metadata = response_metadata (БЕЗ doc_code — только служебные поля)
+        # metadata = response_metadata (schema, task_id, created_at, parser)
+        # Registry rejects these inside document.metadata (HTTP 400)
         response_metadata = {
             "schema": "validated_v3",
             "task_id": 106,
@@ -406,19 +447,22 @@ class TestRunRegistryStep:
                 document_data=document_data, metadata=response_metadata,
             )
 
-        # Verify: create_document получил metadata с doc_code
+        # Verify: create_document got metadata from document_data only
         mock_client.create_document.assert_awaited_once()
         payload = mock_client.create_document.await_args[0][0]
         doc_meta = payload["document"]["metadata"]
 
-        # doc_code/title не потерялись
+        # doc_code/title сохранились
         assert doc_meta.get("doc_code") == "22786-77"
         assert doc_meta.get("title") == "ГОСТ 22786-77 Трубы"
         assert doc_meta.get("era") == "USSR"
-        # response_metadata поля тоже сохранились
-        assert doc_meta.get("schema") == "validated_v3"
-        assert doc_meta.get("task_id") == 106
-        assert doc_meta.get("parser") == {"name": "test", "version": "1.0"}
+        assert doc_meta.get("source_type") == "GOST"
+
+        # response_metadata НЕ попала в document.metadata
+        assert doc_meta.get("schema") is None
+        assert doc_meta.get("task_id") is None
+        assert doc_meta.get("created_at") is None
+        assert doc_meta.get("parser") is None
 
     def test_with_document_data_no_data_wrapper_breaks_doc_id(self):
         """РЕАЛЬНЫЙ Registry возвращает ответ БЕЗ 'data'-обёртки.

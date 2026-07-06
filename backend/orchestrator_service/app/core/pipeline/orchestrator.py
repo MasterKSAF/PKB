@@ -1890,7 +1890,7 @@ class PipelineOrchestrator:
                 extra={"task_id": task_id, "draft_id": task.draft_id},
             )
 
-        elif task.retry_count < settings.pipeline.MAX_STEP_RETRIES:
+        elif failed_step is not None and task.retry_count < settings.pipeline.MAX_STEP_RETRIES:
             # Retry with exponential backoff
             backoff_delay = settings.pipeline.RETRY_BASE_DELAY * (2 ** task.retry_count)
 
@@ -1921,7 +1921,7 @@ class PipelineOrchestrator:
                 extra={"task_id": task_id, "draft_id": task.draft_id},
             )
         else:
-            # Retries exhausted — fail the task and compensate
+            # Failed step not found, or retries exhausted — fail the task and compensate
             await self.task_repo.update_task_status(
                 task_id, status=TaskStatus.FAILED.value
             )
