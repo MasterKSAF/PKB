@@ -60,46 +60,22 @@ from app.core.exception_handlers import (
 from app.core.exceptions import ParserServiceError
 from app.core.task_store import task_store
 from app.core.minio_client import minio_client
-from app.core.hybrid_server import HybridServer
 from app.dependencies import init_services, get_pipeline_service
 
 # Событие для graceful shutdown
 shutdown_event = asyncio.Event()
-hybrid_server = None  # глобальная ссылка для остановки
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Управляет жизненным циклом приложения:
-    - запуск гибридного сервера (только если не используется Docling-парсер)
     - создание бакетов MinIO
     - запуск фоновой очистки задач
     - запуск воркера очереди
     - graceful shutdown
     """
-    global hybrid_server
     logger.info("Starting application lifespan")
-
-    # ---- Запуск гибридного сервера ТОЛЬКО если не используется Docling ----
-    if not settings.use_docling_parser:
-        hybrid_server = HybridServer(
-            host=settings.hybrid_host,
-            port=settings.hybrid_port,
-            startup_timeout=settings.hybrid_startup_timeout,
-        )
-        if settings.hybrid_auto_start:
-            if not hybrid_server.start():
-                logger.error("Failed to start hybrid server, disabling hybrid mode")
-                # Отключаем гибридный режим, чтобы парсер работал без --hybrid
-                settings.parser_use_hybrid = False
-            else:
-                logger.info("Hybrid server started")
-        else:
-            logger.info("Hybrid server auto-start disabled")
-    else:
-        logger.info("Docling parser is enabled, hybrid server not started")
-        hybrid_server = None  # не используется
 
     # Инициализируем сервисы (DI) с shutdown_event
     init_services(shutdown_event)
@@ -136,11 +112,6 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     logger.debug("Cleanup task cancelled")
-
-    # Остановка гибридного сервера (если он был запущен)
-    if hybrid_server:
-        hybrid_server.stop()
-        logger.info("Hybrid server stopped")
 
     # Завершаем ProcessPoolExecutor
     from app.core.executor import shutdown_executor

@@ -205,7 +205,6 @@ ROUTE_TABLE: List[RouteEntry] = [
 
 DEPRECATED_INTEGRATION_PREFIXES = (
     "/api/v1/meridian",
-    "/api/v1/files",
     "/api/v1/external",
 )
 
@@ -213,9 +212,8 @@ DEPRECATED_INTEGRATION_PREFIXES = (
 def is_deprecated_integration_route(path: str) -> bool:
     """True для legacy-маршрутов снятого Integration Service."""
     normalized = path.rstrip("/")
-    # MinIO proxy (previews/documents) не относится к Integration Service
-    if normalized.startswith("/api/v1/files/previews/") or normalized.startswith("/api/v1/files/documents/"):
-        return False
+    # /api/v1/files теперь обслуживается gateway_file_proxy (MinIO proxy),
+    # не относится к Integration Service.
     for prefix in DEPRECATED_INTEGRATION_PREFIXES:
         p = prefix.rstrip("/")
         if normalized == p or normalized.startswith(p + "/"):

@@ -5,9 +5,11 @@
 import tempfile
 import os
 import json
+import shutil
 import asyncio
 import logging
-from typing import Optional, Dict, Any
+from pathlib import Path
+from typing import Optional, Dict, Any, List, Tuple
 
 from app.services.parsers.base import BaseParser, ParseResult
 from app.config import settings
@@ -29,6 +31,30 @@ class DoclingParser(BaseParser):
     def __init__(self):
         logger.debug("DoclingParser initialized")
 
+    # ---------- Сбор изображений из JSON ----------
+    @staticmethod
+    def _collect_image_paths(json_result: Dict[str, Any], base_dir: str) -> List[Tuple[int, str, str]]:
+        """
+        Собирает изображения из JSON-блоков, у которых есть image_key.
+        image_key хранит путь относительно base_dir (например, 'images/page_1_1.png').
+        Возвращает список (page_num, full_path, extension).
+        """
+        images = []
+        blocks = json_result.get('content', {}).get('document', {}).get('block', [])
+        for block in blocks:
+            if block.get('type') != 'image':
+                continue
+            image_key = block.get('image_key', '')
+            if not image_key:
+                continue
+            full_path = os.path.join(base_dir, image_key)
+            if os.path.exists(full_path):
+                _, ext = os.path.splitext(full_path)
+                page_num = block.get('page number', 1)
+                images.append((page_num, full_path, ext))
+        logger.debug(f"DoclingParser: collected {len(images)} images")
+        return images
+
     async def parse(
         self,
         file_bytes: bytes,
@@ -41,6 +67,11 @@ class DoclingParser(BaseParser):
         max_pages = options.get("max_pages")
         page_start = 1
 
+        # Создаём временную папку для изображений (как в PdfParser)
+        temp_dir = tempfile.mkdtemp(prefix=f"docling_parser_{task_id}_")
+        images_dir = os.path.join(temp_dir, "images")
+        os.makedirs(images_dir, exist_ok=True)
+
         try:
             loop = asyncio.get_running_loop()
             result = await asyncio.wait_for(
@@ -50,20 +81,24 @@ class DoclingParser(BaseParser):
                     file_bytes,
                     max_pages,
                     page_start,
+                    images_dir,
                 ),
                 timeout=DOCLING_TIMEOUT
             )
         except asyncio.TimeoutError:
             logger.error(f"Docling parsing timeout after {DOCLING_TIMEOUT}s for task {task_id}")
+            shutil.rmtree(temp_dir, ignore_errors=True)
             raise RuntimeError(f"Docling parsing timeout after {DOCLING_TIMEOUT}s for task {task_id}")
         except Exception as e:
             logger.exception(f"Docling executor failed for task {task_id}")
+            shutil.rmtree(temp_dir, ignore_errors=True)
             raise RuntimeError(f"Docling executor failed: {e}")
 
         # Проверяем, не вернулась ли ошибка
         if isinstance(result, dict) and "error" in result:
             error_msg = result["error"]
             logger.error(f"Docling worker returned error for task {task_id}: {error_msg}")
+            shutil.rmtree(temp_dir, ignore_errors=True)
             raise RuntimeError(f"Docling parsing failed: {error_msg}")
 
         json_result = result
@@ -98,11 +133,14 @@ class DoclingParser(BaseParser):
             .get("page_count", 1)
         )
 
-        images = []
+        # ---- Собираем изображения ----
+        images = self._collect_image_paths(json_result, temp_dir)
+        if not options.get("extract_images", True):
+            images = []
 
         return ParseResult(
             full_json=json_result,
             images=images,
             total_pages=total_pages_in_result,
-            temp_dir=None,
+            temp_dir=temp_dir,
         )

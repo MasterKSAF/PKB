@@ -51,6 +51,13 @@ def build_result(
         quality = final_json.get("quality", {})
         errors = final_json.get("errors", [])
         status = final_json.get("status", "completed")
+    elif "content" in final_json and "document" in final_json.get("content", {}):
+        # Docling-формат: {"content": {"document": {...}, "quality": {...}}, "metadata": {...}}
+        content = final_json["content"]
+        document = content.get("document", {})
+        quality = content.get("quality", {})
+        errors = content.get("errors", [])
+        status = content.get("status", "completed")
     else:
         # Пустой случай
         document = {}
@@ -59,9 +66,9 @@ def build_result(
         status = "completed"
 
     parser_info = {
-        "name": "opendataloader_pdf",
-        "version": "1.0",
-        "ocr_engine": "none",
+        "name": "docling",
+        "version": "2.0",
+        "ocr_engine": "docling",
         "ocr_fallback": False,
     }
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from contextlib import asynccontextmanager
@@ -34,13 +35,28 @@ async def lifespan(app: FastAPI):
         settings.service_port,
     )
 
-    # Инициализируем пул БД
-    try:
-        await init_db_pool()
-        logger.info("Database pool initialized successfully")
-    except Exception as e:
-        logger.error("Failed to initialize database pool: %s", e)
-        # Продолжаем запуск, health check покажет ошибку
+    # Инициализируем пул БД (с ретраем — postgres может восстанавливаться)
+    max_retries = 5
+    for attempt in range(1, max_retries + 1):
+        try:
+            await init_db_pool()
+            logger.info("Database pool initialized successfully")
+            break
+        except Exception as e:
+            logger.error(
+                "Failed to initialize database pool (attempt %d/%d): %s",
+                attempt, max_retries, e,
+            )
+            if attempt < max_retries:
+                delay = 2 ** attempt
+                logger.info("Retrying in %d seconds...", delay)
+                await asyncio.sleep(delay)
+            else:
+                logger.error(
+                    "All %d attempts exhausted. Starting without DB pool — "
+                    "health check will report error.",
+                    max_retries,
+                )
 
     logger.info("Service ready")
 

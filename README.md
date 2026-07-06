@@ -236,6 +236,7 @@ docker compose ps
 > Маршруты аутентификации (`POST /auth/token`, `GET /auth/me` и др.) находятся в Gateway, а не в Orchestrator.
 > Настройка: `UI-UX/UI Final/frontend/src/utils/http.ts` — `DEFAULT_GATEWAY_URL`.
 > Env-переменная: `VITE_API_BASE_URL=http://127.0.0.1:8080/api/v1`.
+> **Учётные данные по умолчанию:** `admin@example.com` / `Admin1234!` (системный администратор).
 
 Подробнее:
 - [`UI-UX/UI Final/README.md`](UI-UX/UI%20Final/README.md) — Web UI

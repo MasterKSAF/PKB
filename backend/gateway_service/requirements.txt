@@ -3,6 +3,7 @@ uvicorn[standard]>=0.27.0
 pydantic>=2.5.0
 python-multipart>=0.0.9
 httpx>=0.27.0
+aiobotocore>=2.16.0
 
 # observability (beta-версии instrumentation — pin, не >=)
 opentelemetry-api==1.27.0

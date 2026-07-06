@@ -26,6 +26,72 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 
+def _save_docling_pictures(doc, images_dir: str) -> Dict[Tuple[int, int], str]:
+    """
+    Сохраняет изображения из DoclingDocument в images_dir.
+    Имена файлов: page_{page_no}_{seq}.png
+
+    Returns:
+        {(page_no, seq): filename} — карта для привязки к JSON-блокам.
+    """
+    import os
+    from PIL import Image
+
+    os.makedirs(images_dir, exist_ok=True)
+    saved = {}  # (page_no, seq) -> filename
+    counter_per_page = {}  # page_no -> int
+
+    for picture in doc.pictures:
+        page_no = picture.prov[0].page_no if picture.prov else 1
+        if not (hasattr(picture, 'image') and picture.image is not None):
+            continue
+        counter_per_page.setdefault(page_no, 0)
+        counter_per_page[page_no] += 1
+        seq = counter_per_page[page_no]
+        fname = f"page_{page_no}_{seq}.png"
+        fpath = os.path.join(images_dir, fname)
+        try:
+            picture.image.save(fpath, format='PNG')
+            saved[(page_no, seq)] = fname
+        except Exception as e:
+            logger.warning("Failed to save picture page=%d seq=%d: %s", page_no, seq, e)
+
+    if saved:
+        print(f"  Saved {len(saved)} pictures to {images_dir}",
+              file=sys.stderr, flush=True)
+    return saved
+
+
+def _update_image_keys(json_result: dict, images_dir: str) -> None:
+    """
+    Проставляет image_key в JSON-блоках типа 'image', указывая на
+    сохранённые файлы изображений. Путь относительный от temp_dir
+    (images_dir = temp_dir/images/).
+    """
+    import os
+    blocks = json_result.get('content', {}).get('document', {}).get('block', [])
+    counter_per_page = {}
+    updated = 0
+    for block in blocks:
+        if block.get('type') != 'image':
+            continue
+        pno = block.get('page number', 1)
+        counter_per_page.setdefault(pno, 0)
+        counter_per_page[pno] += 1
+        seq = counter_per_page[pno]
+        fname = f"page_{pno}_{seq}.png"
+        rel_path = os.path.join('images', fname)
+        fpath = os.path.join(images_dir, fname)
+        if os.path.exists(fpath):
+            block['image_key'] = rel_path
+            updated += 1
+    if updated:
+        print(f"  Updated {updated} image blocks with image_key",
+              file=sys.stderr, flush=True)
+
+
+
+
 def enrich_docling_document(doc, pdf_path: str):
     """
     Обогащает DoclingDocument пропущенными элементами (колонтитулы, подписи Рис.).
@@ -157,7 +223,8 @@ def enrich_docling_document(doc, pdf_path: str):
 
 
 def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
-                            page_start: int = 1) -> Dict[str, Any]:
+                            page_start: int = 1,
+                            images_dir: Optional[str] = None) -> Dict[str, Any]:
     """
     Новый конвейер:
       DocumentConverter → enrich(DoclingDocument) → export_to_markdown() → md_to_json()
@@ -228,6 +295,10 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
     print(f"  Docling OK: {len(doc.pages)} pages processed",
           file=sys.stderr, flush=True)
 
+    # ---- Сохраняем изображения, если указана папка ----
+    if images_dir:
+        _save_docling_pictures(doc, images_dir)
+
     # Enrich на уровне DoclingDocument (возвращает карту bbox)
     doc, bbox_map = enrich_docling_document(doc, pdf_path)
 
@@ -248,6 +319,10 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
         raise RuntimeError("No markdown generated")
 
     json_result = md_to_document_json(page_mds, file_name)
+
+    # ---- Проставляем image_key из сохранённых картинок ----
+    if images_dir:
+        _update_image_keys(json_result, images_dir)
 
     # Проставляем bbox из карты, собранной во время enrich
     def _match_bbox(pno: int, text: str) -> Optional[list]:

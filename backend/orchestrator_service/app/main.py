@@ -17,6 +17,7 @@ from app.core.trace import get_trace_id, set_trace_id, set_user_id, reset_trace_
 from app.db.base import engine
 from app.db.retry_db import init_database
 from app.services.task_poller import start_poller, stop_poller
+from app.services.queue_drain_poller import start_queue_drain_poller, stop_queue_drain_poller
 
 
 @asynccontextmanager
@@ -44,6 +45,9 @@ async def lifespan(app: FastAPI):
     # Start BackgroundTaskPoller
     await start_poller()
 
+    # Start QueueDrainPoller — фоновый диспатч queued задач
+    await start_queue_drain_poller()
+
     # Cleanup stale locks at startup (M5: fallback if Celery Beat was down)
     try:
         from app.db.session import get_db_context
@@ -66,6 +70,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Orchestrator Service")
+    await stop_queue_drain_poller()
     await stop_poller()
     await engine.dispose()
 
