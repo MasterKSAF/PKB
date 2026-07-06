@@ -365,7 +365,7 @@ async def process_parser_full_result(
                 "document_id": draft_id,
                 "level": 1 if b.get("type") == "heading" else 2,
                 "path": str(b.get("number", i + 1)),
-                "page": b.get("page", 1),
+                "page": b.get("page") or b.get("page number") or 1,
                 "type": "text",
                 "content": {"text": b.get("content", "")},
                 "bbox": _normalize_bbox(b.get("bbox")),
@@ -534,9 +534,9 @@ def run_registry_step(
                     extra={"task_id": task_id, "draft_id": draft_id},
                 )
 
-                # --- Step 3: Update draft status (idempotent) ---
+                # --- Step 3: Update draft status (keep PROCESSING — final APPROVED after rag_index) ---
                 await client.update_draft_status(
-                    draft_id=draft_id, status="approved", document_id=current_doc_id,
+                    draft_id=draft_id, status="processing", document_id=current_doc_id,
                 )
                 return {
                     "document_id": current_doc_id,

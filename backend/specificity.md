@@ -20,6 +20,11 @@
 - **После approve Celery-задачи могут не выполняться**, если нет воркеров (docker без celery -pipeline). Документ создаётся в Registry со статусом "uploaded", но pipeline (ocr→converter→registry→rag) не завершается.
   Тесты не ловят это, т.к. мокают .delay() глобально.
 
+## Parser → Converter / Orchestrator
+
+- **Поле страницы в блоках**: `html_to_json.py` и `md_to_json.py` пишут `"page number"` в блоки, но `hierarchy_builder.py:81` читает `block.get("page")`, а `pipeline_formation.py:368` читает `b.get("page", 1)`. Поле `"page"` появляется в блоках только после прохода `standardizer.py`. При передаче сырого `raw_json` (не стандартизированного) все блоки получают `page=1`.
+  - Починено: `hierarchy_builder.py:81` и `pipeline_formation.py:368` читают `block.get("page") or block.get("page number") or 1`.
+
 ### Почему черновик сразу в "uploaded" после подтверждения (2026-07-05)
 
 **Сценарий:**

@@ -738,8 +738,8 @@ class TestOnFullStepCompletedConverter:
         assert updated.version_id is not None, \
             "version_id should be set after full_converter"
 
-        # Verify draft status was synced to approved
-        mock_registry.assert_draft_status(draft_id=100, expected_status="approved")
+        # Verify draft status was synced to processing (final approved deferred to rag_index)
+        mock_registry.assert_draft_status(draft_id=100, expected_status="processing")
 
         # Verify create_document was called
         assert any(

@@ -78,7 +78,7 @@ def _build_content_item(
     page_size_cache: dict[int, tuple[float, float]],
     clause_ctx: dict[str, Any],
 ) -> dict[str, Any] | None:
-    page = int(block.get("page") or 1)
+    page = int(block.get("page") or block.get("page number") or 1)
     page_w, page_h = _page_size(page_size_cache, page)
     bbox = _normalize_bbox(block.get("bbox") or [], page_w, page_h)
     block_type = block.get("type") or "paragraph"

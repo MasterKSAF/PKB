@@ -1043,10 +1043,10 @@ class PipelineOrchestrator:
             task.version_id = version_id
             await self.db.flush()
 
-            # Sync document_id to Registry draft
+            # Sync document_id to Registry draft (keep PROCESSING — final APPROVED after rag_index)
             await registry_doc.update_draft_status(
                 draft_id=task.draft_id,
-                status=DraftState.APPROVED.value,
+                status=DraftState.PROCESSING.value,
                 document_id=document_id,
             )
             await registry_doc.close()
@@ -1190,6 +1190,12 @@ class PipelineOrchestrator:
             await registry.update_document_status(
                 document_id=document_id,
                 status="validating",
+            )
+            # Transition draft to APPROVED only now — after ALL pipeline steps complete
+            await registry.update_draft_status(
+                draft_id=task.draft_id,
+                status=DraftState.APPROVED.value,
+                document_id=document_id,
             )
             await registry.close()
 

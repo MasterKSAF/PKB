@@ -273,9 +273,9 @@ class TestRunRegistryStep:
                 task_id=3, draft_id=DRAFT_ID, document_id=42, version_id=421
             )
 
-        # Verify service call — now calls update_draft_status, not create_document
+        # Verify service call — now calls update_draft_status with processing (final approved deferred to rag_index)
         mock_client.update_draft_status.assert_awaited_once_with(
-            draft_id=DRAFT_ID, status="approved", document_id=42
+            draft_id=DRAFT_ID, status="processing", document_id=42
         )
         mock_client.create_document.assert_not_called()
 
@@ -366,9 +366,9 @@ class TestRunRegistryStep:
         # Verify: get_document_sections called to read sections with IDs
         mock_client.get_document_sections.assert_awaited_once_with(42)
 
-        # Verify: update_draft_status still called
+        # Verify: update_draft_status still called (processing — final approved deferred to rag_index)
         mock_client.update_draft_status.assert_awaited_once_with(
-            draft_id=DRAFT_ID, status="approved", document_id=42
+            draft_id=DRAFT_ID, status="processing", document_id=42
         )
 
         # Verify notify contains sections in output_data
