@@ -15,6 +15,8 @@ from convertor_validator_service_lama.clients.llama_parse_rest_client import (
 from convertor_validator_service_lama.models.extract_job import ExtractJobPollingConfig, ExtractJobResult
 from convertor_validator_service_lama.models.parse_job import ParseJobPollingConfig, ParseJobResult
 from convertor_validator_service_lama.models.contracts import (
+    DocumentStructureWorkflowDryRunRequest,
+    DocumentStructureWorkflowDryRunResponse,
     DryRunResponse,
     ExtractPassDryRunRequest,
     ExtractPassDryRunResponse,
@@ -30,6 +32,9 @@ from convertor_validator_service_lama.models.contracts import (
     RichDocumentPackageDryRunRequest,
     RichDocumentPackageDryRunResponse,
     RichDocumentPackagePlanResponse,
+)
+from convertor_validator_service_lama.services.document_structure_workflow_dry_run import (
+    build_document_structure_workflow_dry_run_response,
 )
 from convertor_validator_service_lama.services.lama_validator_service import (
     build_dry_run_response,
@@ -176,6 +181,16 @@ def extract_passes_dry_run(request: ExtractPassesDryRunRequest) -> ExtractPasses
 def extract_passes_plan() -> ExtractPassPlanResponse:
     return build_extract_pass_plan_response()
 
+
+
+@app.post(
+    "/document-structure-workflow/dry-run",
+    response_model=DocumentStructureWorkflowDryRunResponse,
+)
+def document_structure_workflow_dry_run(
+    request: DocumentStructureWorkflowDryRunRequest,
+) -> DocumentStructureWorkflowDryRunResponse:
+    return build_document_structure_workflow_dry_run_response(request)
 
 
 @app.post("/rich-document-package", response_model=RichDocumentPackageAssemblyResult)
