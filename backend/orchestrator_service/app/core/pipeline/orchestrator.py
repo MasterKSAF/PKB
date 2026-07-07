@@ -987,8 +987,18 @@ class PipelineOrchestrator:
                     metadata = s.output_data.get("metadata")
                     break
 
-            # --- Create document in Registry (moved from approve_draft) ---
+            # Guard: don't create document if converter produced no meaningful data
             meta = metadata or {}
+            if not meta.get("title") and not meta.get("doc_code"):
+                logger.warning(
+                    f"Converter returned empty metadata (no title/doc_code) for task {task.id} — failing",
+                    extra={"task_id": task.id, "draft_id": task.draft_id},
+                )
+                await self.task_repo.set_task_error(task.id, "CONVERTER_NO_DATA", "Converter returned empty metadata")
+                await self.task_repo.update_task_status(task_id=task.id, status=TaskStatus.FAILED.value)
+                return
+
+            # --- Create document in Registry (moved from approve_draft) ---
             # Извлекаем file_hash_sha256 из upload step metadata_fields (P1F-12)
             upload_step = next((s for s in steps if s.step_name == "upload"), None)
             upload_metadata = {}

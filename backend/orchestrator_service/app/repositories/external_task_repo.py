@@ -91,6 +91,20 @@ class ExternalTaskRepository:
             await self.db.delete(task)
         await self.db.flush()
 
+    async def delete_all_pending(self) -> list[tuple[int, str]]:
+        """Delete all pending external tasks and return (orchestrator_task_id, step_name) pairs.
+
+        Used during startup recovery to clean up stale external tasks from a previous lifecycle.
+        The caller should reset the corresponding pipeline steps back to 'pending'.
+        """
+        tasks = await self.get_pending_tasks()
+        result = [(t.orchestrator_task_id, t.step_name) for t in tasks]
+        for t in tasks:
+            await self.db.delete(t)
+        if tasks:
+            await self.db.flush()
+        return result
+
     async def count_pending(self) -> int:
         """Count total pending external tasks."""
         result = await self.db.execute(

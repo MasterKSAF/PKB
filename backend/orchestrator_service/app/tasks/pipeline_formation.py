@@ -378,6 +378,14 @@ async def process_parser_full_result(
                 f"Transformed {len(sections)} parser blocks into sections for RAG"
             )
 
+    if not sections and not full_parser_result.get("document", {}).get("block"):
+        logger.error(
+            f"Parser returned empty result for task {task_id} — no content produced",
+            extra={"task_id": task_id, "draft_id": draft_id},
+        )
+        await _notify_step_failed(task_id, "full_ocr", "PARSER_EMPTY_RESULT", "Parser returned no content")
+        return
+
     input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
     output_data = {
         "sections": sections,

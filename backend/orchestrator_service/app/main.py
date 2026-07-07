@@ -71,6 +71,24 @@ async def lifespan(app: FastAPI):
                     f"Startup: reset {len(reactivated)} stale active tasks to queued"
                     f" (ids: {[t.id for t in reactivated]})"
                 )
+
+            # Cleanup stale external tasks: on restart, any pending external task
+            # is orphaned (the orchestrator that submitted it is gone). Delete them
+            # and reset the corresponding pipeline steps so drain queue re-dispatches.
+            from app.repositories.external_task_repo import ExternalTaskRepository
+            ext_repo = ExternalTaskRepository(db)
+            stale_ext_tasks = await ext_repo.delete_all_pending()
+            if stale_ext_tasks:
+                unique_pairs = set(stale_ext_tasks)
+                for task_id, step_name in unique_pairs:
+                    step = await repo.reset_task_step_for_fallback(
+                        task_id, step_name, new_service_name="Orchestrator",
+                    )
+                    if step:
+                        logger.warning(
+                            f"Startup: reset step {step_name} for task {task_id}"
+                            f" to pending (stale external task cleaned up)"
+                        )
     except Exception as cleanup_err:
         logger.warning(f"Startup lock cleanup failed (non-fatal): {cleanup_err}")
 
