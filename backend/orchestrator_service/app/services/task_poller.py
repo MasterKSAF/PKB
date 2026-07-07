@@ -60,7 +60,12 @@ class BackgroundTaskPoller:
                     await self._process_task(task, repo)
                     await db.commit()
                 except Exception as e:
-                    await db.rollback()
+                    try:
+                        await db.rollback()
+                    except Exception as rb_e:
+                        logger.warning(
+                            f"Rollback failed after external task {task.id} error: {rb_e}",
+                        )
                     logger.error(
                         f"Failed to process external task {task.id}: {e}",
                         extra={
@@ -120,10 +125,24 @@ class BackgroundTaskPoller:
     ) -> None:
         """Check Parser status and handle completion/failure."""
         from app.services.parser_client import ParserServiceClient
+        import httpx
 
         client = ParserServiceClient()
         try:
             status_resp = await client.get_status(task.external_task_id)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                logger.warning(
+                    f"Parser task {task.external_task_id} not found "
+                    f"(lost after restart?), cleaning up",
+                    extra={"task_id": task.id},
+                )
+                await self._handle_failed(
+                    task, repo, "PARSER_TASK_NOT_FOUND",
+                    f"Parser task {task.external_task_id} not found on remote",
+                )
+                return
+            raise
         finally:
             await client.close()
 
