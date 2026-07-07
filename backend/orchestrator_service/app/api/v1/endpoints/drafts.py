@@ -37,6 +37,7 @@ from app.core.pipeline.orchestrator import (
 from app.core.trace import set_draft_id, set_document_id, set_version_id
 from app.db.base import get_db
 from app.storage import upload_file
+from app.repositories.pipeline import TaskRepository
 from app.schemas.drafts import (
     DecideRequest,
     DecideResponse,
@@ -1536,8 +1537,15 @@ async def patch_draft_metadata(
 async def delete_draft(
     draft_id: int,
     current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a draft (proxies to Registry)."""
+    # Clean up pipeline tasks first
+    repo = TaskRepository(db)
+    deleted_count = await repo.soft_delete_tasks_by_draft(draft_id)
+    if deleted_count:
+        logger.info("Cleaned up %d tasks for draft %d", deleted_count, draft_id)
+
     registry = RegistryServiceClient()
     try:
         result = await registry.delete_draft(draft_id)

@@ -571,6 +571,26 @@ class TaskRepository:
             await self.db.flush()
         return released
 
+    async def reset_stale_active_tasks(self) -> list[Task]:
+        """Reset tasks stuck in 'active' after restart back to 'queued'.
+
+        On orchestrator restart, any task in 'active' status is orphaned
+        (no live Celery worker to complete it). Reset to 'queued' so
+        QueueDrainPoller picks it up and re-dispatches it.
+        """
+        result = await self.db.execute(
+            select(Task).where(
+                Task.status == TaskStatus.ACTIVE.value,
+                Task.deleted_at.is_(None),
+            )
+        )
+        tasks = list(result.scalars().all())
+        for task in tasks:
+            task.status = TaskStatus.QUEUED.value
+        if tasks:
+            await self.db.flush()
+        return tasks
+
     async def get_task_steps(self, task_id: int) -> list[TaskStep]:
         """Get all steps for a task, ordered by step index (excludes soft-deleted)."""
         result = await self.db.execute(
@@ -681,3 +701,45 @@ class TaskRepository:
             ).limit(1)
         )
         return result.scalar_one_or_none() is not None
+
+    async def soft_delete_tasks_by_draft(self, draft_id: int) -> int:
+        """Soft-delete all tasks for a draft and their steps."""
+        now = datetime.now(timezone.utc)
+
+        # Find task IDs for this draft
+        result = await self.db.execute(
+            select(Task.id).where(
+                Task.draft_id == draft_id,
+                Task.deleted_at.is_(None),
+            )
+        )
+        task_ids = [r[0] for r in result.all()]
+        if not task_ids:
+            return 0
+
+        # Soft-delete steps
+        await self.db.execute(
+            TaskStep.__table__.update().where(
+                and_(
+                    TaskStep.task_id.in_(task_ids),
+                    TaskStep.deleted_at.is_(None),
+                )
+            ).values(deleted_at=now)
+        )
+
+        # Soft-delete tasks
+        await self.db.execute(
+            Task.__table__.update().where(
+                and_(
+                    Task.id.in_(task_ids),
+                    Task.deleted_at.is_(None),
+                )
+            ).values(
+                deleted_at=now,
+                status="failed",
+            )
+        )
+
+        await self.db.flush()
+        logger.info("Soft-deleted %d tasks for draft %d", len(task_ids), draft_id)
+        return len(task_ids)
