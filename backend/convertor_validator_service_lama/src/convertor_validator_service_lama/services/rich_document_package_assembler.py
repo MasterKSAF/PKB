@@ -25,6 +25,9 @@ from convertor_validator_service_lama.models.rich_document_package import (
 from convertor_validator_service_lama.services.document_structure_assembler import (
     assemble_document_structure_from_parse_items,
 )
+from convertor_validator_service_lama.services.document_structure_bbox_hydrator import (
+    hydrate_document_structure_extraction_source_spans_from_parse_items,
+)
 from convertor_validator_service_lama.services.document_structure_extraction_input import (
     extract_effective_parse_items,
 )
@@ -165,6 +168,16 @@ def build_document_structure_from_artifacts(
     structure_extraction = _build_document_structure_extraction(
         artifacts.get("document_structure_extraction")
     )
+    bbox_hydration_diagnostics: dict[str, Any] | None = None
+
+    if structure_extraction is not None:
+        bbox_hydration = hydrate_document_structure_extraction_source_spans_from_parse_items(
+            structure_extraction,
+            parse_items,
+        )
+        structure_extraction = bbox_hydration.extraction
+        bbox_hydration_diagnostics = bbox_hydration.diagnostics
+
     extraction_namespaces = _build_namespaces_from_document_structure_extraction(
         structure_extraction
     )
@@ -189,6 +202,11 @@ def build_document_structure_from_artifacts(
             "issues_count": len(structure_extraction.issues),
             "diagnostics": structure_extraction.diagnostics,
         }
+
+    if bbox_hydration_diagnostics is not None:
+        diagnostics["document_structure_bbox_hydration"] = (
+            bbox_hydration_diagnostics
+        )
 
     return RichDocumentStructure(
         namespaces=extraction_namespaces or parse_namespaces,
