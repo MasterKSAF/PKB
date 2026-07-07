@@ -1,5 +1,10 @@
 from typing import Any
 
+from pydantic import ValidationError
+
+from convertor_validator_service_lama.models.document_structure_extraction import (
+    DocumentStructureExtraction,
+)
 from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentBoundary,
     RichDocumentCrossReference,
@@ -19,6 +24,9 @@ from convertor_validator_service_lama.models.rich_document_package import (
 )
 from convertor_validator_service_lama.services.document_structure_assembler import (
     assemble_document_structure_from_parse_items,
+)
+from convertor_validator_service_lama.services.document_structure_extraction_input import (
+    extract_effective_parse_items,
 )
 
 
@@ -110,9 +118,13 @@ def assemble_rich_document_package(
                 raw_response=validation_result.raw_response,
             )
 
+    effective_parse_items = extract_effective_parse_items(
+        parse_result.model_dump(mode="json")
+    )
+
     document_structure = build_document_structure_from_artifacts(
         artifacts,
-        parse_items=parse_result.items,
+        parse_items=effective_parse_items,
         parse_page_count=_parse_page_count(parse_result.metadata, parse_result.job_metadata),
     )
 
@@ -150,14 +162,36 @@ def build_document_structure_from_artifacts(
         parse_item_structure.get("sections", [])
     )
 
+    structure_extraction = _build_document_structure_extraction(
+        artifacts.get("document_structure_extraction")
+    )
+    extraction_namespaces = _build_namespaces_from_document_structure_extraction(
+        structure_extraction
+    )
+    extraction_sections = _build_sections_from_document_structure_extraction(
+        structure_extraction
+    )
     extract_sections = _build_sections(artifacts.get("sections"))
 
     diagnostics: dict[str, Any] = {}
     if parse_item_structure:
         diagnostics["parse_item_structure"] = parse_item_structure.get("diagnostics", {})
+    if structure_extraction is not None:
+        diagnostics["document_structure_extraction"] = {
+            "schema_version": structure_extraction.schema_version,
+            "document_profile": _enum_or_str(structure_extraction.document_profile),
+            "page_count": structure_extraction.page_count,
+            "numbering_scopes_count": len(structure_extraction.numbering_scopes),
+            "item_classifications_count": len(
+                structure_extraction.item_classifications
+            ),
+            "sections_count": len(structure_extraction.sections),
+            "issues_count": len(structure_extraction.issues),
+            "diagnostics": structure_extraction.diagnostics,
+        }
 
     return RichDocumentStructure(
-        namespaces=parse_namespaces,
+        namespaces=extraction_namespaces or parse_namespaces,
         document_boundaries=_build_document_boundaries(
             artifacts.get("document_boundaries")
         ),
@@ -167,7 +201,7 @@ def build_document_structure_from_artifacts(
         nested_documents=_build_nested_documents(
             artifacts.get("nested_documents")
         ),
-        sections=extract_sections or parse_sections,
+        sections=extraction_sections or extract_sections or parse_sections,
         tables=_build_tables(artifacts.get("tables")),
         images=_build_images_from_artifact(artifacts.get("images")),
         formulas=_build_formulas_from_artifact(artifacts.get("formulas")),
@@ -180,6 +214,136 @@ def build_document_structure_from_artifacts(
         ),
         diagnostics=diagnostics,
     )
+
+
+def _build_document_structure_extraction(
+    artifact: RichDocumentPackageArtifact | None,
+) -> DocumentStructureExtraction | None:
+    if artifact is None:
+        return None
+
+    content = artifact.content
+
+    if isinstance(content, DocumentStructureExtraction):
+        return content
+
+    if not isinstance(content, dict):
+        return None
+
+    payload = content.get("merged_extraction")
+    if payload is None:
+        payload = content.get("document_structure_extraction")
+    if payload is None:
+        payload = content
+
+    if not isinstance(payload, dict):
+        return None
+
+    try:
+        return DocumentStructureExtraction.model_validate(payload)
+    except ValidationError:
+        return None
+
+
+def _build_namespaces_from_document_structure_extraction(
+    extraction: DocumentStructureExtraction | None,
+) -> list[RichDocumentNamespace]:
+    if extraction is None:
+        return []
+
+    namespaces: list[RichDocumentNamespace] = []
+
+    for index, scope in enumerate(extraction.numbering_scopes, start=1):
+        raw = scope.model_dump(mode="json")
+
+        namespaces.append(
+            RichDocumentNamespace(
+                namespace_id=scope.namespace_id,
+                title=scope.title,
+                page_start=scope.page_start,
+                page_end=scope.page_end,
+                start_item_index=scope.start_item_index,
+                end_item_index_exclusive=scope.end_item_index_exclusive,
+                ordinal=index,
+                raw=raw,
+            )
+        )
+
+    return namespaces
+
+
+def _build_sections_from_document_structure_extraction(
+    extraction: DocumentStructureExtraction | None,
+) -> list[RichDocumentSection]:
+    if extraction is None:
+        return []
+
+    sections: list[RichDocumentSection] = []
+
+    for section in extraction.sections:
+        raw = section.model_dump(mode="json")
+
+        sections.append(
+            RichDocumentSection(
+                section_id=section.section_id,
+                parent_section_id=section.parent_section_id,
+                clause=section.clause,
+                title=section.title,
+                path=section.namespaced_path,
+                page_start=_page_start_from_source_spans(raw.get("source_spans")),
+                page_end=_page_end_from_source_spans(raw.get("source_spans")),
+                bbox=_bbox_from_source_spans(raw.get("source_spans")),
+                section_type=_enum_or_str(section.section_kind),
+                content={
+                    "content_item_indices": list(section.content_item_indices),
+                    "source_spans": raw.get("source_spans", []),
+                    "confidence": section.confidence,
+                    "reason": section.reason,
+                    "issues": raw.get("issues", []),
+                },
+                raw=raw,
+            )
+        )
+
+    return sections
+
+
+def _page_start_from_source_spans(source_spans: Any) -> int | None:
+    pages = _pages_from_source_spans(source_spans)
+    return min(pages) if pages else None
+
+
+def _page_end_from_source_spans(source_spans: Any) -> int | None:
+    pages = _pages_from_source_spans(source_spans)
+    return max(pages) if pages else None
+
+
+def _pages_from_source_spans(source_spans: Any) -> list[int]:
+    if not isinstance(source_spans, list):
+        return []
+
+    pages: list[int] = []
+
+    for span in source_spans:
+        if not isinstance(span, dict):
+            continue
+
+        page = _first_int(span.get("page"))
+        if page is not None:
+            pages.append(page)
+
+    return pages
+
+
+def _enum_or_str(value: Any) -> str:
+    enum_value = getattr(value, "value", None)
+    if isinstance(enum_value, str):
+        return enum_value
+
+    if isinstance(value, str):
+        return value
+
+    return str(value)
 
 
 def _build_parse_item_structure(
@@ -430,13 +594,33 @@ def _bbox_from_source_spans(value: Any) -> list[float] | None:
         if not isinstance(row, dict):
             continue
 
-        normalized_bbox = row.get("normalized_bbox")
-        if not isinstance(normalized_bbox, dict):
-            continue
+        normalized_bbox = _bbox(row.get("normalized_bbox"))
+        if normalized_bbox is not None:
+            return normalized_bbox
 
-        keys = ("x", "y", "w", "h")
-        if all(isinstance(normalized_bbox.get(key), (int, float)) for key in keys):
-            return [float(normalized_bbox[key]) for key in keys]
+        normalized_bbox_dict = row.get("normalized_bbox")
+        if isinstance(normalized_bbox_dict, dict):
+            keys = ("x", "y", "w", "h")
+            if all(
+                isinstance(normalized_bbox_dict.get(key), (int, float))
+                and not isinstance(normalized_bbox_dict.get(key), bool)
+                for key in keys
+            ):
+                return [float(normalized_bbox_dict[key]) for key in keys]
+
+        bbox = _bbox(row.get("bbox"))
+        if bbox is not None:
+            return bbox
+
+        bbox_dict = row.get("bbox")
+        if isinstance(bbox_dict, dict):
+            keys = ("x", "y", "w", "h")
+            if all(
+                isinstance(bbox_dict.get(key), (int, float))
+                and not isinstance(bbox_dict.get(key), bool)
+                for key in keys
+            ):
+                return [float(bbox_dict[key]) for key in keys]
 
     return None
 

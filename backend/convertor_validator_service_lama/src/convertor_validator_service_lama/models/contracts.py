@@ -89,7 +89,7 @@ class ExtractPassRunRequest(BaseModel):
     extraction_schema: dict[str, Any] = Field(default_factory=dict)
     instructions: str | None = None
     schema_name: str | None = None
-    expand: list[str] = Field(default_factory=lambda: ["extract_result"])
+    expand: list[str] = Field(default_factory=list)
     max_attempts: int = Field(default=60, ge=1)
     interval_seconds: float = Field(default=2.0, ge=0.0)
 
@@ -110,7 +110,7 @@ class ExtractPassesRunRequest(BaseModel):
     extraction_schemas: dict[str, dict[str, Any]] = Field(default_factory=dict)
     instructions_by_pass: dict[str, str] = Field(default_factory=dict)
     schema_names_by_pass: dict[str, str] = Field(default_factory=dict)
-    expand: list[str] = Field(default_factory=lambda: ["extract_result"])
+    expand: list[str] = Field(default_factory=list)
     max_attempts: int = Field(default=60, ge=1)
     interval_seconds: float = Field(default=2.0, ge=0.0)
 
@@ -192,7 +192,7 @@ class DocumentStructureWorkflowRunRequest(BaseModel):
     document_hint: str | None = None
     pass_name: LlamaExtractPassName = "sections"
     schema_name: str = "document_structure_extraction_v1"
-    expand: list[str] = Field(default_factory=lambda: ["extract_result"])
+    expand: list[str] = Field(default_factory=list)
     max_attempts: int = Field(default=60, ge=1)
     interval_seconds: float = Field(default=2.0, ge=0.0)
     include_metadata_in_instructions: bool = True

@@ -82,6 +82,14 @@ class ParseItemSpan(StrictExtractionModel):
     normalized_bbox: list[float] | None = Field(default=None, min_length=4, max_length=4)
     text_preview: str | None = Field(default=None, max_length=500)
 
+    @field_validator("bbox", "normalized_bbox", mode="before")
+    @classmethod
+    def _empty_bbox_array_to_none(cls, value: Any) -> Any:
+        if value == []:
+            return None
+
+        return value
+
     @field_validator("bbox", "normalized_bbox")
     @classmethod
     def validate_bbox(

@@ -294,3 +294,77 @@ def test_document_structure_extraction_classifies_numbered_lookalikes():
     assert roles[29] == ItemRole.NORMATIVE_CLAUSE
     assert extraction.item_classifications[0].is_normative_clause is False
     assert extraction.item_classifications[2].is_normative_clause is True
+
+def test_parse_item_span_treats_empty_bbox_arrays_as_absent() -> None:
+    payload = {
+        "schema_version": "document_structure_extraction_v1",
+        "document_profile": "simple_standard",
+        "page_count": 1,
+        "numbering_scopes": [
+            {
+                "namespace_id": "main_document",
+                "title": "Main document",
+                "scope_type": "main_document",
+                "page_start": 1,
+                "page_end": 1,
+                "confidence": 0.9,
+                "reason": "Test scope.",
+            }
+        ],
+        "item_classifications": [
+            {
+                "item_index": 0,
+                "role": "body_text",
+                "namespace_id": "main_document",
+                "clause": "1",
+                "belongs_to_clause": "1",
+                "is_normative_clause": True,
+                "source_span": {
+                    "page": 1,
+                    "item_index": 0,
+                    "bbox": [],
+                    "normalized_bbox": [],
+                    "text_preview": "Clause text.",
+                },
+                "confidence": 0.9,
+                "reason": "Test classification.",
+                "issues": [],
+            }
+        ],
+        "sections": [
+            {
+                "section_id": "main_document/1",
+                "namespace_id": "main_document",
+                "namespaced_path": "main_document/1",
+                "clause": "1",
+                "title": "Clause 1",
+                "section_kind": "numbered_clause",
+                "content_item_indices": [0],
+                "source_spans": [
+                    {
+                        "page": 1,
+                        "item_index": 0,
+                        "bbox": [],
+                        "normalized_bbox": [],
+                        "text_preview": "Clause text.",
+                    }
+                ],
+                "confidence": 0.9,
+                "reason": "Test section.",
+                "issues": [],
+            }
+        ],
+        "issues": [],
+        "diagnostics": {},
+    }
+
+    extraction = DocumentStructureExtraction.model_validate(payload)
+
+    source_span = extraction.item_classifications[0].source_span
+    assert source_span is not None
+    assert source_span.bbox is None
+    assert source_span.normalized_bbox is None
+
+    section_span = extraction.sections[0].source_spans[0]
+    assert section_span.bbox is None
+    assert section_span.normalized_bbox is None

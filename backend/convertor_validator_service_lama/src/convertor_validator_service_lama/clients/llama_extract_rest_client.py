@@ -35,6 +35,12 @@ class LlamaExtractPollingTimeoutError(LlamaExtractRestClientError):
     pass
 
 
+_VALID_EXTRACT_JOB_EXPANDS: set[str] = {
+    "configuration",
+    "extract_metadata",
+}
+
+
 class LlamaExtractRestClient:
     def __init__(
         self,
@@ -82,8 +88,10 @@ class LlamaExtractRestClient:
         expand: Sequence[str] | None = None,
     ) -> ExtractJobResult:
         params: dict[str, str | list[str]] = {"project_id": project_id}
-        if expand:
-            params["expand"] = list(expand)
+        valid_expand = self._valid_expand(expand)
+
+        if valid_expand:
+            params["expand"] = valid_expand
 
         response = self._http_client.get(
             self._url(f"/api/v2/extract/{job_id}"),
@@ -147,13 +155,22 @@ class LlamaExtractRestClient:
         if request.instructions:
             configuration["system_prompt"] = request.instructions
 
-        if request.schema_name:
-            configuration["schema_name"] = request.schema_name
-
         return {
             "file_input": request.parse_job_id,
             "configuration": configuration,
         }
+
+    def _valid_expand(self, expand: Sequence[str] | None) -> list[str]:
+        if not expand:
+            return []
+
+        result: list[str] = []
+
+        for value in expand:
+            if value in _VALID_EXTRACT_JOB_EXPANDS and value not in result:
+                result.append(value)
+
+        return result
 
     def _url(self, path: str) -> str:
         return f"{self._settings.extract_base_url.rstrip('/')}{path}"
@@ -167,7 +184,13 @@ class LlamaExtractRestClient:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise LlamaExtractResponseError(str(exc)) from exc
+            response_text = response.text.strip()
+            message = str(exc)
+
+            if response_text:
+                message = f"{message}; response_body={response_text[:4000]}"
+
+            raise LlamaExtractResponseError(message) from exc
 
         try:
             data = response.json()
