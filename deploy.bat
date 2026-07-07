@@ -35,16 +35,16 @@ echo   %GREEN%Docker is running.%NC%
 echo.
 
 :: ── 1. Git pull ──────────────────────────────────────────────────────────────
-echo %YELLOW%[1/4] Pulling latest code from git...%NC%
-git pull 2>&1
-if errorlevel 1 (
-    echo   %YELLOW%Pull failed, force checkout...%NC%
-    git fetch origin
-    git checkout origin/develop -- . 2>nul
-)
-git fetch --unshallow 2>nul || ver>nul
-echo   %GREEN%Git updated.%NC%
-echo.
+::echo %YELLOW%[1/4] Pulling latest code from git...%NC%
+::git pull 2>&1
+::if errorlevel 1 (
+    ::  echo   %YELLOW%Pull failed, force checkout...%NC%
+    :: git fetch origin
+    :: git checkout origin/develop -- . 2>nul
+::)
+:: git fetch --unshallow 2>nul || ver>nul
+:: echo   %GREEN%Git updated.%NC%
+::echo.
 
 :: ── 2. Сборка и запуск ──────────────────────────────────────────────────────
 echo %YELLOW%[2/4] Building and starting all services...%NC%

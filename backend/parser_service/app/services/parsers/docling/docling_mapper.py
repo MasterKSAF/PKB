@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'shared'))
 import tempfile
 import os
 
+from app.config import settings
 from standardizer import JsonStandardizer
 from normalizer import Normalizer, ParseResult
 from quality_metrics import assess_quality_from_json
@@ -257,12 +258,12 @@ def _create_converter():
     from docling.document_converter import DocumentConverter, PdfFormatOption
 
     pipeline_options = PdfPipelineOptions()
-    pipeline_options.do_ocr = False
-    pipeline_options.do_table_structure = True
+    pipeline_options.do_ocr = settings.docling_do_ocr
+    pipeline_options.do_table_structure = settings.docling_table_structure
     pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
     pipeline_options.table_structure_options.do_cell_matching = False
-    pipeline_options.do_formula_enrichment = True
-    pipeline_options.accelerator_options.num_threads = 4
+    pipeline_options.do_formula_enrichment = settings.docling_formula_enrichment
+    pipeline_options.accelerator_options.num_threads = settings.docling_num_threads
     pipeline_options.layout_batch_size = 2
     pipeline_options.table_batch_size = 2
     pipeline_options.generate_picture_images = True
@@ -283,55 +284,28 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
                             converter: Optional[Any] = None) -> Dict[str, Any]:
     """
     Новый конвейер:
-      DocumentConverter → enrich(DoclingDocument) → export_to_html() → html_to_json()
+      Docling Serve (HTTP) → enrich(DoclingDocument) → export_to_html() → html_to_json()
 
-    Параметры (совместимы со старым _try_pipeline):
+    Параметры:
         pdf_path: путь к PDF
         max_pages: последняя страница (включительно, None = все)
-        page_start: начальная страница
-        converter: переиспользуемый DocumentConverter (если None — создаётся новый)
+        page_start: игнорируется (docling-serve обрабатывает с первой страницы)
+        converter: устарел, игнорируется
 
     Returns:
         JSON в формате opendataloader
     """
     from docling_core.types.doc.base import ImageRefMode
     from html_to_json import html_to_document_json
+    from docling_serve_client import request_docling_document
 
     file_name = Path(pdf_path).name
     file_bytes = Path(pdf_path).read_bytes()
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
-    # Используем переданный конвертер или создаём новый
-    if converter is None:
-        converter = _create_converter()
+    doc, _ = request_docling_document(pdf_path, max_pages=max_pages)
 
-    # Определяем диапазон страниц
-    page_end = max_pages if max_pages is not None else None
-
-    # Обрабатываем батчами по 5 страниц (как _try_pipeline), чтобы избежать std::bad_alloc
-    from docling_core.types.doc import DoclingDocument
-    doc = DoclingDocument(name=Path(pdf_path).stem)
-    batch_size = 5
-    page_limit = page_end or 9999
-
-    for batch_start in range(page_start, page_limit + 1, batch_size):
-        batch_end = min(batch_start + batch_size - 1, page_limit)
-        try:
-            batch_result = converter.convert(
-                pdf_path, raises_on_error=False,
-                page_range=(batch_start, batch_end),
-            )
-            if batch_result and batch_result.document and batch_result.document.pages:
-                _merge_pages(doc, batch_result.document)
-        except Exception as e:
-            print(f"  Batch {batch_start}-{batch_end} failed: {e}",
-                  file=sys.stderr, flush=True)
-            continue
-
-    if not doc.pages:
-        raise RuntimeError("DocumentConverter failed on all pages")
-
-    print(f"  Docling OK: {len(doc.pages)} pages processed",
+    print(f"  Docling OK: {len(doc.pages)} pages processed (via docling-serve)",
           file=sys.stderr, flush=True)
 
     # ---- Сохраняем изображения, если указана папка ----
@@ -505,12 +479,12 @@ def _try_pipeline(pdf_path: str, max_pages: Optional[int] = None, page_start: in
         from docling.pipeline.standard_pdf_pipeline import StandardPdfPipeline
 
         pipeline_options = PdfPipelineOptions()
-        pipeline_options.do_ocr = False
-        pipeline_options.do_table_structure = True
+        pipeline_options.do_ocr = settings.docling_do_ocr
+        pipeline_options.do_table_structure = settings.docling_table_structure
         pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
-        pipeline_options.table_structure_options.do_cell_matching = False
-        pipeline_options.do_formula_enrichment = True
-        pipeline_options.accelerator_options.num_threads = 4
+        pipeline_options.table_structure_options.do_cell_matching = True
+        pipeline_options.do_formula_enrichment = settings.docling_formula_enrichment
+        pipeline_options.accelerator_options.num_threads = settings.docling_num_threads
         pipeline_options.layout_batch_size = 2
         pipeline_options.table_batch_size = 2
 
@@ -531,7 +505,7 @@ def _try_pipeline(pdf_path: str, max_pages: Optional[int] = None, page_start: in
 
         from docling_core.types.doc import DoclingDocument
         result_doc = DoclingDocument(name=Path(pdf_path).stem)
-        batch_size = 5
+        batch_size = settings.docling_batch_size
 
         for start in range(page_start, page_limit + 1, batch_size):
             end = min(start + batch_size - 1, page_limit)
@@ -691,7 +665,7 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
             continue
         page = _doc[pno - 1]
         blocks = page.get_text('dict', sort=True)['blocks']
-        
+
         # Весь текст Docling на этой странице
         page_doc_text = ' '.join(
             k.get('content', '') for k in kids
@@ -739,7 +713,7 @@ def _enrich_empty_blocks(pdf_path: str, raw: dict) -> dict:
             continue
         page = _doc2[pno - 1]
         blocks = page.get_text('dict', sort=True)['blocks']
-        
+
         page_doc_text = ' '.join(
             k.get('content', '') for k in kids
             if k.get('page number') == pno and k.get('content', '').strip()

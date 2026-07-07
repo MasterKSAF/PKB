@@ -8,15 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Установка системных зависимостей:
-# libxcb1 — требуется Docling (DocumentConverter) для рендеринга PDF через Qt/XCB
-# libgl1, libglib2.0-0t64 — для OpenCV, используемого моделями Docling
-# libgomp1 — OpenMP, требуется torch/scipy для параллельных вычислений
+# libmagic1 — требуется python-magic для определения MIME-типа
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
-    libxcb1 \
-    libgl1 \
-    libglib2.0-0t64 \
-    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание непривилегированного пользователя
@@ -33,13 +27,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копирование всего исходного кода (с учётом .dockerignore)
 COPY --chown=parser:parser ./app /app/app
 
-# Создание кэш-директории для HuggingFace/HuggingFace Hub (Docling)
-RUN mkdir -p /home/parser/.cache/huggingface && chown -R parser:parser /home/parser
-
-# Кэш для Docling (модели layout/table)
-ENV XDG_CACHE_HOME=/home/parser/.cache
-
-# Переключение на непривилегированного пользователя
 USER parser
 
 # Порт, указанный в конфигурации (по умолчанию 8087)

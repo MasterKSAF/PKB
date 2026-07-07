@@ -67,8 +67,8 @@ class Settings(BaseSettings):
 
     # OpenTelemetry
     otel_endpoint: str = Field("localhost:4317", alias="OTEL_EXPORTER_OTLP_ENDPOINT")
-    disable_telemetry: bool = Field(False, alias="DISABLE_TELEMETRY") 
-    
+    disable_telemetry: bool = Field(False, alias="DISABLE_TELEMETRY")
+
     # Лимиты параллельности и очереди
     max_concurrent_full_pipelines: int = Field(5, alias="MAX_CONCURRENT_FULL_PIPELINES")
     max_concurrent_preview_tasks: int = Field(30, alias="MAX_CONCURRENT_PREVIEW_TASKS")
@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     docling_batch_size: int = Field(5, alias="DOCLING_BATCH_SIZE")
     docling_do_ocr: bool = Field(False, alias="DOCLING_DO_OCR")
     docling_table_structure: bool = Field(True, alias="DOCLING_TABLE_STRUCTURE")
+    docling_formula_enrichment: bool = Field(True, alias="DOCLING_FORMULA_ENRICHMENT")
+    docling_serve_url: str = Field(
+        "http://localhost:5001", alias="DOCLING_SERVE_URL"
+    )
+    docling_serve_timeout: int = Field(1200, alias="DOCLING_SERVE_TIMEOUT")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

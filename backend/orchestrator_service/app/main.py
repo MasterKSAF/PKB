@@ -63,6 +63,14 @@ async def lifespan(app: FastAPI):
                     f"Startup: released {len(released)} stale task locks "
                     "(Celery Beat may have been down)"
                 )
+
+            # Reset active → queued: tasks orphaned by restart
+            reactivated = await repo.reset_stale_active_tasks()
+            if reactivated:
+                logger.warning(
+                    f"Startup: reset {len(reactivated)} stale active tasks to queued"
+                    f" (ids: {[t.id for t in reactivated]})"
+                )
     except Exception as cleanup_err:
         logger.warning(f"Startup lock cleanup failed (non-fatal): {cleanup_err}")
 
