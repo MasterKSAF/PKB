@@ -62,6 +62,8 @@ class DoclingParser(BaseParser):
         task_id: int,
         total_pages: Optional[int] = None,
     ) -> ParseResult:
+        import time as _time
+        t0 = _time.time()
         logger.info("DoclingParser: processing task %d", task_id)
 
         max_pages = options.get("max_pages")
@@ -71,9 +73,11 @@ class DoclingParser(BaseParser):
         temp_dir = tempfile.mkdtemp(prefix=f"docling_parser_{task_id}_")
         images_dir = os.path.join(temp_dir, "images")
         os.makedirs(images_dir, exist_ok=True)
+        t_setup = _time.time()
 
         try:
             loop = asyncio.get_running_loop()
+            t_submit = _time.time()
             result = await asyncio.wait_for(
                 loop.run_in_executor(
                     process_pool_executor,
@@ -102,6 +106,9 @@ class DoclingParser(BaseParser):
             raise RuntimeError(f"Docling parsing failed: {error_msg}")
 
         json_result = result
+        t_exec = _time.time()
+        logger.info("TIMING DoclingParser.parse: setup=%.3fs, executor=%.3fs (task %d)",
+                     t_setup - t0, t_exec - t_submit, task_id)
 
         # ---- Расчёт качества через quality_metrics ----
         try:

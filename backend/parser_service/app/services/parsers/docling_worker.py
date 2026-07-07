@@ -1,6 +1,6 @@
 """
 Воркер для Docling парсинга в отдельном процессе.
-Использует оригинальную convert_via_docling_md из docling_mapper.
+Использует docling-serve (HTTP) вместо локальной модели.
 """
 import tempfile
 import os
@@ -22,21 +22,9 @@ from docling_mapper import convert_via_docling_md
 logger = logging.getLogger(__name__)
 
 
-# Кэш конвертера на уровне процесса (создаётся один раз в init_worker)
-_converter = None
-
-
 def init_worker():
-    """
-    Инициализация воркер-процесса: предзагрузка модели Docling.
-    Конвертер создаётся один раз и переиспользуется для всех последующих задач.
-    """
-    global _converter
-    logger.info("Initializing Docling worker process: pre-loading model...")
-    # Импортируем _create_converter и создаём экземпляр конвертера
-    from docling_mapper import _create_converter
-    _converter = _create_converter()
-    logger.info("Docling worker process initialized, model loaded (770/770)")
+    """Инициализация воркер-процесса. С HTTP-сервером не требуется предзагрузка."""
+    logger.info("Docling worker initialized (no local model, uses docling-serve)")
 
 
 def parse_pdf_worker(file_bytes: bytes, max_pages: Optional[int], page_start: int,
@@ -45,6 +33,9 @@ def parse_pdf_worker(file_bytes: bytes, max_pages: Optional[int], page_start: in
     Вызывается в отдельном процессе для парсинга PDF.
     Создаёт временную папку, записывает файл, вызывает convert_via_docling_md.
     """
+    import time as _time
+    t0 = _time.time()
+
     # Проверка сигнатуры PDF
     if len(file_bytes) < 5 or not file_bytes[:5].startswith(b'%PDF'):
         return {"error": f"File does not start with PDF signature. Got: {file_bytes[:20]}"}
@@ -67,16 +58,17 @@ def parse_pdf_worker(file_bytes: bytes, max_pages: Optional[int], page_start: in
 
         # Преобразуем в абсолютный путь (он уже абсолютный, но на всякий случай)
         abs_path = os.path.abspath(pdf_path)
+        t1 = _time.time()
         logger.debug(f"Temp PDF created: {abs_path}, size: {actual_size} bytes")
 
-        # Вызываем функцию с переиспользуемым конвертером
         result = convert_via_docling_md(
             pdf_path=abs_path,
             max_pages=max_pages,
-            page_start=page_start,
             images_dir=images_dir,
-            converter=_converter,
         )
+        t2 = _time.time()
+        logger.debug("TIMING parse_pdf_worker: setup=%.3fs, convert=%.3fs, total=%.3fs",
+                     t1 - t0, t2 - t1, t2 - t0)
         return result
 
     except Exception as e:

@@ -134,22 +134,21 @@ class PagesTotalStep(PipelineStep):
 
 class ParseStep(PipelineStep):
     async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
+        import time as _time
+        t0 = _time.time()
         logger.debug("Parsing with MIME %s", ctx.mime_type)
         parser = ParserFactory.get_parser(ctx.mime_type)
         if parser is None:
             raise ValueError(f"No parser for MIME {ctx.mime_type}")
 
         ctx.options["original_file_name"] = ctx.original_file_name
+        t_get_parser = _time.time()
 
         # ---- ДОБАВЛЯЕМ: передаём max_pages в options для DoclingParser ----
         if ctx.max_pages is not None:
             ctx.options["max_pages"] = ctx.max_pages
 
         # ── Preview mode: обрезаем PDF до max_pages страниц ──────────────
-        # Чтобы CLI парсер не обрабатывал весь документ (что может висеть >300с),
-        # передаём только первые max_pages страниц.
-        # ctx.total_pages НЕ затираем — он хранит оригинальное количество страниц
-        # для корректного определения preview_not_supported ниже.
         file_bytes = ctx.file_bytes
         _original_total = None
         if ctx.max_pages is not None and ctx.mime_type == "application/pdf" and file_bytes:
@@ -170,6 +169,7 @@ class ParseStep(PipelineStep):
                     )
             except Exception as e:
                 logger.warning("Failed to truncate PDF for preview: %s", e)
+        t_truncate = _time.time()
 
         ctx.parse_result = await parser.parse(
             file_bytes,
@@ -177,6 +177,10 @@ class ParseStep(PipelineStep):
             ctx.task_id,
             total_pages=getattr(ctx, "total_pages", None),
         )
+        t_parse_done = _time.time()
+        logger.info("TIMING ParseStep: get_parser=%.3fs, truncate=%.3fs, parse=%.3fs, total=%.3fs (task %d)",
+                     t_get_parser - t0, t_truncate - t_get_parser, t_parse_done - t_truncate,
+                     t_parse_done - t0, ctx.task_id)
         if ctx.parse_result.temp_dir:
             ctx.temp_dir = ctx.parse_result.temp_dir
         logger.debug("Parsing completed, total_pages=%d", ctx.parse_result.total_pages)

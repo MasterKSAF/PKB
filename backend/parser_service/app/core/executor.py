@@ -1,6 +1,8 @@
 """
 Глобальный ProcessPoolExecutor для парсинга документов.
 Использует spawn-контекст для изоляции и предотвращения проблем с fork.
+
+С docling-serve (HTTP) воркеры не загружают модели — можно больше процессов.
 """
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
@@ -13,11 +15,9 @@ logger = logging.getLogger(__name__)
 # Используем spawn-контекст для надёжности
 context = multiprocessing.get_context('spawn')
 
-# Ограничиваем количество воркеров значением из настроек, но не более 2 для Docling
-# (чтобы избежать перегрузки памяти)
-max_workers = min(settings.max_concurrent_full_pipelines, 2)
+# Количество воркеров — из настроек (модели не загружаются, память не проблема)
+max_workers = settings.max_concurrent_full_pipelines
 
-# Создаём executor с initializer
 process_pool_executor = ProcessPoolExecutor(
     max_workers=max_workers,
     mp_context=context,

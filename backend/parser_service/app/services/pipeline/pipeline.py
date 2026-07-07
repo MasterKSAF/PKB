@@ -72,8 +72,11 @@ class Pipeline:
 
     async def run(self, ctx: ProcessingContext) -> ProcessingContext:
         """Запускает выполнение пайплайна."""
+        import time as _time
         total_steps = len(self.steps)
+        _step_times = []
         for i, step in enumerate(self.steps):
+            t_s = _time.time()
             if ctx.shutdown_event and ctx.shutdown_event.is_set():
                 logger.warning("Pipeline cancelled for task %d due to shutdown", ctx.task_id)
                 raise asyncio.CancelledError("Pipeline cancelled due to shutdown")
@@ -91,6 +94,9 @@ class Pipeline:
                 logger.debug("Executing step %d/%d: %s", i + 1, total_steps, step_name)
 
             ctx = await step.execute(ctx)
+            t_e = _time.time()
+            _step_times.append((step_name, t_e - t_s))
+            logger.info("TIMING Pipeline step %s: %.3fs (task %d)", step_name, t_e - t_s, ctx.task_id)
 
         if ctx.track_progress:
             await self.task_store.update_task(
@@ -99,5 +105,7 @@ class Pipeline:
                 step="completed",
                 step_detail="Все шаги пайплайна выполнены",
             )
-        logger.info("Pipeline completed successfully for task %d", ctx.task_id)
+        _total = sum(t for _, t in _step_times)
+        _steps_summary = ", ".join(f"{n}={t:.1f}s" for n, t in _step_times)
+        logger.info("TIMING Pipeline total=%.1fs task=%d [%s]", _total, ctx.task_id, _steps_summary)
         return ctx
