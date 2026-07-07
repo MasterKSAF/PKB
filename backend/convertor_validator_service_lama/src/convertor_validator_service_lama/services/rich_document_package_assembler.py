@@ -25,6 +25,9 @@ from convertor_validator_service_lama.models.rich_document_package import (
 from convertor_validator_service_lama.services.document_structure_assembler import (
     assemble_document_structure_from_parse_items,
 )
+from convertor_validator_service_lama.services.document_structure_extraction_input import (
+    extract_effective_parse_items,
+)
 
 
 def assemble_rich_document_package(
@@ -115,9 +118,13 @@ def assemble_rich_document_package(
                 raw_response=validation_result.raw_response,
             )
 
+    effective_parse_items = extract_effective_parse_items(
+        parse_result.model_dump(mode="json")
+    )
+
     document_structure = build_document_structure_from_artifacts(
         artifacts,
-        parse_items=parse_result.items,
+        parse_items=effective_parse_items,
         parse_page_count=_parse_page_count(parse_result.metadata, parse_result.job_metadata),
     )
 
