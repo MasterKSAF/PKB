@@ -15,6 +15,9 @@ from convertor_validator_service_lama.models.extract_job import (
     ExtractJobSubmitResponse,
     ExtractPassRequest,
 )
+from convertor_validator_service_lama.services.llama_extract_schema_adapter import (
+    build_llama_extract_compatible_json_schema,
+)
 from convertor_validator_service_lama.services.document_structure_prompt_agent import (
     StructuredJsonPromptBackend,
     parse_json_object_response,
@@ -109,7 +112,7 @@ class LlamaExtractStructuredJsonPromptBackend(StructuredJsonPromptBackend):
             pass_name=self._config.pass_name,
             project_id=project_id,
             schema_name=self._config.schema_name,
-            extraction_schema=json_schema,
+            extraction_schema=build_llama_extract_compatible_json_schema(json_schema),
             instructions=self._build_instructions(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
@@ -122,7 +125,7 @@ class LlamaExtractStructuredJsonPromptBackend(StructuredJsonPromptBackend):
             job_id=submit_response.job_id,
             pass_name=self._config.pass_name,
             project_id=project_id,
-            expand=self._config.expand or ["extract_result"],
+            expand=self._config.expand,
             config=self._config.polling_config,
         )
 

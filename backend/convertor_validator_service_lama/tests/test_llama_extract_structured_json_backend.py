@@ -121,6 +121,7 @@ def test_llama_extract_backend_submits_structured_prompt_and_returns_result():
     assert request.extraction_schema == {
         "type": "object",
         "title": "DocumentStructureExtraction",
+        "properties": {},
     }
     assert "System prompt." in (request.instructions or "")
     assert "User prompt." in (request.instructions or "")
@@ -132,7 +133,7 @@ def test_llama_extract_backend_submits_structured_prompt_and_returns_result():
             "job_id": "extract-job-123",
             "pass_name": "sections",
             "project_id": "project-123",
-            "expand": ["extract_result"],
+            "expand": None,
             "config": None,
         }
     ]

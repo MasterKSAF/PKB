@@ -240,7 +240,7 @@ def test_factory_allows_parse_job_id_from_stage_metadata():
 
     assert result.sections[0].namespaced_path == "main_document/1/1"
     assert client.start_requests[0].parse_job_id == "parse-job-from-stage-metadata"
-    assert client.poll_calls[0]["expand"] == ["extract_result"]
+    assert client.poll_calls[0]["expand"] is None
 
 
 def test_factory_can_omit_metadata_from_instructions():
