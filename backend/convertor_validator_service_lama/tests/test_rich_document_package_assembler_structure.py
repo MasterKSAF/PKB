@@ -320,3 +320,166 @@ def test_assembler_builds_document_structure_from_parse_items_when_extract_secti
 
     assert structure.diagnostics["parse_item_structure"]["sections_count"] == 3
     assert structure.diagnostics["parse_item_structure"]["namespaces_count"] == 2
+
+
+def test_assembler_maps_document_structure_extraction_artifact_into_structure() -> None:
+    extraction_payload = {
+        "schema_version": "document_structure_extraction_v1",
+        "document_profile": "simple_standard",
+        "page_count": 2,
+        "numbering_scopes": [
+            {
+                "namespace_id": "main_document",
+                "title": "Main document",
+                "scope_type": "main_document",
+                "page_start": 1,
+                "page_end": 2,
+                "confidence": 0.95,
+                "reason": "Fake overview.",
+            }
+        ],
+        "item_classifications": [
+            {
+                "item_index": 0,
+                "role": "normative_clause",
+                "namespace_id": "main_document",
+                "clause": "1.1",
+                "is_normative_clause": True,
+                "source_span": {"page": 1, "item_index": 0},
+                "confidence": 0.9,
+                "reason": "Fake classification.",
+            }
+        ],
+        "sections": [
+            {
+                "section_id": "main_document/1/1",
+                "namespace_id": "main_document",
+                "namespaced_path": "main_document/1/1",
+                "clause": "1.1",
+                "title": "Clause 1.1",
+                "section_kind": "numbered_clause",
+                "content_item_indices": [0, 1],
+                "source_spans": [
+                    {
+                        "page": 1,
+                        "item_index": 0,
+                        "normalized_bbox": [0.1, 0.2, 0.3, 0.4],
+                    },
+                    {
+                        "page": 2,
+                        "item_index": 1,
+                        "normalized_bbox": [0.2, 0.3, 0.4, 0.5],
+                    },
+                ],
+                "confidence": 0.9,
+                "reason": "Fake section.",
+            }
+        ],
+        "issues": [],
+        "diagnostics": {"workflow_scope_inputs_count": 1},
+    }
+
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        parse_result=_parse_result(),
+        extract_results={
+            "document_structure_extraction": _extract_result(
+                {
+                    "merged_extraction": extraction_payload,
+                }
+            ),
+            "tables": _extract_result(
+                {
+                    "tables": [
+                        {
+                            "table_id": "table-1",
+                            "caption": "Table 1",
+                            "page": 2,
+                            "cells": [],
+                        }
+                    ]
+                }
+            ),
+        },
+    )
+
+    result = assemble_rich_document_package(request)
+
+    structure = result.package.document_structure
+
+    assert [namespace.namespace_id for namespace in structure.namespaces] == [
+        "main_document"
+    ]
+    assert structure.namespaces[0].title == "Main document"
+    assert structure.namespaces[0].page_start == 1
+    assert structure.namespaces[0].page_end == 2
+
+    assert len(structure.sections) == 1
+
+    section = structure.sections[0]
+
+    assert section.section_id == "main_document/1/1"
+    assert section.clause == "1.1"
+    assert section.title == "Clause 1.1"
+    assert section.path == "main_document/1/1"
+    assert section.page_start == 1
+    assert section.page_end == 2
+    assert section.bbox == [0.1, 0.2, 0.3, 0.4]
+    assert section.section_type == "numbered_clause"
+    assert section.content["content_item_indices"] == [0, 1]
+    assert section.content["confidence"] == 0.9
+    assert section.raw["source_spans"][1]["page"] == 2
+
+    assert structure.tables[0].table_id == "table-1"
+
+    assert structure.diagnostics["document_structure_extraction"] == {
+        "schema_version": "document_structure_extraction_v1",
+        "document_profile": "simple_standard",
+        "page_count": 2,
+        "numbering_scopes_count": 1,
+        "item_classifications_count": 1,
+        "sections_count": 1,
+        "issues_count": 0,
+        "diagnostics": {"workflow_scope_inputs_count": 1},
+    }
+
+
+def test_assembler_keeps_legacy_sections_when_document_structure_extraction_invalid() -> None:
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        parse_result=_parse_result(),
+        extract_results={
+            "document_structure_extraction": _extract_result(
+                {
+                    "merged_extraction": {
+                        "schema_version": "document_structure_extraction_v1",
+                        "document_profile": "simple_standard",
+                        "page_count": 2,
+                        "numbering_scopes": [],
+                    }
+                }
+            ),
+            "sections": _extract_result(
+                {
+                    "sections": [
+                        {
+                            "section_id": "legacy-section",
+                            "title": "Legacy section",
+                            "path": "1",
+                            "content": "Legacy text",
+                        }
+                    ]
+                }
+            ),
+        },
+    )
+
+    result = assemble_rich_document_package(request)
+
+    structure = result.package.document_structure
+
+    assert structure.sections[0].section_id == "legacy-section"
+    assert structure.sections[0].content == "Legacy text"
+    assert "document_structure_extraction" not in structure.diagnostics

@@ -235,3 +235,66 @@ def test_rich_document_package_endpoint_rejects_empty_parse_job_id() -> None:
     response = client.post("/rich-document-package", json=payload)
 
     assert response.status_code == 422
+
+
+def test_rich_document_package_endpoint_exposes_document_structure_extraction() -> None:
+    payload = _payload()
+
+    payload["extract_results"]["document_structure_extraction"] = {
+        "job_id": "extract-job-document-structure",
+        "pass_name": "sections",
+        "status": "COMPLETED",
+        "result": {
+            "merged_extraction": {
+                "schema_version": "document_structure_extraction_v1",
+                "document_profile": "simple_standard",
+                "page_count": 2,
+                "numbering_scopes": [
+                    {
+                        "namespace_id": "main_document",
+                        "title": "Main document",
+                        "scope_type": "main_document",
+                        "page_start": 1,
+                        "page_end": 2,
+                        "confidence": 0.95,
+                        "reason": "Fake overview.",
+                    }
+                ],
+                "sections": [
+                    {
+                        "section_id": "main_document/1",
+                        "namespace_id": "main_document",
+                        "namespaced_path": "main_document/1",
+                        "clause": "1",
+                        "title": "Clause 1",
+                        "section_kind": "numbered_clause",
+                        "content_item_indices": [0],
+                        "source_spans": [
+                            {
+                                "page": 1,
+                                "item_index": 0,
+                                "normalized_bbox": [0.1, 0.2, 0.3, 0.4],
+                            }
+                        ],
+                        "confidence": 0.9,
+                        "reason": "Fake section.",
+                    }
+                ],
+                "diagnostics": {"workflow_scope_inputs_count": 1},
+            }
+        },
+        "raw_response": {},
+    }
+
+    response = client.post("/rich-document-package", json=payload)
+
+    assert response.status_code == 200
+
+    structure = response.json()["package"]["document_structure"]
+
+    assert structure["namespaces"][0]["namespace_id"] == "main_document"
+    assert structure["sections"][0]["section_id"] == "main_document/1"
+    assert structure["sections"][0]["path"] == "main_document/1"
+    assert structure["sections"][0]["section_type"] == "numbered_clause"
+    assert structure["sections"][0]["bbox"] == [0.1, 0.2, 0.3, 0.4]
+    assert structure["diagnostics"]["document_structure_extraction"]["sections_count"] == 1
