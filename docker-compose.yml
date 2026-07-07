@@ -642,6 +642,7 @@ services:
       REGISTRY_SERVICE_URL: http://registry:8084
       OCR_ENABLED: "false"
       PARSER_FALLBACK_TO_OCR: "false"
+      PIPELINE__AUTO_APPROVE_ENABLED: "true"
     depends_on:
       postgres:
         condition: service_healthy

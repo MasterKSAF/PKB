@@ -1945,14 +1945,15 @@ class PipelineOrchestrator:
 
             await self.task_repo.update_task_status(
                 task_id=task_id,
-                status=TaskStatus.ACTIVE.value,
+                status=TaskStatus.QUEUED.value,
+                stage=TaskStage.FULL.value,
                 step_name=step_name,
                 step_index=task.current_step_index,
             )
 
             logger.info(
                 f"Step {step_name} failed, retry {task.retry_count}/{settings.pipeline.MAX_STEP_RETRIES} "
-                f"in {backoff_delay}s",
+                f"in {backoff_delay}s, queued for re-dispatch",
                 extra={"task_id": task_id, "draft_id": task.draft_id},
             )
         else:
