@@ -53,6 +53,16 @@ registry_creation completed → enqueue rag_index`
 1. `backend/orchestrator_service/app/core/pipeline/orchestrator.py` — `approve_draft()`: добавить `file_hash_sha256` в `doc_payload`
 2. `backend/orchestrator_service/app/services/registry_client.py` — `create_draft()`: убедиться что `file_hash_sha256` сохраняется в черновике
 
+### I1. docling-serve не возвращает picture.image
+
+**Симптом:** `_save_docling_pictures` не сохраняет ни одной картинки — все `PictureItem.image = None`.
+
+**Причина:** docling-serve (REST API) при десериализации DoclingDocument теряет ImageRef с пиксельными данными. `doc.export_to_html()` не генерирует `<figure>` — HTML-парсер не создаёт image-блоки, в UI нет картинок.
+
+**Работает:** `_save_images_from_pdf` (PyMuPDF, `fitz`) извлекает встроенные изображения напрямую из PDF. Запасной вариант — `_inject_missing_image_blocks` добавляет блоки в JSON.
+
+**Где:** `docling_mapper.py`, `_save_docling_pictures` (строка 31).
+
 ### S1. Search 500 — bbox строка вместо списка
 
 **Статус:** НЕ ИСПРАВЛЕНО

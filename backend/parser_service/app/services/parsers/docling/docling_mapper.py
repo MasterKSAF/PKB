@@ -8,7 +8,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'shared'))
 
@@ -82,6 +82,126 @@ def _save_docling_pictures(doc, images_dir: str) -> Dict[Tuple[int, int], str]:
     return saved
 
 
+ImageUploader = Callable[[int, bytes, str], str]
+"""Upload function signature: (page_no, image_bytes, ext) -> final image_key."""
+
+
+def _save_images_from_pdf(
+    pdf_path: str,
+    images_dir: str,
+    image_uploader: Optional[ImageUploader] = None,
+) -> List[Tuple[int, str, str]]:
+    """
+    Извлекает ВСЕ встроенные изображения из PDF через PyMuPDF.
+
+    Если передан image_uploader — делегирует сохранение ему, возвращая его ключ.
+    Если нет — сохраняет в images_dir как page_{page_no}_{seq}.png (текущее поведение).
+
+    Returns:
+        List of (page_no, image_key_or_path, extension).
+    """
+    import fitz as _fitz
+    from PIL import Image as _PILImage
+    import io as _io
+
+    if image_uploader is None:
+        os.makedirs(images_dir, exist_ok=True)
+
+    result: List[Tuple[int, str, str]] = []
+    counter_per_page: Dict[int, int] = {}
+
+    pdf = _fitz.open(pdf_path)
+
+    for pno in range(pdf.page_count):
+        page = pdf[pno]
+        image_list = page.get_images(full=True)
+
+        for img_info in image_list:
+            xref = img_info[0]
+            try:
+                base_image = pdf.extract_image(xref)
+            except Exception:
+                continue
+
+            img_bytes = base_image.get("image")
+            ext = base_image.get("ext", "png")
+            if not img_bytes:
+                continue
+
+            try:
+                pil_img = _PILImage.open(_io.BytesIO(img_bytes))
+                pno_1 = pno + 1
+                counter_per_page.setdefault(pno_1, 0)
+                counter_per_page[pno_1] += 1
+                seq = counter_per_page[pno_1]
+
+                if image_uploader:
+                    key = image_uploader(pno_1, img_bytes, ".png")
+                    result.append((pno_1, key, ".png"))
+                else:
+                    fname = f"page_{pno_1}_{seq}.png"
+                    fpath = os.path.join(images_dir, fname)
+                    pil_img.save(fpath, format='PNG')
+                    result.append((pno_1, fpath, ".png"))
+            except Exception as e:
+                logger.warning("Failed to save PDF image page=%d xref=%d: %s", pno + 1, xref, e)
+
+    pdf.close()
+
+    if result:
+        print(f"  Saved {len(result)} PDF images{' via uploader' if image_uploader else ''}",
+              file=sys.stderr, flush=True)
+    return result
+
+
+def _inject_missing_image_blocks(
+    json_result: dict,
+    images_dir: str,
+    pdf_images: List[Tuple[int, str, str]],
+) -> None:
+    """
+    Добавляет блоки изображений в JSON для файлов, извлечённых из PDF,
+    но не привязанных ни к одному блоку в JSON.
+    Вызывается после _update_image_keys.
+
+    Если image_key_or_path (2-й элемент кортежа) является локальным путём
+    (начинается с images_dir), проставляется _temp_path для UploadImagesStep.
+    Иначе это финальный image_key (от uploader'а) — _temp_path не нужен.
+    """
+    if not pdf_images:
+        return
+    blocks = json_result.get('content', {}).get('document', {}).get('block', [])
+    existing_ids = set()
+    for blk in blocks:
+        v = blk.get('_temp_path', '') or blk.get('image_key', '')
+        if v:
+            existing_ids.add(v)
+
+    added = 0
+    for pno, key_or_path, _ext in pdf_images:
+        if key_or_path in existing_ids:
+            continue
+        new_block = {
+            'type': 'image',
+            'page number': pno,
+            'content': '',
+            'image_key': key_or_path,
+            'bounding box': [0, 0, 0, 0],
+        }
+        # Если это локальный файл (нет uploader'а) — сохраняем _temp_path
+        is_local = key_or_path.startswith(images_dir) if images_dir else False
+        if is_local:
+            fname = os.path.basename(key_or_path)
+            new_block['_temp_path'] = key_or_path
+            new_block['image_key'] = 'images/' + fname
+        blocks.append(new_block)
+        added += 1
+
+    if added:
+        print(f"  Injected {added} image blocks from PDF extraction",
+              file=sys.stderr, flush=True)
+
+
 def _update_image_keys(json_result: dict, images_dir: str) -> None:
     """
     Проставляет image_key в JSON-блоках типа 'image', указывая на
@@ -100,7 +220,7 @@ def _update_image_keys(json_result: dict, images_dir: str) -> None:
         counter_per_page[pno] += 1
         seq = counter_per_page[pno]
         fname = f"page_{pno}_{seq}.png"
-        rel_path = os.path.join('images', fname)
+        rel_path = 'images/' + fname  # always forward slash
         fpath = os.path.join(images_dir, fname)
         if os.path.exists(fpath):
             block['image_key'] = rel_path
@@ -309,8 +429,10 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
           file=sys.stderr, flush=True)
 
     # ---- Сохраняем изображения, если указана папка ----
+    pdf_images: List[Tuple[int, str, str]] = []
     if images_dir:
         _save_docling_pictures(doc, images_dir)
+        pdf_images = _save_images_from_pdf(pdf_path, images_dir)
 
     # Enrich на уровне DoclingDocument (возвращает карту bbox)
     doc, bbox_map = enrich_docling_document(doc, pdf_path)
@@ -334,6 +456,9 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
     # ---- Проставляем image_key из сохранённых картинок ----
     if images_dir:
         _update_image_keys(json_result, images_dir)
+        # Если в JSON нет image-блоков (docling-serve не вернул картинки),
+        # добавляем блоки для всех изображений, извлечённых из PDF.
+        _inject_missing_image_blocks(json_result, images_dir, pdf_images)
 
     # Проставляем bbox из карты, собранной во время enrich
     def _match_bbox(pno: int, text: str) -> Optional[list]:
