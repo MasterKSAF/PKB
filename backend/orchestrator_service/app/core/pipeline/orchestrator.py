@@ -755,80 +755,69 @@ class PipelineOrchestrator:
             )
             return
 
-        # Check if there are critical notifications — block auto-approve
-        has_critical = await self.task_repo.has_critical_notifications(task.id)
-
         if preview_not_supported:
             logger.info(
                 "Preview returned full document (preview_not_supported=True), "
                 "skipping full Parser/OCR phase",
                 extra={"task_id": task.id, "draft_id": task.draft_id},
             )
-            # Engine returned full document — mark as full_completed
-            await self.task_repo.update_task_status(
-                task_id=task.id,
-                stage=TaskStage.DECISION.value,
-                progress_percent=50,
-            )
             task.full_completed = True
-            await self.db.flush()
-
-            # Evaluate quality and auto-approve conditions
-            quality_action = self._check_auto_approve(task, steps)
-            if quality_action == "auto_approve":
-                logger.info(
-                    "Auto-approving draft after full preview",
-                    extra={"draft_id": task.draft_id, "task_id": task.id},
-                )
-                await self.approve_draft(task.draft_id, task.id)
-                return
-            elif quality_action == "discarded":
-                logger.warning(
-                    "Discarding draft due to low quality",
-                    extra={"draft_id": task.draft_id, "task_id": task.id},
-                )
-                registry = RegistryServiceClient()
-                await registry.update_draft_status(
-                    draft_id=task.draft_id,
-                    status="discarded",
-                    error_code="QUALITY_TOO_LOW",
-                )
-                await registry.close()
-                await self.task_repo.update_task_status(
-                    task_id=task.id,
-                    stage=TaskStage.DECISION.value,
-                    progress_percent=100,
-                    status=TaskStatus.FAILED.value,
-                )
-                return
-            elif quality_action == "review_required":
-                logger.info(
-                    "Review required due to quality thresholds",
-                    extra={"draft_id": task.draft_id, "task_id": task.id},
-                )
-                registry = RegistryServiceClient()
-                await registry.update_draft_status(
-                    draft_id=task.draft_id,
-                    status="review_required",
-                )
-                await registry.close()
-                await self.task_repo.update_task_status(
-                    task_id=task.id,
-                    stage=TaskStage.DECISION.value,
-                    progress_percent=50,
-                )
-                return
-            # else: ready_for_approve — continue to normal flow
-
         else:
-            # Partial preview — always wait for decision
             task.full_completed = False
-            await self.db.flush()
+
+        await self.task_repo.update_task_status(
+            task_id=task.id,
+            stage=TaskStage.DECISION.value,
+            progress_percent=50,
+        )
+        await self.db.flush()
+
+        # Evaluate quality and auto-approve conditions
+        quality_action = self._check_auto_approve(task, steps)
+        if quality_action == "auto_approve":
+            logger.info(
+                "Auto-approving draft",
+                extra={"draft_id": task.draft_id, "task_id": task.id},
+            )
+            await self.approve_draft(task.draft_id, task.id)
+            return
+        elif quality_action == "discarded":
+            logger.warning(
+                "Discarding draft due to low quality",
+                extra={"draft_id": task.draft_id, "task_id": task.id},
+            )
+            registry = RegistryServiceClient()
+            await registry.update_draft_status(
+                draft_id=task.draft_id,
+                status="discarded",
+                error_code="QUALITY_TOO_LOW",
+            )
+            await registry.close()
+            await self.task_repo.update_task_status(
+                task_id=task.id,
+                stage=TaskStage.DECISION.value,
+                progress_percent=100,
+                status=TaskStatus.FAILED.value,
+            )
+            return
+        elif quality_action == "review_required":
+            logger.info(
+                "Review required due to quality thresholds",
+                extra={"draft_id": task.draft_id, "task_id": task.id},
+            )
+            registry = RegistryServiceClient()
+            await registry.update_draft_status(
+                draft_id=task.draft_id,
+                status="review_required",
+            )
+            await registry.close()
             await self.task_repo.update_task_status(
                 task_id=task.id,
                 stage=TaskStage.DECISION.value,
                 progress_percent=50,
             )
+            return
+        # else: ready_for_approve — continue to normal flow
 
         # --- Save preview_metadata from converter (P1F-4) ---
         preview_metadata = {}

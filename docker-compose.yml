@@ -578,6 +578,7 @@ services:
       OCR_ENABLED: "false"
       PARSER_FALLBACK_TO_OCR: "false"
       CONVERTER_SERVICE_URL: http://converter-validator:8086
+      PIPELINE__AUTO_APPROVE_ENABLED: "true"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8081 --reload
     depends_on:
       postgres:
