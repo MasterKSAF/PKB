@@ -50,6 +50,7 @@ def hydrate_document_structure_extraction_source_spans_from_parse_items(
         "spans_text_mismatch": 0,
         "spans_clause_mismatch": 0,
         "spans_missing_parse_bbox": 0,
+        "spans_hydrated_from_nested_list_item": 0,
         "sections_seen": 0,
         "sections_with_bbox_after_direct_hydration": 0,
         "sections_hydrated_by_clause_fallback": 0,
@@ -83,6 +84,12 @@ def hydrate_document_structure_extraction_source_spans_from_parse_items(
         if direct_has_bbox:
             diagnostics["sections_with_bbox_after_direct_hydration"] += 1
 
+            if _section_has_clause_primary_bbox(
+                section.source_spans,
+                section.clause,
+            ):
+                continue
+
         fallback_span = _build_clause_fallback_span(
             section.clause,
             indexed_items=indexed_items,
@@ -105,10 +112,7 @@ def hydrate_document_structure_extraction_source_spans_from_parse_items(
         )
 
         if direct_has_bbox:
-            if fallback_has_bbox and not _section_has_clause_primary_bbox(
-                section.source_spans,
-                section.clause,
-            ):
+            if fallback_has_bbox:
                 _make_clause_span_primary(
                     section.source_spans,
                     fallback_span,
@@ -183,12 +187,28 @@ def _hydrate_span(
         diagnostics["spans_clause_mismatch"] += 1
         return
 
-    bbox = _bbox_from_parse_item(parse_item)
-    normalized_bbox = _normalized_bbox_from_parse_item(parse_item)
+    nested_clause_item = _nested_list_item_for_clause(
+        parse_item,
+        expected_clause,
+    )
+
+    if nested_clause_item is not None:
+        bbox = _bbox_from_parse_item(nested_clause_item)
+        normalized_bbox = _normalized_bbox_from_parse_item(nested_clause_item)
+        diagnostics["spans_hydrated_from_nested_list_item"] += 1
+    else:
+        bbox = _bbox_from_parse_item(parse_item)
+        normalized_bbox = _normalized_bbox_from_parse_item(parse_item)
 
     if normalized_bbox is None:
-        page_width = _first_number(parse_item.get("page_width"))
-        page_height = _first_number(parse_item.get("page_height"))
+        page_width = _first_number(
+            nested_clause_item.get("page_width") if nested_clause_item else None,
+            parse_item.get("page_width"),
+        )
+        page_height = _first_number(
+            nested_clause_item.get("page_height") if nested_clause_item else None,
+            parse_item.get("page_height"),
+        )
         normalized_bbox = _normalize_bbox(
             bbox,
             page_width=page_width,
@@ -345,6 +365,102 @@ def _find_parse_item_by_leading_clause(
             return item
 
     return None
+
+
+def _nested_list_item_for_clause(
+    parse_item: dict[str, Any],
+    expected_clause: str | None,
+) -> dict[str, Any] | None:
+    normalized_clause = _normalize_clause(expected_clause or "")
+
+    if not normalized_clause:
+        return None
+
+    nested_items = parse_item.get("items")
+
+    if not isinstance(nested_items, list) or not nested_items:
+        return None
+
+    clause_segments = _clause_text_segments(_extract_item_text(parse_item))
+
+    if len(clause_segments) != len(nested_items):
+        return None
+
+    for index, segment in enumerate(clause_segments):
+        if segment.clause != normalized_clause:
+            continue
+
+        nested_item = nested_items[index]
+
+        if not isinstance(nested_item, dict):
+            return None
+
+        if _bbox_from_parse_item(nested_item) is None:
+            return None
+
+        return _inherit_page_geometry(
+            nested_item,
+            parse_item,
+        )
+
+    return None
+
+
+@dataclass(frozen=True)
+class _ClauseTextSegment:
+    clause: str
+    text: str
+    start: int
+    end: int
+
+
+def _clause_text_segments(text: str) -> list[_ClauseTextSegment]:
+    if not text or not text.strip():
+        return []
+
+    matches = list(
+        re.finditer(
+            r"(?m)(?:^|\n)\s*([0-9]+(?:\.[0-9]+)*)\s*[.)]\s+",
+            text,
+        )
+    )
+
+    if not matches:
+        return []
+
+    segments: list[_ClauseTextSegment] = []
+
+    for index, match in enumerate(matches):
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        segment_text = text[start:end].strip()
+
+        if not segment_text:
+            continue
+
+        segments.append(
+            _ClauseTextSegment(
+                clause=_normalize_clause(match.group(1)),
+                text=segment_text,
+                start=start,
+                end=end,
+            )
+        )
+
+    return segments
+
+
+def _inherit_page_geometry(
+    nested_item: dict[str, Any],
+    parent_item: dict[str, Any],
+) -> dict[str, Any]:
+    result = dict(nested_item)
+
+    for key in ("page_number", "page", "page_width", "page_height"):
+        if result.get(key) is None and parent_item.get(key) is not None:
+            result[key] = parent_item[key]
+
+    return result
 
 
 def _page_from_item(item: dict[str, Any]) -> int | None:

@@ -494,3 +494,133 @@ def test_bbox_hydrator_prefers_clause_span_over_table_span() -> None:
     assert section.source_spans[1].bbox == [50.0, 60.0, 40.0, 30.0]
     assert section.source_spans[1].normalized_bbox == [0.5, 0.3, 0.4, 0.15]
     assert result.diagnostics["sections_preferred_clause_fallback"] == 1
+
+def test_bbox_hydrator_uses_nested_list_item_bbox_for_merged_clauses() -> None:
+    extraction = DocumentStructureExtraction.model_validate(
+        {
+            "schema_version": "document_structure_extraction_v1",
+            "document_profile": "simple_standard",
+            "page_count": 1,
+            "numbering_scopes": [
+                {
+                    "namespace_id": "main_document",
+                    "title": "Main document",
+                    "scope_type": "main_document",
+                    "confidence": 0.9,
+                    "reason": "Test scope.",
+                }
+            ],
+            "item_classifications": [],
+            "sections": [
+                {
+                    "section_id": "main_document/7",
+                    "namespace_id": "main_document",
+                    "namespaced_path": "main_document/7",
+                    "clause": "7",
+                    "title": None,
+                    "section_kind": "numbered_clause",
+                    "content_item_indices": [0],
+                    "source_spans": [
+                        {
+                            "page": 1,
+                            "item_index": 0,
+                            "text_preview": "7. First clause",
+                        }
+                    ],
+                    "confidence": 0.9,
+                    "reason": "Test section.",
+                    "issues": [],
+                },
+                {
+                    "section_id": "main_document/8",
+                    "namespace_id": "main_document",
+                    "namespaced_path": "main_document/8",
+                    "clause": "8",
+                    "title": None,
+                    "section_kind": "numbered_clause",
+                    "content_item_indices": [0],
+                    "source_spans": [
+                        {
+                            "page": 1,
+                            "item_index": 0,
+                            "text_preview": "8. Second clause",
+                        }
+                    ],
+                    "confidence": 0.9,
+                    "reason": "Test section.",
+                    "issues": [],
+                },
+                {
+                    "section_id": "main_document/9",
+                    "namespace_id": "main_document",
+                    "namespaced_path": "main_document/9",
+                    "clause": "9",
+                    "title": None,
+                    "section_kind": "numbered_clause",
+                    "content_item_indices": [0],
+                    "source_spans": [
+                        {
+                            "page": 1,
+                            "item_index": 0,
+                            "text_preview": "9. Third clause",
+                        }
+                    ],
+                    "confidence": 0.9,
+                    "reason": "Test section.",
+                    "issues": [],
+                },
+            ],
+            "issues": [],
+            "diagnostics": {},
+        }
+    )
+
+    parse_items = [
+        {
+            "page_number": 1,
+            "text": (
+                "7. First clause text.\n\n"
+                "8. Second clause text.\n\n"
+                "9. Third clause text."
+            ),
+            "bbox": [{"x": 10, "y": 20, "w": 100, "h": 90}],
+            "items": [
+                {
+                    "type": "text",
+                    "md": "First clause text.",
+                    "bbox": [{"x": 10, "y": 20, "w": 100, "h": 20}],
+                },
+                {
+                    "type": "text",
+                    "md": "Second clause text.",
+                    "bbox": [{"x": 10, "y": 45, "w": 100, "h": 20}],
+                },
+                {
+                    "type": "text",
+                    "md": "Third clause text.",
+                    "bbox": [{"x": 10, "y": 70, "w": 100, "h": 20}],
+                },
+            ],
+            "page_width": 200,
+            "page_height": 200,
+        }
+    ]
+
+    result = hydrate_document_structure_extraction_source_spans_from_parse_items(
+        extraction,
+        parse_items,
+    )
+
+    section_7 = result.extraction.sections[0]
+    section_8 = result.extraction.sections[1]
+    section_9 = result.extraction.sections[2]
+
+    assert section_7.source_spans[0].bbox == [10.0, 20.0, 100.0, 20.0]
+    assert section_8.source_spans[0].bbox == [10.0, 45.0, 100.0, 20.0]
+    assert section_9.source_spans[0].bbox == [10.0, 70.0, 100.0, 20.0]
+
+    assert section_7.source_spans[0].normalized_bbox == [0.05, 0.1, 0.5, 0.1]
+    assert section_8.source_spans[0].normalized_bbox == [0.05, 0.225, 0.5, 0.1]
+    assert section_9.source_spans[0].normalized_bbox == [0.05, 0.35, 0.5, 0.1]
+
+    assert result.diagnostics["spans_hydrated_from_nested_list_item"] == 3
