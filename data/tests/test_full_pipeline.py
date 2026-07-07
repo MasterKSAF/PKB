@@ -2,6 +2,7 @@
 Full pipeline test: Upload document → Process → Search → Verify
 Tests the complete pipeline with real services via Gateway (port 8080)
 """
+import io
 import requests
 import time
 import uuid
@@ -9,6 +10,8 @@ import json
 import sys
 import hashlib
 from pathlib import Path
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 from config import get_api_url, get_direct_rag_url, ensure_services
 
