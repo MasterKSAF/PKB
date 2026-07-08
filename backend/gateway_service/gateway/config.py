@@ -65,7 +65,7 @@ class GatewayConfig:
     })
 
     # Таймауты
-    request_timeout: float = float(os.getenv("GATEWAY_REQUEST_TIMEOUT", "30.0"))
+    request_timeout: float = float(os.getenv("GATEWAY_REQUEST_TIMEOUT", "180.0"))
     health_timeout: float = float(os.getenv("GATEWAY_HEALTH_TIMEOUT", "5.0"))
 
     # CORS (GW-3)
