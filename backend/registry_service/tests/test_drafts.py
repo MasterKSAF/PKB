@@ -67,7 +67,7 @@ def test_get_draft_preview(client):
     response = client.get(f"/api/v1/registry/drafts/{draft_id}/preview")
     assert response.status_code == 200
     data = response.json()["data"]
-    assert data["id"] == draft_id
+    assert data["draft_id"] == draft_id
     # Ensure hidden fields are not in preview
     assert "raw_data" not in data
     assert "document_key" not in data
