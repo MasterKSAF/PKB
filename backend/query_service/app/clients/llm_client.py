@@ -59,6 +59,11 @@ async def complete(
             prompt_tokens = usage.get("prompt_tokens", 0)
             completion_tokens = usage.get("completion_tokens", 0)
             content = data["choices"][0]["message"]["content"]
+            if not content:
+                logger.warning(
+                    "llm attempt=%d/3 empty_content model=%s", attempt + 1, settings.LLM_MODEL,
+                )
+                raise ValueError("LLM returned empty content")
             logger.info(
                 "llm_complete model=%s prompt_tokens=%d completion_tokens=%d duration_ms=%d",
                 settings.LLM_MODEL, prompt_tokens, completion_tokens, duration_ms,
@@ -66,6 +71,30 @@ async def complete(
             return LLMResult(content, prompt_tokens, completion_tokens, duration_ms)
         except Exception as exc:
             last_exc = exc
+            if isinstance(exc, httpx.HTTPStatusError):
+                resp_text = (exc.response.text[:200] or "") if exc.response else ""
+                logger.warning(
+                    "llm attempt=%d/3 http_error status=%d body=%s model=%s",
+                    attempt + 1, exc.response.status_code, resp_text, settings.LLM_MODEL,
+                )
+            elif isinstance(exc, httpx.ConnectError):
+                logger.warning(
+                    "llm attempt=%d/3 connect_error model=%s url=%s",
+                    attempt + 1, settings.LLM_MODEL, settings.LLM_API_URL,
+                )
+            elif isinstance(exc, httpx.TimeoutException):
+                logger.warning(
+                    "llm attempt=%d/3 timeout model=%s", attempt + 1, settings.LLM_MODEL,
+                )
+            elif isinstance(exc, (KeyError, IndexError, ValueError)):
+                logger.warning(
+                    "llm attempt=%d/3 response_error=%s model=%s",
+                    attempt + 1, exc, settings.LLM_MODEL,
+                )
+            else:
+                logger.warning(
+                    "llm attempt=%d/3 error=%s model=%s", attempt + 1, exc, settings.LLM_MODEL,
+                )
             if attempt < 2:
                 await asyncio.sleep(backoff)
                 backoff *= 2

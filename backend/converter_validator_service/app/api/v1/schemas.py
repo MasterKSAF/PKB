@@ -32,6 +32,7 @@ class ConvertRequest(RawJsonRequest):
     use_llm: bool = True
     llm_max_tokens: int | None = Field(None, ge=1, le=128000)
     llm_timeout: int | None = Field(None, ge=1, le=600)
+    preview_metadata: dict[str, Any] | None = None
 
 
 class LlmUsage(BaseModel):

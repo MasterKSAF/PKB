@@ -345,6 +345,7 @@ services:
       DOCLING_SERVE_ENG_LOC_NUM_WORKERS: "4"
       ONNXRUNTIME_INTRAP_NUM_THREADS: 4
       ONNXRUNTIME_INTERAP_NUM_THREADS: 4
+      DOCLING_SERVE_MAX_SYNC_WAIT: "1800"
     volumes:
       - docling_hf_cache:/root/.cache/huggingface
     networks:

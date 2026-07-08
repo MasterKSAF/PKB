@@ -359,7 +359,17 @@ async def run_pipeline(
 
         if llm_text is None:
             logger.error("llm generation failed after retries", extra={"message_id": message_id})
-            await _set_status(session_factory, message_id, "failed")
+            async with session_factory() as db:
+                async with db.begin():
+                    await db.execute(
+                        update(ChatMessage)
+                        .where(ChatMessage.message_id == message_id)
+                        .values(
+                            content="Не удалось сгенерировать ответ. Попробуйте переформулировать запрос.",
+                            status="failed",
+                            processing_time_ms=0,
+                        )
+                    )
             return
 
         await _set_status(session_factory, message_id, "enriching_citations")
@@ -420,4 +430,14 @@ async def run_pipeline(
 
     except Exception:
         logger.error("pipeline error", extra={"message_id": message_id}, exc_info=True)
-        await _set_status(session_factory, message_id, "failed")
+        async with session_factory() as db:
+            async with db.begin():
+                await db.execute(
+                    update(ChatMessage)
+                    .where(ChatMessage.message_id == message_id)
+                    .values(
+                        content="Внутренняя ошибка при обработке запроса. Попробуйте повторить.",
+                        status="failed",
+                        processing_time_ms=0,
+                    )
+                )

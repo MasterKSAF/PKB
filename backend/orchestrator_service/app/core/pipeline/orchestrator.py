@@ -948,11 +948,15 @@ class PipelineOrchestrator:
             # Extract full parser result from the full_ocr step output
             full_result = None
             file_key = None
+            preview_metadata = None
             for s in steps:
                 if s.step_name == "upload" and s.output_data:
                     file_key = s.output_data.get("file_key")
                 if s.step_name == "full_ocr" and s.output_data:
                     full_result = s.output_data.get("full_result")
+                # Use preview metadata (extracted at preview stage) instead of re-extracting
+                if s.step_name == "preview_converter" and s.output_data:
+                    preview_metadata = s.output_data.get("metadata", {})
             if not file_key:
                 for s in steps:
                     if s.input_data and s.input_data.get("file_key"):
@@ -973,7 +977,7 @@ class PipelineOrchestrator:
             )
             run_converter_full_step.delay(
                 task.id, task.draft_id, file_key, trace_id=trace_id,
-                raw_json=full_result,
+                raw_json=full_result, preview_metadata=preview_metadata,
             )
 
         elif step_name == "full_converter":

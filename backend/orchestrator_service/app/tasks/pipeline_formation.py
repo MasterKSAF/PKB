@@ -403,8 +403,13 @@ async def process_parser_full_result(
 def run_converter_full_step(
     self, task_id: int, draft_id: int, file_key: str,
     trace_id: str = "", raw_json: Optional[dict] = None,
+    preview_metadata: Optional[dict] = None,
 ):
-    """Full Converter step — convert and validate full document."""
+    """Full Converter step — convert and validate full document.
+
+    Uses preview_metadata (extracted at preview stage, possibly modified by user)
+    instead of re-extracting from raw_json, because user may have edited fields.
+    """
     if trace_id:
         set_trace_id(trace_id)
     try:
@@ -416,6 +421,8 @@ def run_converter_full_step(
                 body = {"file_key": file_key, "draft_id": draft_id, "task_id": task_id}
                 if raw_json:
                     body["raw_json"] = raw_json
+                if preview_metadata:
+                    body["preview_metadata"] = preview_metadata
                 return await client.convert_full(body)
             finally:
                 await client.close()

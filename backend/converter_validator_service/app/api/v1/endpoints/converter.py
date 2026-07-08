@@ -53,5 +53,6 @@ async def convert_document(request: ConvertRequest):
         use_llm=request.use_llm,
         llm_max_tokens=llm_max_tokens,
         llm_timeout=llm_timeout,
+        preview_metadata=request.preview_metadata,
     )
     return ConvertResponse(**result)

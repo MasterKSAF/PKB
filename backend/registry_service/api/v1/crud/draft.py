@@ -43,7 +43,11 @@ def get_drafts(db: Session, page: int = 1, page_size: int = 50, draft_id: Option
     if document_key is not None:
         query = query.filter(Draft.document_key == document_key)
     if status is not None:
-        query = query.filter(Draft.status == status)
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        if len(statuses) == 1:
+            query = query.filter(Draft.status == statuses[0])
+        elif len(statuses) > 1:
+            query = query.filter(Draft.status.in_(statuses))
         
     total = query.count()
     drafts = query.order_by(Draft.draft_id.desc()).offset((page - 1) * page_size).limit(page_size).all()

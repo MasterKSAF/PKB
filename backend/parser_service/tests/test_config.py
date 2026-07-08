@@ -14,7 +14,7 @@ def test_default_settings():
     assert settings.pdf_dpi == 72
     assert settings.minio_timeout == 30
     assert settings.preview_timeout == 300
-    assert settings.pipeline_timeout == 300
+    assert settings.pipeline_timeout == 1800
     assert settings.parser_timeout == 300
     # Обязательные поля заданы в conftest
     _ = settings.minio_endpoint

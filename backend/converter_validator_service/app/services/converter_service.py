@@ -75,11 +75,14 @@ async def convert(
     use_llm: bool = True,
     llm_max_tokens: int | None = None,
     llm_timeout: int | None = None,
+    preview_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not raw_json:
         raise MetadataExtractionFailedError("raw_json is empty")
 
-    preview_meta = extract_preview_metadata(raw_json)
+    # Если переданы preview-метаданные (уже извлечены на preview и возможно изменены пользователем),
+    # используем их вместо повторного извлечения из raw_json.
+    preview_meta = preview_metadata if preview_metadata else extract_preview_metadata(raw_json)
     try:
         hierarchy = build_hierarchy(raw_json)
     except Exception as exc:

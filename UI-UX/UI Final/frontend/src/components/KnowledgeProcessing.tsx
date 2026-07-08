@@ -420,7 +420,7 @@ const getStatusLabel = (status: DraftStatus) => {
     case 'validation':
       return 'Повторная проверка';
     case 'approved':
-      return 'Принят';
+      return 'Публикуется…';
     case 'discarded':
       return 'Отклонён';
     case 'failed':
@@ -854,6 +854,8 @@ const createIdempotencyKey = () =>
     ? crypto.randomUUID()
     : `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+const ACTIVE_DRAFT_STATUSES = ['uploaded', 'previewing', 'validation', 'ready_for_approve', 'review_required', 'failed'];
+
 const readStoredDraftDocumentKeys = () => {
   if (typeof window === 'undefined') return [];
 
@@ -881,7 +883,7 @@ const draftProgressByStatus: Record<DraftStatus, number> = {
   failed: 100,
 };
 
-const isActiveDraftStatus = (status: DraftStatus) => status !== 'approved' && status !== 'discarded';
+const isActiveDraftStatus = (status: DraftStatus) => status !== 'discarded';
 const shouldPollDraftDetails = (status?: DraftStatus | null) => status === 'previewing' || status === 'validation';
 const isPreviewStartConflict = (error: any) => error?.response?.status === 409;
 
@@ -891,6 +893,8 @@ const getDraftQueueStage = (status: DraftStatus) => {
       return 'Загрузка';
     case 'previewing':
       return 'Предпросмотр / OCR';
+    case 'approved':
+      return 'Публикация';
     case 'ready_for_approve':
     case 'review_required':
       return 'Ожидание решения';
@@ -1252,7 +1256,7 @@ export const KnowledgeProcessing: React.FC = () => {
   const gatewayDraftsQuery = useQuery({
     queryKey: ['gateway-drafts', workMode, draftDocumentKeys],
     queryFn: async () => {
-      const gatewayDrafts = await draftsApi.list();
+      const gatewayDrafts = await draftsApi.list({ status: ACTIVE_DRAFT_STATUSES.join(',') });
       const byId = new Map<string, any>(
         gatewayDrafts.map((item: any) => [String(item.draft_id ?? item.id), item]),
       );
@@ -1300,6 +1304,7 @@ export const KnowledgeProcessing: React.FC = () => {
 
   useEffect(() => {
     if (workMode !== 'prod' || !gatewayDraftsQuery.data) return;
+    const published = publishedDocumentsQuery.data ?? [];
 
     setDrafts((current) => {
       const deletedIds = new Set(deletedGatewayDraftIds);
@@ -1316,9 +1321,15 @@ export const KnowledgeProcessing: React.FC = () => {
         });
       });
 
-      return Array.from(byId.values()).filter((draft) => isActiveDraftStatus(draft.status));
+      return Array.from(byId.values()).filter((draft) => {
+        if (draft.status === 'approved') {
+          const docId = draft.gatewayPromotedDocumentId;
+          return docId != null && !published.some((doc: any) => String(doc.id) === String(docId));
+        }
+        return draft.status !== 'discarded';
+      });
     });
-  }, [deletedGatewayDraftIds, gatewayDraftsQuery.data, workMode]);
+  }, [deletedGatewayDraftIds, gatewayDraftsQuery.data, publishedDocumentsQuery.data, workMode]);
 
   useEffect(() => {
     if (selectedDraftId && !drafts.some((draft) => draft.id === selectedDraftId)) {
@@ -1986,12 +1997,16 @@ export const KnowledgeProcessing: React.FC = () => {
       // The draft should NOT be removed yet — keep it visible with "validation" status
       // until the backend reports a terminal status ("approved"/"discarded"/"failed").
       const isProceedingAfterApprove = action === 'approve' && response?.status === 'proceeding';
-      const shouldRemoveDraft = action === 'reject' || nextStatus === 'approved' || nextStatus === 'discarded' || (Boolean(response?.document_id) && !isProceedingAfterApprove);
+      const shouldRemoveDraft = action === 'reject' || nextStatus === 'discarded';
 
       if (shouldRemoveDraft) {
         setDrafts((current) => current.filter((item) => item.id !== draftId));
         setSelectedDraftId('');
         setPreviewPanelOpen(false);
+        const gatewayDraftId = draft.gatewayDraftId;
+        if (gatewayDraftId) {
+          setDeletedGatewayDraftIds((current) => Array.from(new Set([gatewayDraftId, ...current])));
+        }
       } else {
         updateDraft(draftId, {
           ...draftPatchFromGateway(response, draft),
@@ -2000,7 +2015,7 @@ export const KnowledgeProcessing: React.FC = () => {
           gatewayMetadataOverrides: metadataOverrides,
           note:
             action === 'approve' && isProceedingAfterApprove
-              ? 'Документ создан, запущена индексация. Черновик исчезнет после завершения.'
+              ? 'Документ создан, запущена индексация. Черновик будет скрыт после появления документа в реестре.'
               : action === 'confirm'
                 ? 'Черновик подтверждён. Запущена повторная проверка.'
                 : response?.message ?? draft.note,

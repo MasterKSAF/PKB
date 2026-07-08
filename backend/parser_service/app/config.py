@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # Таймауты пайплайна
     preview_timeout: int = Field(300, alias="PREVIEW_TIMEOUT")
-    pipeline_timeout: int = Field(300, alias="PIPELINE_TIMEOUT")
+    pipeline_timeout: int = Field(1800, alias="PIPELINE_TIMEOUT")
     parser_timeout: int = Field(300, alias="PARSER_TIMEOUT")
 
     # Безопасность и валидация
@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     docling_serve_url: str = Field(
         "http://localhost:5001", alias="DOCLING_SERVE_URL"
     )
-    docling_serve_timeout: int = Field(1200, alias="DOCLING_SERVE_TIMEOUT")
+    docling_serve_timeout: int = Field(1800, alias="DOCLING_SERVE_TIMEOUT")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
