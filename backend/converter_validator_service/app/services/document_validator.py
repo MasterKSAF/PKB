@@ -54,11 +54,35 @@ def _build_cross_references(
     return cross_refs
 
 
+_METADATA_YEAR_MIN = 1900
+_METADATA_YEAR_MAX = 2030
+
+
+def _metadata_quality_ok(metadata: dict[str, Any]) -> bool:
+    year = metadata.get("year")
+    if year is None:
+        return False
+    if year < _METADATA_YEAR_MIN or year > _METADATA_YEAR_MAX:
+        return False
+    doc_code = metadata.get("doc_code")
+    title = metadata.get("title")
+    if not doc_code or not title:
+        return False
+    if len(title) < 5:
+        return False
+    if ".pdf" in title.lower() or ".pdf" in doc_code.lower():
+        return False
+    return True
+
+
 def _decision(
     structure_valid: bool,
     classification: dict[str, Any],
+    metadata_quality: bool = True,
 ) -> str:
     if not structure_valid:
+        return "review_required"
+    if not metadata_quality:
         return "review_required"
     if classification.get("overall_status") == "CONFIRMED":
         return "auto"
@@ -142,17 +166,19 @@ async def validate_document(
         matching["predecessor_doc_id"] = int(pred) if pred is not None else None
         matching["successor_doc_id"] = int(succ) if succ is not None else None
 
+    metadata_ok = _metadata_quality_ok(preview_meta)
     status = "completed" if structure_ok else "failed"
     return {
         "validation_id": f"val-{uuid.uuid4().hex[:8]}",
         "document_id": document_id,
         "structure_valid": structure_ok,
+        "metadata_quality": metadata_ok,
         "classification": classification,
         "fingerprint": fingerprint,
         "matching": matching,
         "cross_references": _build_cross_references(
             document.get("references") or []
         ),
-        "decision": _decision(structure_ok, classification),
+        "decision": _decision(structure_ok, classification, metadata_ok),
         "status": status,
     }

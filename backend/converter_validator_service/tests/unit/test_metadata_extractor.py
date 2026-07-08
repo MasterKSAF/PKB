@@ -1,4 +1,7 @@
-from app.services.metadata_extractor import extract_preview_metadata
+import pytest
+from app.core.exceptions import MetadataExtractionFailedError
+from app.services.converter_service import extract_metadata
+from app.services.metadata_extractor import _infer_year, extract_preview_metadata
 
 
 def _make_raw_json(file_name: str, blocks: list[dict], author: str | None = None) -> dict:
@@ -372,3 +375,80 @@ def test_extract_drawing_num_from_filename():
     meta = extract_preview_metadata(raw)
     assert meta["doc_code"] == "2-020101-004"
     assert meta["title"] is not None
+
+
+# ─── extract_metadata (validation gate) ────────────────────────
+
+
+def test_extract_metadata_drawing_code_with_bad_year():
+    """extract_metadata c чертежом: год 174 отброшен, но не блокирует — doc_code и title есть."""
+    raw = _make_raw_json(
+        file_name="2-020101-174.pdf",
+        blocks=[{"number": 1, "type": "paragraph", "content": "Чертёж 2-020101-174 Корпус судна"}],
+    )
+    meta = extract_metadata(raw)
+    assert meta["doc_code"] == "2-020101-174"
+    assert meta["title"] is not None
+
+
+def test_extract_metadata_empty_title_raises():
+    """extract_metadata с пустым title → MetadataExtractionFailedError."""
+    raw = _make_raw_json(
+        file_name="doc.pdf",
+        blocks=[{"number": 1, "type": "paragraph", "content": "Просто текст без doc_code и title"}],
+    )
+    with pytest.raises(MetadataExtractionFailedError):
+        extract_metadata(raw)
+
+
+def test_extract_metadata_good_data_ok():
+    """extract_metadata с нормальными данными не падает."""
+    raw = _make_raw_json(
+        file_name="doc.pdf",
+        blocks=[
+            {"number": 1, "type": "paragraph", "content": "ПКПС-VIII-2018"},
+            {"number": 2, "type": "paragraph", "content": "Системы и трубопроводы"},
+        ],
+    )
+    meta = extract_metadata(raw)
+    assert meta["doc_code"] == "ПКПС-VIII-2018"
+    assert meta["year"] == 2018
+
+
+# ─── _infer_year (range validation) ───────────────────────────
+
+
+def test_infer_year_out_of_range_174():
+    """Год 174 из суффикса кода чертежа 2-020101-174 не проходит диапазон."""
+    year = _infer_year("2-020101-174", ["2-020101-174.pdf", "some text"])
+    assert year is None
+
+
+def test_infer_year_out_of_range_4():
+    """Год 4 из суффикса 2-020101-004 не проходит диапазон (004 — номер чертежа)."""
+    year = _infer_year("2-020101-004", ["2-020101-004.pdf"])
+    assert year is None
+
+
+def test_infer_year_valid_two_digit():
+    """95 → 1995 (value >= 50)."""
+    year = _infer_year("2.105-95", ["ГОСТ Р 2.105-95 ЕСКД"])
+    assert year == 1995
+
+
+def test_infer_year_valid_four_digit():
+    """2018 из ПКПС-VIII-2018."""
+    year = _infer_year("ПКПС-VIII-2018", ["ПКПС-VIII-2018 Системы"])
+    assert year == 2018
+
+
+def test_infer_year_no_year_in_text():
+    """Нет года в тексте → None."""
+    year = _infer_year(None, ["чертеж без даты"])
+    assert year is None
+
+
+def test_infer_year_from_text_fallback():
+    """Если в коде года нет, ищется в тексте."""
+    year = _infer_year("ABC-123", ["какой-то текст 2023 год"])
+    assert year == 2023

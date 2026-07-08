@@ -3,6 +3,8 @@ import os
 os.environ.setdefault("MOCK_RAG_ENABLED", "true")
 os.environ.setdefault("MOCK_REGISTRY_ENABLED", "true")
 os.environ.setdefault("MOCK_LLM_ENABLED", "true")
+os.environ.setdefault("LLM_API_URL", "http://localhost:11434/v1")
+os.environ.setdefault("LLM_MODEL", "deepseek-chat")
 
 import pytest
 import pytest_asyncio
@@ -25,6 +27,8 @@ async def app():
     os.environ["MOCK_RAG_ENABLED"] = "true"
     os.environ["MOCK_REGISTRY_ENABLED"] = "true"
     os.environ["MOCK_LLM_ENABLED"] = "true"
+    os.environ["LLM_API_URL"] = "http://localhost:11434/v1"
+    os.environ["LLM_MODEL"] = "deepseek-chat"
 
     # patch lru_cache
     from app.config import get_settings

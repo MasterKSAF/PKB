@@ -16,7 +16,7 @@ from config import get_api_url, ensure_services
 ensure_services("all")
 
 GW = get_api_url()
-PDF = Path("data/pdf/ПКПС_Часть_VIII_Системы_и_трубопроводы,_изд_2018.pdf")
+PDF = Path("data/pdf/gost_22786-77.pdf")
 
 print(f"Target: {GW}")
 print(f"PDF:    {PDF.name} ({PDF.stat().st_size} bytes)")
@@ -134,21 +134,24 @@ log("Approve draft (start full pipeline)")
 r = requests.patch(f"{GW}/drafts/{draft_id}/decide",
     json={"action":"approve"},
     headers={**h, "Content-Type": "application/json"})
-print(f"  Decide: HTTP {r.status_code}")
-assert r.status_code in (200, 202), f"Decide failed: {r.status_code} {r.text[:300]}"
-
-decide_data = r.json()
-document_id = decide_data.get("document_id")
-task_id = decide_data.get("task_id") or task_id
-print(f"  document_id={document_id}, task_id={task_id}")
-print(f"  status={decide_data.get('status')}")
+print(f"  Decide: HTTP {r.status_code} {r.text[:300]}")
+if r.status_code in (200, 202):
+    decide_data = r.json()
+    document_id = decide_data.get("document_id")
+    task_id = decide_data.get("task_id") or task_id
+    print(f"  document_id={document_id}, task_id={task_id}")
+    print(f"  status={decide_data.get('status')}")
+elif r.status_code == 409 and "INVALID_STAGE" in r.text:
+    log("Draft already in full pipeline — skip approve")
+else:
+    assert False, f"Decide failed: {r.status_code} {r.text[:300]}"
 
 if not task_id:
     r2 = requests.get(f"{GW}/drafts/{draft_id}/tasks", headers=h)
     tasks = r2.json().get("tasks", [])
     task_id = tasks[0]["task_id"] if tasks else None
     print(f"  fetched task_id={task_id}")
-assert task_id, "No task_id available"
+assert task_id, "No task_id available (decide did not return one, and /tasks returned empty)"
 
 # ─── Wait for Full Pipeline ────────────────────────────────────────────
 log("Wait for full pipeline completion (poll every 5s, timeout 600s)")
@@ -182,6 +185,10 @@ if not pipeline_ok:
 
 # ─── Verify in Registry ────────────────────────────────────────────────
 log("Verify document in registry")
+if task_id:
+    r2 = requests.get(f"{GW}/tasks/{task_id}/status", headers=h)
+    if r2.status_code == 200:
+        document_id = r2.json().get("document_id")
 if document_id:
     r = requests.get(f"{GW}/registry/documents/{document_id}", headers=h)
     if r.status_code == 200:

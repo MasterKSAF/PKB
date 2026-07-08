@@ -905,7 +905,12 @@ class PipelineOrchestrator:
             return "review_required"
 
         # --- Check auto-approve conditions ---
-        has_valid_metadata = bool(metadata.get("doc_code") and metadata.get("title"))
+        has_doc_code_and_title = bool(metadata.get("doc_code") and metadata.get("title"))
+        has_valid_year = False
+        year = metadata.get("year")
+        if year is not None and isinstance(year, int) and 1900 <= year <= 2030:
+            has_valid_year = True
+        has_valid_metadata = has_doc_code_and_title and has_valid_year
         has_no_duplicates = not task.error_code or task.error_code != "DUPLICATE_DETECTED"
 
         if cfg.AUTO_APPROVE_ENABLED and has_valid_metadata and has_no_duplicates:
@@ -988,8 +993,8 @@ class PipelineOrchestrator:
                     break
 
             # Guard: don't create document if converter produced no meaningful data
-            meta = metadata or {}
-            if not meta.get("title") and not meta.get("doc_code"):
+            doc_meta = (document_data or {}).get("metadata", {})
+            if not doc_meta.get("title") and not doc_meta.get("doc_code"):
                 logger.warning(
                     f"Converter returned empty metadata (no title/doc_code) for task {task.id} — failing",
                     extra={"task_id": task.id, "draft_id": task.draft_id},
@@ -1004,18 +1009,18 @@ class PipelineOrchestrator:
             upload_metadata = {}
             if upload_step and upload_step.input_data:
                 upload_metadata = upload_step.input_data.get("metadata_fields", {}) or {}
-            file_hash = meta.get("file_hash_sha256") or upload_metadata.get("file_hash_sha256")
+            file_hash = doc_meta.get("file_hash_sha256") or upload_metadata.get("file_hash_sha256")
 
             doc_payload = {
-                "title": meta.get("title") or f"Draft {task.draft_id}",
-                "doc_code": meta.get("doc_code") or f"DRAFT-{task.draft_id}",
-                "era": meta.get("era"),
-                "source_type": meta.get("source_type"),
-                "jurisdiction": meta.get("jurisdiction"),
-                "mks_oks_code": meta.get("mks_oks_code"),
-                "okstu_code": meta.get("okstu_code"),
-                "issuing_body": meta.get("issuing_body"),
-                "udk_code": meta.get("udk_code"),
+                "title": doc_meta.get("title") or f"Draft {task.draft_id}",
+                "doc_code": doc_meta.get("doc_code") or f"DRAFT-{task.draft_id}",
+                "era": doc_meta.get("era"),
+                "source_type": doc_meta.get("source_type"),
+                "jurisdiction": doc_meta.get("jurisdiction"),
+                "mks_oks_code": doc_meta.get("mks_oks_code"),
+                "okstu_code": doc_meta.get("okstu_code"),
+                "issuing_body": doc_meta.get("issuing_body"),
+                "udk_code": doc_meta.get("udk_code"),
                 "draft_id": task.draft_id,
                 "status": "uploaded",
                 "file_hash_sha256": file_hash,

@@ -42,6 +42,10 @@ _CHAT_SYSTEM_PROMPT = (
     "Отвечай на вопрос на основе истории диалога. Будь краток и по делу."
 )
 
+_CONTEXT_TOKEN_BUDGET = 6000
+_SUMMARY_MAX_TOKENS = 1024
+_RECENT_KEEP_MESSAGES = 4
+
 
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
@@ -122,7 +126,7 @@ async def _summarize(prev_summary: str | None, messages: list[dict], settings) -
         {"role": "system", "content": _SUMMARY_PROMPT},
         {"role": "user", "content": base + f"Добавь в резюме переписку:\n{convo}"},
     ]
-    return await llm_client.complete(prompt, max_tokens=settings.LLM_SUMMARY_MAX_TOKENS)
+    return await llm_client.complete(prompt, max_tokens=_SUMMARY_MAX_TOKENS)
 
 
 async def _prepare_context(
@@ -134,8 +138,8 @@ async def _prepare_context(
     summary, until = await _load_session_meta(session_factory, session_id)
     history = await _load_messages_after(session_factory, session_id, exclude_message_id, until)
 
-    budget = settings.LLM_CONTEXT_TOKEN_BUDGET
-    keep = settings.LLM_RECENT_KEEP_MESSAGES
+    budget = _CONTEXT_TOKEN_BUDGET
+    keep = _RECENT_KEEP_MESSAGES
 
     def total_tokens() -> int:
         t = _estimate_tokens(summary) if summary else 0

@@ -60,6 +60,8 @@ _DRAWING_NUM_CODE_RE = re.compile(
     re.IGNORECASE,
 )
 _YEAR_IN_CODE_RE = re.compile(r"-(\d{2,4})\s*$")
+_YEAR_MIN = 1900
+_YEAR_MAX = 2030
 _MKS_OKS_RE = re.compile(
     r"(?:МКС|ОКС|ICS)\s*[:\s]*?(\d{2}(?:\.\d{3}(?:\.\d{2})?)?(?:-\d{2})?)",
     re.IGNORECASE,
@@ -213,8 +215,11 @@ def _infer_year(doc_code: str | None, texts: list[str]) -> int | None:
             year_part = match.group(1)
             if len(year_part) == 2:
                 value = int(year_part)
-                return 1900 + value if value >= 50 else 2000 + value
-            return int(year_part)
+                year = 1900 + value if value >= 50 else 2000 + value
+            else:
+                year = int(year_part)
+            if _YEAR_MIN <= year <= _YEAR_MAX:
+                return year
     for text in texts:
         year_match = re.search(r"\b(19|20)\d{2}\b", text)
         if year_match:

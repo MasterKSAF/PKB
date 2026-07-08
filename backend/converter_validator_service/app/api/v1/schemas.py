@@ -29,10 +29,9 @@ class PreviewMetadataResponse(BaseModel):
 
 
 class ConvertRequest(RawJsonRequest):
-    use_llm: bool = False
-    llm_model: str = "gpt-4o-mini"
-    llm_max_tokens: int = Field(4096, ge=1, le=128000)
-    llm_timeout: int = Field(60, ge=1, le=600)
+    use_llm: bool = True
+    llm_max_tokens: int | None = Field(None, ge=1, le=128000)
+    llm_timeout: int | None = Field(None, ge=1, le=600)
 
 
 class LlmUsage(BaseModel):

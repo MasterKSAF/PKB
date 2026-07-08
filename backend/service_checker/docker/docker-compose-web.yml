@@ -47,7 +47,10 @@ x-env-common: &env-common
   SEARCH_MAX_TOP_K: 100
   # LLM (converter-validator)
   OPENAI_API_KEY: ${ROUTERAI_API_KEY:-}
-  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://routerai.ru/api/v1}
+  LLM_BASE_URL: ${LLM_BASE_URL:-https://routerai.ru/api/v1}
+  LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-v4-flash}
+  LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-4096}
+  LLM_TIMEOUT: ${LLM_TIMEOUT:-60}
 
 services:
   # ============================================================================

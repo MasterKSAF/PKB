@@ -3,14 +3,25 @@ import time
 from typing import Any
 
 from app.config import settings
+from app.core.exceptions import MetadataExtractionFailedError
 
 logger = logging.getLogger(__name__)
+
+try:
+    from openai import AuthenticationError as _OpenAIAuthError
+except ImportError:
+    _OpenAIAuthError = type("_OpenAIAuthError", (Exception,), {})
+
+_LLM_SYSTEM_PROMPT = (
+    "Ты — ассистент по инженерным нормативно-техническим документам ПКБ. "
+    "Извлеки из текста: 1) название документа, 2) код документа, 3) год издания. "
+    "Верни JSON."
+)
 
 
 async def enrich_document(
     document: dict[str, Any],
     *,
-    model: str,
     max_tokens: int,
     timeout: int,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
@@ -24,19 +35,14 @@ async def enrich_document(
 
         client = AsyncOpenAI(
             api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url,
+            base_url=settings.llm_base_url,
             timeout=timeout,
         )
-        prompt = (
-            "Уточни метаданные нормативного документа (код МКС, группа, эра) "
-            "на основе JSON. Верни только JSON с ключами: "
-            "mks_oks_code, group, era, validity_status."
-        )
         response = await client.chat.completions.create(
-            model=model,
+            model=settings.llm_model,
             max_tokens=max_tokens,
             messages=[
-                {"role": "system", "content": prompt},
+                {"role": "system", "content": _LLM_SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": str(document.get("metadata", {}))[:8000],
@@ -48,15 +54,19 @@ async def enrich_document(
         if response.usage:
             tokens = response.usage.total_tokens or 0
         usage = {
-            "model": model,
+            "model": settings.llm_model,
             "tokens_used": tokens,
             "processing_time_ms": elapsed_ms,
         }
         return document, usage
+    except _OpenAIAuthError:
+        raise MetadataExtractionFailedError(
+            "LLM API key is invalid or revoked"
+        )
     except Exception as exc:
         logger.warning("LLM enrichment failed: %s", exc)
         return document, {
-            "model": model,
+            "model": settings.llm_model,
             "tokens_used": 0,
             "processing_time_ms": int((time.perf_counter() - started) * 1000),
         }

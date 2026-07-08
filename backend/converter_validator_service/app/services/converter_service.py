@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
+from app.config import settings
 from app.core.exceptions import ConversionFailedError, MetadataExtractionFailedError
 from app.services.document_validator import validate_document
 from app.services.hierarchy_builder import build_hierarchy
@@ -71,10 +72,9 @@ async def convert(
     version_id: int | None = None,
     raw_json: dict[str, Any],
     document_id: int | None = None,
-    use_llm: bool = False,
-    llm_model: str = "gpt-4o-mini",
-    llm_max_tokens: int = 4096,
-    llm_timeout: int = 60,
+    use_llm: bool = True,
+    llm_max_tokens: int | None = None,
+    llm_timeout: int | None = None,
 ) -> dict[str, Any]:
     if not raw_json:
         raise MetadataExtractionFailedError("raw_json is empty")
@@ -90,11 +90,12 @@ async def convert(
     hierarchy = _merge_document_metadata(hierarchy, preview_meta, raw_json)
     llm_usage = None
     if use_llm:
+        max_tokens = llm_max_tokens if llm_max_tokens is not None else settings.llm_max_tokens
+        timeout = llm_timeout if llm_timeout is not None else settings.llm_timeout
         hierarchy, llm_usage = await enrich_document(
             hierarchy,
-            model=llm_model,
-            max_tokens=llm_max_tokens,
-            timeout=llm_timeout,
+            max_tokens=max_tokens,
+            timeout=timeout,
         )
 
     document_id = document_id or _extract_document_id(raw_json)

@@ -6,6 +6,9 @@ from ..config import get_settings
 
 logger = logging.getLogger("query_service.llm")
 
+_DEFAULT_TEMPERATURE = 0.2
+_DEFAULT_TOP_P = 0.95
+
 
 class LLMResult:
     __slots__ = ("content", "prompt_tokens", "completion_tokens", "duration_ms")
@@ -27,9 +30,9 @@ async def complete(
     payload = {
         "model": settings.LLM_MODEL,
         "messages": messages,
-        "temperature": settings.LLM_TEMPERATURE,
+        "temperature": _DEFAULT_TEMPERATURE,
         "max_tokens": max_tokens or settings.LLM_MAX_TOKENS,
-        "top_p": settings.LLM_TOP_P,
+        "top_p": _DEFAULT_TOP_P,
         "stream": False,
     }
     if cache_key:

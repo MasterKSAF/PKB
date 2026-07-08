@@ -32,8 +32,8 @@ async def test_summarization_triggers_on_overflow(app, monkeypatch):
 
     s = get_settings()
     monkeypatch.setattr(s, "MOCK_LLM_ENABLED", True)
-    monkeypatch.setattr(s, "LLM_CONTEXT_TOKEN_BUDGET", 200)
-    monkeypatch.setattr(s, "LLM_RECENT_KEEP_MESSAGES", 4)
+    monkeypatch.setattr(pipeline, "_CONTEXT_TOKEN_BUDGET", 200)
+    monkeypatch.setattr(pipeline, "_RECENT_KEEP_MESSAGES", 4)
 
     summary, history = await pipeline._prepare_context(factory, sid, "0", s)
 
@@ -54,14 +54,14 @@ async def test_append_only_no_resummarize_within_budget(app, monkeypatch):
 
     s = get_settings()
     monkeypatch.setattr(s, "MOCK_LLM_ENABLED", True)
-    monkeypatch.setattr(s, "LLM_CONTEXT_TOKEN_BUDGET", 200)
-    monkeypatch.setattr(s, "LLM_RECENT_KEEP_MESSAGES", 4)
+    monkeypatch.setattr(pipeline, "_CONTEXT_TOKEN_BUDGET", 200)
+    monkeypatch.setattr(pipeline, "_RECENT_KEEP_MESSAGES", 4)
 
     await pipeline._prepare_context(factory, sid, "0", s)
     async with factory() as db:
         until_1 = (await db.get(ChatSession, sid)).summarized_until_message_id
 
-    monkeypatch.setattr(s, "LLM_CONTEXT_TOKEN_BUDGET", 100000)
+    monkeypatch.setattr(pipeline, "_CONTEXT_TOKEN_BUDGET", 100000)
     summary, history = await pipeline._prepare_context(factory, sid, "0", s)
 
     async with factory() as db:
