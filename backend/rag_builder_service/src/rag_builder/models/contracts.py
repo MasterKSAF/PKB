@@ -128,8 +128,8 @@ class BuildRequest(BaseModel):
 
 class BuildResponse(BaseModel):
     document_id: int
-    status: Literal["indexed", "failed"]
-    indexed_at: datetime
+    status: Literal["pending", "indexed", "failed"]
+    indexed_at: datetime | None = None
     chunks_count: int
     index_stats: dict[str, int]
     errors: list[str] = Field(default_factory=list)

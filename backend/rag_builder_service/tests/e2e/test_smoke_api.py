@@ -28,11 +28,16 @@ async def test_e2e_build_status_delete(app: FastAPI) -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         build = await client.post("/api/v1/rag/build", json=payload)
         assert build.status_code == 202
-        assert build.json()["status"] == "indexed"
+        assert build.json()["status"] == "pending"
 
-        status = await client.get(f"/api/v1/rag/build/{doc_id}/status?longpoll=1")
-        assert status.status_code == 200
-        assert status.json()["status"] in {"indexed", "pending"}
+        import asyncio
+        for attempt in range(10):
+            status = await client.get(f"/api/v1/rag/build/{doc_id}/status?longpoll=5")
+            assert status.status_code == 200
+            if status.json()["status"] == "indexed":
+                break
+            await asyncio.sleep(1)
+        assert status.json()["status"] == "indexed"
 
         delete = await client.delete(f"/api/v1/rag/build/{doc_id}")
         assert delete.status_code == 200

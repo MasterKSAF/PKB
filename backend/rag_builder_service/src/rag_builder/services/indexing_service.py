@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag_builder.chunking.service import ChunkingService
 from rag_builder.core.config import settings
+from rag_builder.db.session import SessionLocal
 from rag_builder.embeddings.service import EmbeddingService
 from rag_builder.models.contracts import BuildRequest, BuildResponse, DeleteResponse, StatusResponse
 from rag_builder.repositories.chunk_repository import ChunkRepository
@@ -38,39 +39,43 @@ class IndexingService:
         if req.document_id is None:
             raise ValueError("document_id must be resolved by request validation")
         doc_id = req.document_id
+        logger.info("Indexing queued document_id={}", doc_id)
+        self._set_status(str(doc_id), DocStatus(status="pending"))
+        asyncio.create_task(self._run_indexing(req))
+        return BuildResponse(
+            document_id=doc_id,
+            status="pending",
+            indexed_at=None,
+            chunks_count=0,
+            index_stats={"sections": len(req.sections)},
+            errors=[],
+            warnings=[],
+        )
+
+    async def _run_indexing(self, req: BuildRequest) -> None:
+        doc_id = req.document_id
         logger.info("Indexing start document_id={}", doc_id)
         self._set_status(str(doc_id), DocStatus(status="indexing"))
         try:
-            repo = ChunkRepository(session)
-            strategy = str(req.options.get("strategy", settings.chunk_default_strategy))
-            txn_id = uuid4()
-            chunks = self.chunking.build_chunks(doc_id, req.sections, req.protected_spans, strategy, txn_id)
-            vectors = await self.embedding.embed_many([c.content for c in chunks])
-            vectors_for_repo: list[list[float] | None] = [v for v in vectors]
-            warnings: list[str] = []
-            errors: list[str] = []
-            async with session.begin():
-                await repo.delete_by_document(doc_id)
-                created = await repo.insert_chunks(chunks, vectors_for_repo)
+            async with SessionLocal() as session:
+                repo = ChunkRepository(session)
+                strategy = str(req.options.get("strategy", settings.chunk_default_strategy))
+                txn_id = uuid4()
+                chunks = self.chunking.build_chunks(doc_id, req.sections, req.protected_spans, strategy, txn_id)
+                vectors = await self.embedding.embed_many([c.content for c in chunks])
+                vectors_for_repo: list[list[float] | None] = [v for v in vectors]
+                async with session.begin():
+                    await repo.delete_by_document(doc_id)
+                    created = await repo.insert_chunks(chunks, vectors_for_repo)
             now = datetime.now(UTC_PLUS_3)
             self._set_status(
                 str(doc_id),
                 DocStatus(status="indexed", chunks_count=created, has_embeddings=created > 0, indexed_at=now),
             )
             logger.info("Indexing completed document_id={} chunks={} txn_id={}", doc_id, created, txn_id)
-            return BuildResponse(
-                document_id=req.document_id,
-                status="indexed",
-                indexed_at=now,
-                chunks_count=created,
-                index_stats={"sections": len(req.sections), "chunks": created, "embeddings": created},
-                errors=errors,
-                warnings=warnings,
-            )
         except Exception:
             self._set_status(str(doc_id), DocStatus(status="failed"))
             logger.exception("Indexing failed document_id={}", doc_id)
-            raise
 
     async def delete(self, document_id: int, session: AsyncSession) -> DeleteResponse:
         logger.info("Delete index start document_id={}", document_id)

@@ -56,15 +56,56 @@ def make_req(
 
 
 class TestBuild:
-    async def test_build_returns_indexed_status(self, service: IndexingService, mock_session: AsyncMock) -> None:
+    async def test_build_returns_pending_status_immediately(self, service: IndexingService, mock_session: AsyncMock) -> None:
+        req = make_req()
+        resp = await service.build(req, mock_session)
+
+        assert resp.status == "pending"
+        assert resp.document_id == 100
+        assert resp.chunks_count == 0
+        assert resp.indexed_at is None
+        assert resp.errors == []
+        assert resp.warnings == []
+
+    async def test_build_sets_status_to_pending(self, service: IndexingService, mock_session: AsyncMock) -> None:
+        req = make_req()
+        await service.build(req, mock_session)
+
+        status = service._status.get("100")
+        assert status is not None
+        assert status.status == "pending"
+
+    async def test_build_empty_sections_ok(self, service: IndexingService, mock_session: AsyncMock) -> None:
+        req = BuildRequest(document_id=100, sections=[], options={})
+        resp = await service.build(req, mock_session)
+
+        assert resp.status == "pending"
+        assert resp.chunks_count == 0
+        assert resp.index_stats["sections"] == 0
+
+    async def test_run_indexing_completes_successfully(self, service: IndexingService) -> None:
+        req = make_req()
+        # Set initial pending status (as build() would)
+        service._status["100"] = MagicMock(status="pending")
+
         with patch.object(service.chunking, "build_chunks") as mock_chunking, \
              patch.object(service.embedding, "embed_many") as mock_embed, \
+             patch("rag_builder.services.indexing_service.SessionLocal") as mock_session_local, \
              patch("rag_builder.services.indexing_service.ChunkRepository") as mock_repo_cls:
+
+            mock_session = AsyncMock(spec=AsyncSession)
+            mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_local.return_value.__aexit__ = AsyncMock(return_value=None)
+            begin_cm = AsyncMock()
+            begin_cm.__aenter__ = AsyncMock(return_value=mock_session)
+            begin_cm.__aexit__ = AsyncMock(return_value=None)
+            mock_session.begin = MagicMock(return_value=begin_cm)
 
             mock_repo = AsyncMock()
             mock_repo.delete_by_document = AsyncMock(return_value=0)
             mock_repo.insert_chunks = AsyncMock(return_value=1)
             mock_repo_cls.return_value = mock_repo
+
             mock_chunking.return_value = [
                 MagicMock(section_id=1, document_id=100, chunk_index=0,
                           content="hello", strategy="semantic_1024", page=1,
@@ -72,105 +113,91 @@ class TestBuild:
             ]
             mock_embed.return_value = [[0.1] * 2048]
 
-            req = make_req()
-            resp = await service.build(req, mock_session)
+            await service._run_indexing(req)
 
-            assert resp.status == "indexed"
-            assert resp.document_id == 100
-            assert resp.chunks_count == 1
-            assert resp.index_stats["sections"] == 1
-            assert resp.index_stats["chunks"] == 1
-            assert resp.index_stats["embeddings"] == 1
-            # errors/warnings default to empty
-            assert resp.errors == []
-            assert resp.warnings == []
+            status = service._status.get("100")
+            assert status is not None
+            assert status.status == "indexed"
+            assert status.chunks_count == 1
+            assert status.has_embeddings is True
+            assert status.indexed_at is not None
 
-    async def test_build_generates_uuid4_txn_id(self, service: IndexingService, mock_session: AsyncMock) -> None:
+    async def test_run_indexing_generates_uuid4_txn_id(self, service: IndexingService) -> None:
+        req = make_req()
+
         with patch.object(service.chunking, "build_chunks") as mock_chunking, \
-             patch.object(service.embedding, "embed_many") as mock_embed, \
+             patch.object(service.embedding, "embed_many", return_value=[[0.1] * 2048]), \
+             patch("rag_builder.services.indexing_service.SessionLocal") as mock_session_local, \
              patch("rag_builder.services.indexing_service.ChunkRepository") as mock_repo_cls:
+
+            mock_session = AsyncMock(spec=AsyncSession)
+            mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_local.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_session.begin = MagicMock()
+            mock_session.begin.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.begin.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_repo = AsyncMock()
             mock_repo.delete_by_document = AsyncMock(return_value=0)
             mock_repo.insert_chunks = AsyncMock(return_value=1)
             mock_repo_cls.return_value = mock_repo
+
             mock_chunking.return_value = [
                 MagicMock(section_id=1, document_id=100, chunk_index=0,
                           content="hello", strategy="semantic_1024", page=1,
-                          indexing_txn_id="some-uuid")
+                          indexing_txn_id=None)
             ]
-            mock_embed.return_value = [[0.1] * 2048]
 
-            req = make_req()
-            await service.build(req, mock_session)
+            await service._run_indexing(req)
 
-            # build_chunks was called with a txn_id
             call_kwargs = mock_chunking.call_args
-            txn_id_arg = call_kwargs[0][4]  # 5th positional arg (indexing_txn_id)
+            txn_id_arg = call_kwargs[0][4]
             assert txn_id_arg is not None
             assert isinstance(txn_id_arg, type(uuid4()))
 
-    async def test_build_with_strategy_from_request(self, service: IndexingService, mock_session: AsyncMock) -> None:
+    async def test_run_indexing_with_strategy_from_request(self, service: IndexingService) -> None:
+        req = make_req(strategy="custom")
+
         with patch.object(service.chunking, "build_chunks") as mock_chunking, \
              patch.object(service.embedding, "embed_many", return_value=[[0.1] * 2048]), \
+             patch("rag_builder.services.indexing_service.SessionLocal") as mock_session_local, \
              patch("rag_builder.services.indexing_service.ChunkRepository") as mock_repo_cls:
+
+            mock_session = AsyncMock(spec=AsyncSession)
+            mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_local.return_value.__aexit__ = AsyncMock(return_value=None)
+            mock_session.begin = MagicMock()
+            mock_session.begin.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.begin.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_repo = AsyncMock()
             mock_repo.delete_by_document = AsyncMock(return_value=0)
             mock_repo.insert_chunks = AsyncMock(return_value=1)
             mock_repo_cls.return_value = mock_repo
+
             mock_chunking.return_value = [
                 MagicMock(section_id=1, document_id=100, chunk_index=0,
                           content="hello", strategy="custom", page=1,
                           indexing_txn_id=None)
             ]
 
-            req = make_req(strategy="custom")
-            await service.build(req, mock_session)
+            await service._run_indexing(req)
 
             call_args = mock_chunking.call_args[0]
-            assert call_args[3] == "custom"  # strategy arg
+            assert call_args[3] == "custom"
 
-    async def test_build_empty_sections_ok(self, service: IndexingService, mock_session: AsyncMock) -> None:
-        with patch.object(service.chunking, "build_chunks") as mock_chunking, \
-             patch.object(service.embedding, "embed_many", return_value=[]), \
-             patch("rag_builder.services.indexing_service.ChunkRepository") as mock_repo_cls:
+    async def test_run_indexing_sets_failed_on_exception(self, service: IndexingService) -> None:
+        req = make_req()
+        service._status["100"] = MagicMock(status="pending")
 
-            mock_repo = AsyncMock()
-            mock_repo.delete_by_document = AsyncMock(return_value=0)
-            mock_repo.insert_chunks = AsyncMock(return_value=0)
-            mock_repo_cls.return_value = mock_repo
-            mock_chunking.return_value = []
+        with patch.object(service.chunking, "build_chunks", side_effect=ValueError("chunking failed")), \
+             patch("rag_builder.services.indexing_service.SessionLocal") as mock_session_local:
 
-            req = BuildRequest(document_id=100, sections=[], options={})
-            resp = await service.build(req, mock_session)
+            mock_session = AsyncMock(spec=AsyncSession)
+            mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_local.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            assert resp.status == "indexed"
-            assert resp.chunks_count == 0
-
-    async def test_build_sets_status_indexing_then_indexed(self, service: IndexingService, mock_session: AsyncMock) -> None:
-        with patch.object(service.chunking, "build_chunks") as mock_chunking, \
-             patch.object(service.embedding, "embed_many", return_value=[]), \
-             patch("rag_builder.services.indexing_service.ChunkRepository") as mock_repo_cls:
-
-            mock_repo = AsyncMock()
-            mock_repo.delete_by_document = AsyncMock(return_value=0)
-            mock_repo.insert_chunks = AsyncMock(return_value=0)
-            mock_repo_cls.return_value = mock_repo
-            mock_chunking.return_value = []
-
-            req = make_req()
-            await service.build(req, mock_session)
-
-            status = service._status.get("100")
-            assert status is not None
-            assert status.status == "indexed"
-
-    async def test_build_sets_failed_on_exception(self, service: IndexingService, mock_session: AsyncMock) -> None:
-        with patch.object(service.chunking, "build_chunks", side_effect=ValueError("chunking failed")):
-            req = make_req()
-            with pytest.raises(ValueError, match="chunking failed"):
-                await service.build(req, mock_session)
+            await service._run_indexing(req)
 
             status = service._status.get("100")
             assert status is not None
