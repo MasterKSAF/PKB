@@ -95,7 +95,7 @@ type DraftNotification = {
   suggestedAction?: string;
 };
 
-type DraftSort = 'updated_desc' | 'name_asc' | 'status';
+type DraftSort = 'updated_desc' | 'created_desc' | 'name_asc' | 'status';
 type MetadataReviewStatus = 'manual' | 'extracted' | 'review' | 'empty';
 type KnowledgeProcessingSection = 'upload' | 'drafts' | 'registry' | 'journal';
 
@@ -833,6 +833,9 @@ const sortDrafts = (items: DraftItem[], sort: DraftSort) => {
   const compareUpdated = (left: DraftItem, right: DraftItem) =>
     new Date(right.updatedAt || 0).getTime() - new Date(left.updatedAt || 0).getTime();
 
+  const compareCreated = (left: DraftItem, right: DraftItem) =>
+    new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
+
   const compareName = (left: DraftItem, right: DraftItem) => left.title.localeCompare(right.title, 'ru');
 
   const compareStatus = (left: DraftItem, right: DraftItem) =>
@@ -843,6 +846,7 @@ const sortDrafts = (items: DraftItem[], sort: DraftSort) => {
   return [...items].sort((left, right) => {
     if (sort === 'name_asc') return compareName(left, right);
     if (sort === 'status') return compareStatus(left, right);
+    if (sort === 'created_desc') return compareCreated(left, right);
     return compareUpdated(left, right);
   });
 };
@@ -1225,7 +1229,7 @@ export const KnowledgeProcessing: React.FC = () => {
   const [previewSearch, setPreviewSearch] = useState('');
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectComment, setRejectComment] = useState('');
-  const [draftSort, setDraftSort] = useState<DraftSort>('updated_desc');
+  const [draftSort, setDraftSort] = useState<DraftSort>('created_desc');
   const [drafts, setDrafts] = useState<DraftItem[]>(() => (workMode === 'demo' ? createDemoDrafts() : []));
   const [draftDocumentKeys, setDraftDocumentKeys] = useState<string[]>(() =>
     workMode === 'prod' ? readStoredDraftDocumentKeys() : [],
@@ -2621,6 +2625,7 @@ export const KnowledgeProcessing: React.FC = () => {
                     }}
                   >
                     <MenuItem value="updated_desc">Обновление</MenuItem>
+                    <MenuItem value="created_desc">Дата добавления</MenuItem>
                     <MenuItem value="name_asc">Название</MenuItem>
                     <MenuItem value="status">Статус</MenuItem>
                   </TextField>

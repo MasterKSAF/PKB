@@ -236,6 +236,7 @@ const buildDemoDetail = (document: Document | null) => {
     title: document.name,
     doc_code: document.id.toUpperCase(),
     source_type: document.type,
+    file_name: document.fileName || document.name,
     status: document.indexStatus === 'Индексировано' ? 'published' : 'processing',
     era: 'CURRENT',
     validity_status: document.indexStatus === 'Индексировано' ? 'active' : 'pending',
@@ -716,7 +717,11 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const detailRecord = (detail ?? {}) as Record<string, any>;
   const versions = workMode === 'prod' ? extractVersionItems(versionsQuery.data) : buildDemoVersions(selectedDocument);
   const history = workMode === 'prod' ? (historyQuery.data ?? []) : buildDemoHistory(selectedDocument);
-  const errors = workMode === 'prod' ? (errorsQuery.data ?? []) : buildDemoErrors(selectedDocument);
+  const errors = (workMode === 'prod' ? (errorsQuery.data ?? []) : buildDemoErrors(selectedDocument))
+    .filter((error: unknown) => {
+      const record = error as Record<string, unknown>;
+      return record && (record.error_message || record.error_code || record.message);
+    });
   const historyRows = useMemo(() => normalizeHistoryRows(history), [history]);
   const parameters = workMode === 'prod' ? parametersQuery.data : buildDemoParameters(selectedDocument);
   const previewPages = useMemo(
@@ -806,6 +811,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const businessKeyRows: Array<[string, unknown]> = [
     ['document_id', detailRecord.document_id ?? selectedDocument?.id],
     ['version_id', latestVersionId],
+    ['file_name', detailRecord.file_name ?? selectedDocument?.fileName],
     ['title_key', detailRecord.title_key ?? selectedDocument?.titleKey],
     ['title_hash_sha256', detailRecord.title_hash_sha256 ?? selectedDocument?.titleHashSha256],
   ];
@@ -1432,9 +1438,9 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                             </Typography>
                           </Box>
                         ))}
-                        {errors.length > 0 && (
+                        {errors.length > 0 && ((errors[0] as any)?.error_message || (errors[0] as any)?.error_code || (errors[0] as any)?.message) && (
                           <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                            Последняя ошибка: {(errors[0] as any)?.error_message ?? 'Сервер вернул список ошибок.'}
+                            Последняя ошибка: {(errors[0] as any)?.error_message || (errors[0] as any)?.message || (errors[0] as any)?.error_code}
                           </Alert>
                         )}
                         {!historyRows.length && !errors.length && (

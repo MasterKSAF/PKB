@@ -59,6 +59,7 @@ export interface Document {
   documentKey?: string;
   titleKey?: string;
   titleHashSha256?: string;
+  fileName?: string;
   validFrom?: string;
   validUntil?: string;
 }

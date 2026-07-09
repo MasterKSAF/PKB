@@ -168,6 +168,7 @@ type GatewayDocumentDetail = {
   title?: string;
   doc_code?: string;
   source_type?: string;
+  file_name?: string;
   title_key?: string;
   title_hash_sha256?: string;
   status?: string;
@@ -837,6 +838,7 @@ function mapGatewayDocumentDetailResponse(payload: any): GatewayDocumentDetail {
     title: data.title ?? '',
     doc_code: data.doc_code ?? '',
     source_type: data.source_type ?? '',
+    file_name: data.file_name ?? data.original_filename ?? '',
     title_key: data.title_key ?? '',
     title_hash_sha256: data.title_hash_sha256 ?? '',
     status: data.status ?? '',
