@@ -1184,6 +1184,29 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                           sx={{ width: 'fit-content' }}
                         />
                       )}
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<ChevronLeft size={16} />}
+                          onClick={() => setPreviewPageIndex((current) => Math.max(current - 1, 0))}
+                          disabled={previewPageIndex === 0 || previewPages.length === 0}
+                        >
+                          Назад
+                        </Button>
+                        <Typography variant="caption" color="text.secondary">
+                          Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
+                        </Typography>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          endIcon={<ChevronRight size={16} />}
+                          onClick={() => setPreviewPageIndex((current) => Math.min(current + 1, previewPages.length - 1))}
+                          disabled={previewPages.length === 0 || previewPageIndex >= previewPages.length - 1}
+                        >
+                          Вперед
+                        </Button>
+                      </Stack>
                       <Paper
                         variant="outlined"
                         sx={{
@@ -1217,29 +1240,6 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                           </Typography>
                         )}
                       </Paper>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<ChevronLeft size={16} />}
-                          onClick={() => setPreviewPageIndex((current) => Math.max(current - 1, 0))}
-                          disabled={previewPageIndex === 0 || previewPages.length === 0}
-                        >
-                          Назад
-                        </Button>
-                        <Typography variant="caption" color="text.secondary">
-                          Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
-                        </Typography>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          endIcon={<ChevronRight size={16} />}
-                          onClick={() => setPreviewPageIndex((current) => Math.min(current + 1, previewPages.length - 1))}
-                          disabled={previewPages.length === 0 || previewPageIndex >= previewPages.length - 1}
-                        >
-                          Вперед
-                        </Button>
-                      </Stack>
                     </Stack>
                   </Paper>
 
@@ -1538,6 +1538,26 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
               <Chip size="small" variant="outlined" label={previewSearchMatchCount ? `${previewSearchMatchCount} совп.` : 'Нет совпадений'} sx={{ width: 'fit-content' }} />
             )}
 
+            <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => setPreviewPageIndex((current) => Math.max(current - 1, 0))}
+                disabled={previewPageIndex === 0 || previewPages.length === 0}
+                >
+                Назад
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
+              </Typography>
+              <Button
+                  variant="outlined"
+                  onClick={() => setPreviewPageIndex((current) => Math.min(current + 1, previewPages.length - 1))}
+                disabled={previewPages.length === 0 || previewPageIndex >= previewPages.length - 1}
+                >
+                Вперед
+              </Button>
+            </Stack>
+
             <Paper
               variant="outlined"
               sx={{
@@ -1575,26 +1595,6 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                 <Typography color="text.secondary">Сервер не передал список страниц документа.</Typography>
               )}
             </Paper>
-
-            <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-                <Button
-                  variant="outlined"
-                  onClick={() => setPreviewPageIndex((current) => Math.max(current - 1, 0))}
-                disabled={previewPageIndex === 0 || previewPages.length === 0}
-                >
-                Назад
-              </Button>
-              <Typography variant="caption" color="text.secondary">
-                Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
-              </Typography>
-              <Button
-                  variant="outlined"
-                  onClick={() => setPreviewPageIndex((current) => Math.min(current + 1, previewPages.length - 1))}
-                disabled={previewPages.length === 0 || previewPageIndex >= previewPages.length - 1}
-                >
-                Вперед
-              </Button>
-            </Stack>
           </Stack>
         </DialogContent>
         <DialogActions>

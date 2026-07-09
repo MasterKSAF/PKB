@@ -2815,6 +2815,138 @@ export const KnowledgeProcessing: React.FC = () => {
                   <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
                     <Button
                       fullWidth
+                      onClick={() => setProcessingStatusOpen((current) => !current)}
+                      endIcon={processingStatusOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      disabled={!selectedDraft}
+                      sx={draftSectionButtonSx}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+                        <Typography sx={draftSectionTitleSx}>Статус обработки</Typography>
+                        <Chip
+                          label={selectedTaskStatusLabel}
+                          size="small"
+                          variant="outlined"
+                          color={selectedTaskStatus ? getTaskStatusColor(selectedTaskStatus.status) : undefined}
+                        />
+                        {taskStatusQuery.isFetching && <Chip label="обновляется" size="small" variant="outlined" />}
+                      </Stack>
+                    </Button>
+                    <Divider sx={headerDividerSx} />
+                    <Collapse in={processingStatusOpen}>
+                      <Stack spacing={1.15} sx={{ p: 1.25 }}>
+                        {taskStatusQuery.isError && (
+                          <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
+                            Статус задачи сейчас недоступен. Показываем последний статус черновика.
+                          </Alert>
+                        )}
+
+                        {selectedTaskStatus?.status === 'failed' && (selectedTaskErrorMessage || selectedTaskErrorCode) && (
+                          <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
+                            <Typography sx={{ fontWeight: 560 }}>Обработка завершилась с ошибкой</Typography>
+                            <Typography variant="body2">
+                              {selectedTaskErrorMessage || 'Причина не передана'}
+                              {selectedTaskErrorCode ? ` · ${selectedTaskErrorCode}` : ''}
+                            </Typography>
+                          </Alert>
+                        )}
+
+                        <Box>
+                          <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 0.55 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Прогресс обработки
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontWeight: 620 }}>
+                              {selectedTaskProgress}%
+                            </Typography>
+                          </Stack>
+                          <LinearProgress
+                            variant="determinate"
+                            value={selectedTaskProgress}
+                            sx={{
+                              height: 8,
+                              borderRadius: 999,
+                              bgcolor: isLight ? 'rgba(15,23,42,0.08)' : 'rgba(233,237,243,0.12)',
+                            }}
+                          />
+                        </Box>
+
+                        <Box
+                          sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', md: '0.75fr 1fr 0.75fr 1fr' },
+                            gap: 1,
+                          }}
+                        >
+                          {[
+                            ['Статус', selectedTaskStatusLabel],
+                            ['Этап', selectedTaskStageLabel],
+                            ['Текущий шаг', selectedTaskCurrentStep ? getTaskStageLabel(selectedTaskCurrentStep.stepName, selectedTaskCurrentStep.serviceName) : 'не передан'],
+                            ['Обновлен', selectedTaskStatus?.updatedAt ?? workspaceDraft.updatedAt],
+                            ['task_id', selectedTaskStatus?.taskId ?? workspaceDraft.gatewayTaskId],
+                            ['Комментарий', selectedTaskErrorMessage || workspaceDraft.note],
+                          ].map(([label, value]) => (
+                            <React.Fragment key={label}>
+                              <Typography variant="caption" color="text.secondary">
+                                {label}
+                              </Typography>
+                              <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
+                                {displayValue(value)}
+                              </Typography>
+                            </React.Fragment>
+                          ))}
+                        </Box>
+
+                        <Divider sx={headerDividerSx} />
+
+                        <Stack spacing={0.65}>
+                          <Typography variant="caption" color="text.secondary">
+                            Шаги пайплайна
+                          </Typography>
+                          {selectedTaskSteps.length ? (
+                            selectedTaskSteps.slice(0, 8).map((step) => (
+                              <Box
+                                key={`${step.stepName}-${step.serviceName}`}
+                                sx={{
+                                  display: 'grid',
+                                  gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1fr) auto' },
+                                  gap: 0.75,
+                                  alignItems: 'center',
+                                  p: 0.75,
+                                  borderRadius: 1.8,
+                                  bgcolor: isLight ? 'rgba(15,23,42,0.035)' : 'rgba(233,237,243,0.055)',
+                                }}
+                              >
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 560, overflowWrap: 'anywhere' }}>
+                                    {getTaskStageLabel(step.stepName, step.serviceName)}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+                                    {step.serviceName || step.stepName}
+                                    {step.errorMessage ? ` · ${step.errorMessage}` : ''}
+                                  </Typography>
+                                </Box>
+                                <Chip
+                                  label={getTaskStatusLabel(step.status)}
+                                  size="small"
+                                  variant="outlined"
+                                  color={getTaskStatusColor(step.status)}
+                                  sx={{ justifySelf: { xs: 'start', sm: 'end' } }}
+                                />
+                              </Box>
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              Шаги задачи пока не переданы.
+                            </Typography>
+                          )}
+                        </Stack>
+                      </Stack>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
+                    <Button
+                      fullWidth
                       onClick={() => setMetadataOpen((current) => !current)}
                       endIcon={metadataOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                       sx={draftSectionButtonSx}
@@ -3079,138 +3211,6 @@ export const KnowledgeProcessing: React.FC = () => {
                             Кандидаты на дубликаты не переданы.
                           </Typography>
                         )}
-                      </Stack>
-                    </Collapse>
-                  </Paper>
-
-                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSx }}>
-                    <Button
-                      fullWidth
-                      onClick={() => setProcessingStatusOpen((current) => !current)}
-                      endIcon={processingStatusOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                      disabled={!selectedDraft}
-                      sx={draftSectionButtonSx}
-                    >
-                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-                        <Typography sx={draftSectionTitleSx}>Статус обработки</Typography>
-                        <Chip
-                          label={selectedTaskStatusLabel}
-                          size="small"
-                          variant="outlined"
-                          color={selectedTaskStatus ? getTaskStatusColor(selectedTaskStatus.status) : undefined}
-                        />
-                        {taskStatusQuery.isFetching && <Chip label="обновляется" size="small" variant="outlined" />}
-                      </Stack>
-                    </Button>
-                    <Divider sx={headerDividerSx} />
-                    <Collapse in={processingStatusOpen}>
-                      <Stack spacing={1.15} sx={{ p: 1.25 }}>
-                        {taskStatusQuery.isError && (
-                          <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                            Статус задачи сейчас недоступен. Показываем последний статус черновика.
-                          </Alert>
-                        )}
-
-                        {selectedTaskStatus?.status === 'failed' && (selectedTaskErrorMessage || selectedTaskErrorCode) && (
-                          <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>
-                            <Typography sx={{ fontWeight: 560 }}>Обработка завершилась с ошибкой</Typography>
-                            <Typography variant="body2">
-                              {selectedTaskErrorMessage || 'Причина не передана'}
-                              {selectedTaskErrorCode ? ` · ${selectedTaskErrorCode}` : ''}
-                            </Typography>
-                          </Alert>
-                        )}
-
-                        <Box>
-                          <Stack direction="row" spacing={1} sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 0.55 }}>
-                            <Typography variant="caption" color="text.secondary">
-                              Прогресс обработки
-                            </Typography>
-                            <Typography variant="caption" sx={{ fontWeight: 620 }}>
-                              {selectedTaskProgress}%
-                            </Typography>
-                          </Stack>
-                          <LinearProgress
-                            variant="determinate"
-                            value={selectedTaskProgress}
-                            sx={{
-                              height: 8,
-                              borderRadius: 999,
-                              bgcolor: isLight ? 'rgba(15,23,42,0.08)' : 'rgba(233,237,243,0.12)',
-                            }}
-                          />
-                        </Box>
-
-                        <Box
-                          sx={{
-                            display: 'grid',
-                            gridTemplateColumns: { xs: '1fr', md: '0.75fr 1fr 0.75fr 1fr' },
-                            gap: 1,
-                          }}
-                        >
-                          {[
-                            ['Статус', selectedTaskStatusLabel],
-                            ['Этап', selectedTaskStageLabel],
-                            ['Текущий шаг', selectedTaskCurrentStep ? getTaskStageLabel(selectedTaskCurrentStep.stepName, selectedTaskCurrentStep.serviceName) : 'не передан'],
-                            ['Обновлен', selectedTaskStatus?.updatedAt ?? workspaceDraft.updatedAt],
-                            ['task_id', selectedTaskStatus?.taskId ?? workspaceDraft.gatewayTaskId],
-                            ['Комментарий', selectedTaskErrorMessage || workspaceDraft.note],
-                          ].map(([label, value]) => (
-                            <React.Fragment key={label}>
-                              <Typography variant="caption" color="text.secondary">
-                                {label}
-                              </Typography>
-                              <Typography variant="caption" sx={{ overflowWrap: 'anywhere' }}>
-                                {displayValue(value)}
-                              </Typography>
-                            </React.Fragment>
-                          ))}
-                        </Box>
-
-                        <Divider sx={headerDividerSx} />
-
-                        <Stack spacing={0.65}>
-                          <Typography variant="caption" color="text.secondary">
-                            Шаги пайплайна
-                          </Typography>
-                          {selectedTaskSteps.length ? (
-                            selectedTaskSteps.slice(0, 8).map((step) => (
-                              <Box
-                                key={`${step.stepName}-${step.serviceName}`}
-                                sx={{
-                                  display: 'grid',
-                                  gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1fr) auto' },
-                                  gap: 0.75,
-                                  alignItems: 'center',
-                                  p: 0.75,
-                                  borderRadius: 1.8,
-                                  bgcolor: isLight ? 'rgba(15,23,42,0.035)' : 'rgba(233,237,243,0.055)',
-                                }}
-                              >
-                                <Box sx={{ minWidth: 0 }}>
-                                  <Typography variant="body2" sx={{ fontWeight: 560, overflowWrap: 'anywhere' }}>
-                                    {getTaskStageLabel(step.stepName, step.serviceName)}
-                                  </Typography>
-                                  <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
-                                    {step.serviceName || step.stepName}
-                                    {step.errorMessage ? ` · ${step.errorMessage}` : ''}
-                                  </Typography>
-                                </Box>
-                                <Chip
-                                  label={getTaskStatusLabel(step.status)}
-                                  size="small"
-                                  variant="outlined"
-                                  color={getTaskStatusColor(step.status)}
-                                  sx={{ justifySelf: { xs: 'start', sm: 'end' } }}
-                                />
-                              </Box>
-                            ))
-                          ) : (
-                            <Typography variant="body2" color="text.secondary">
-                              Шаги задачи пока не переданы.
-                            </Typography>
-                          )}
-                        </Stack>
                       </Stack>
                     </Collapse>
                   </Paper>
