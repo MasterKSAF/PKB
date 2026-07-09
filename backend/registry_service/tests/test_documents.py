@@ -136,7 +136,7 @@ def test_create_draft_duplicate_document_key(client):
         "created_by": "admin",
     })
     assert resp2.status_code == 409
-    assert "DUPLICATE_DRAFT" in resp2.text
+    assert "DUPLICATE_IN_PROGRESS" in resp2.text
 
 def test_get_documents(client):
     client.post("/api/v1/registry/documents", json={"title": "Doc 1", "classifier_system": "MKS"})

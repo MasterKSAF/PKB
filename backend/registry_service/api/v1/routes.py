@@ -612,11 +612,7 @@ def get_document_page_markdown_endpoint(
                 detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
             )
         blocks = document_crud.get_page_blocks_md(db, document.id, page_num)
-
-        # Build combined markdown — content уже содержит ![alt](/api/v1/files/{key}) для image-блоков
-        markdown = '\n\n'.join(
-            b['content'] for b in blocks if b.get('content', '').strip()
-        )
+        markdown = document_crud.get_page_content_md_str(db, document.id, page_num)
 
         return {
             'data': {
@@ -625,7 +621,8 @@ def get_document_page_markdown_endpoint(
                 'width': 595.0,
                 'height': 842.0,
                 'blocks': blocks,
-                'markdown': markdown
+                'markdown': markdown,
+                'content': markdown
             }
         }
     except HTTPException:
@@ -657,13 +654,16 @@ def get_document_page_html_endpoint(
                 detail={'error': {'code': 'PAGE_NOT_FOUND', 'message': f'Page {page_num} not found. Total pages: {pages_total}'}},
             )
         blocks = document_crud.get_page_blocks_html(db, document.id, page_num)
+        html = document_crud.get_page_content_html_str(db, document.id, page_num)
         return {
             'data': {
                 'document_id': document.id,
                 'page': page_num,
                 'width': 595.0,
                 'height': 842.0,
-                'blocks': blocks
+                'blocks': blocks,
+                'html': html,
+                'content': html
             }
         }
     except HTTPException:

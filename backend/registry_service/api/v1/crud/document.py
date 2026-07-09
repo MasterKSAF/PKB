@@ -1139,3 +1139,244 @@ def get_page_blocks_raw(db: Session, document_id: int, page_num: int) -> List[Di
         })
     return blocks
 
+
+def get_page_content_md_str(db: Session, document_id: int, page_num: int) -> str:
+    sections = (
+        db.query(DocumentSection)
+        .filter(DocumentSection.document_id == document_id, DocumentSection.page == page_num)
+        .order_by(DocumentSection.id.asc())
+        .all()
+    )
+    if not sections:
+        return ""
+    
+    parts = []
+    for sec in sections:
+        sec_type = sec.type_
+        content = sec.content
+        if not isinstance(content, dict):
+            parts.append(str(content or ""))
+            continue
+            
+        if sec_type == "text":
+            text = content.get("markdown") or content.get("text") or ""
+            parts.append(f"\n\n{text}")
+        elif sec_type == "textBlock":
+            block = content.get("block") or []
+            if block:
+                parts.append("\n\n" + "\n\n".join(block))
+        elif sec_type == "headerFooter":
+            text = content.get("text") or ""
+            parts.append(f"\n\n*{text}*")
+        elif sec_type == "table":
+            if "markdown" in content and content["markdown"]:
+                tbl_md = content["markdown"]
+            else:
+                caption = content.get("caption") or ""
+                columns = content.get("columns") or []
+                rows = content.get("rows") or []
+                footnotes = content.get("footnotes") or []
+                image_key = content.get("image_key")
+                
+                col_count = len(columns)
+                if rows:
+                    col_count = max(col_count, max(len(row) for row in rows))
+                if col_count == 0:
+                    col_count = 1
+                
+                padded_columns = list(columns)
+                while len(padded_columns) < col_count:
+                    padded_columns.append("")
+                
+                tbl_parts = []
+                if caption:
+                    tbl_parts.append(caption)
+                
+                header_line = "| " + " | ".join(padded_columns) + " |"
+                delimiters = "| " + " | ".join([":---"] * col_count) + " |"
+                tbl_parts.append(header_line)
+                tbl_parts.append(delimiters)
+                
+                for row in rows:
+                    padded_row = list(row)
+                    while len(padded_row) < col_count:
+                        padded_row.append(None)
+                    row_str = "| " + " | ".join([str(val) if val is not None else " " for val in padded_row]) + " |"
+                    tbl_parts.append(row_str)
+                    
+                for fn in footnotes:
+                    tbl_parts.append(f"\\* {fn}")
+                    
+                tbl_md = "\n".join(tbl_parts)
+                if image_key:
+                    tbl_md += f"\n\n![{caption or 'table'}](/api/v1/files/{image_key})"
+                
+            parts.append(tbl_md)
+        elif sec_type == "list":
+            items = content.get("items") or []
+            list_parts = []
+            for item in items:
+                list_parts.append(f"* {item}")
+            parts.append("\n".join(list_parts))
+        elif sec_type == "image":
+            caption = content.get("caption") or ""
+            image_key = content.get("image_key") or ""
+            description = content.get("description") or ""
+            img_parts = []
+            if image_key:
+                img_parts.append(f"![{caption}](/api/v1/files/{image_key})")
+            if caption or description:
+                sep = " — " if (caption and description) else ""
+                img_parts.append(f"*{caption}{sep}{description}*")
+            parts.append("\n".join(img_parts))
+        elif sec_type == "formula":
+            latex = content.get("latex") or ""
+            meaning = content.get("meaning") or ""
+            image_key = content.get("image_key")
+            f_parts = []
+            if latex:
+                f_parts.append(f"$${latex}$$")
+            if meaning:
+                f_parts.append(f"*Физический смысл: {meaning}*")
+            f_md = "\n".join(f_parts)
+            if image_key:
+                f_md += f"\n\n![Формула: {latex}](/api/v1/files/{image_key})"
+            parts.append(f_md)
+        else:
+            parts.append(str(content))
+            
+    return "\n".join(parts)
+
+
+def get_page_content_html_str(db: Session, document_id: int, page_num: int) -> str:
+    sections = (
+        db.query(DocumentSection)
+        .filter(DocumentSection.document_id == document_id, DocumentSection.page == page_num)
+        .order_by(DocumentSection.id.asc())
+        .all()
+    )
+    if not sections:
+        return ""
+        
+    parts = []
+    for sec in sections:
+        sec_type = sec.type_
+        content = sec.content
+        if not isinstance(content, dict):
+            parts.append(f'<p data-type="{sec_type}">{str(content or "")}</p>')
+            continue
+            
+        if sec_type == "text":
+            text = content.get("html") or content.get("markdown") or content.get("text") or ""
+            if text.startswith("<p"):
+                parts.append(text)
+            else:
+                parts.append(f'<p data-type="text">{text}</p>')
+        elif sec_type == "textBlock":
+            block = content.get("block") or []
+            block_htmls = [f"  <p>{item}</p>" for item in block]
+            block_str = "\n".join(block_htmls)
+            parts.append(f'<section data-type="textBlock">\n{block_str}\n</section>')
+        elif sec_type == "headerFooter":
+            text = content.get("text") or ""
+            parts.append(f'<header data-type="headerFooter" class="header-footer">\n  <span>{text}</span>\n</header>')
+        elif sec_type == "table":
+            if "html" in content and content["html"]:
+                tbl_html = content["html"]
+                if tbl_html.startswith("<table") and 'data-type="table"' not in tbl_html:
+                    tbl_html = tbl_html.replace("<table", '<table data-type="table"', 1)
+                parts.append(tbl_html)
+            elif "markdown" in content and content["markdown"]:
+                tbl_html = convert_markdown_to_html(content["markdown"], "table")
+                if tbl_html.startswith("<table") and 'data-type="table"' not in tbl_html:
+                    tbl_html = tbl_html.replace("<table", '<table data-type="table"', 1)
+                parts.append(tbl_html)
+            else:
+                caption = content.get("caption") or ""
+                columns = content.get("columns") or []
+                rows = content.get("rows") or []
+                footnotes = content.get("footnotes") or []
+                image_key = content.get("image_key")
+                
+                col_count = len(columns)
+                if rows:
+                    col_count = max(col_count, max(len(row) for row in rows))
+                if col_count == 0:
+                    col_count = 1
+                
+                tbl_parts = [f'<table data-type="table">']
+                if caption:
+                    tbl_parts.append(f'  <caption>{caption}</caption>')
+                    
+                tbl_parts.append('  <thead>')
+                header_cells = []
+                for idx in range(col_count):
+                    col_val = columns[idx] if idx < len(columns) else ""
+                    header_cells.append(f'<th>{col_val}</th>')
+                tbl_parts.append('    <tr>' + "".join(header_cells) + '</tr>')
+                tbl_parts.append('  </thead>')
+                    
+                if rows:
+                    tbl_parts.append('  <tbody>')
+                    for row in rows:
+                        row_cells = []
+                        for idx in range(col_count):
+                            val = row[idx] if idx < len(row) else None
+                            if val is None or str(val).strip() == "":
+                                row_cells.append('<td>&nbsp;</td>')
+                            else:
+                                row_cells.append(f'<td>{val}</td>')
+                        tbl_parts.append('    <tr>' + "".join(row_cells) + '</tr>')
+                    tbl_parts.append('  </tbody>')
+                    
+                if footnotes or image_key:
+                    tbl_parts.append('  <tfoot>')
+                    for fn in footnotes:
+                        tbl_parts.append(f'    <tr><td colspan="{col_count}">{fn}</td></tr>')
+                    if image_key:
+                        tbl_parts.append(f'    <tr><td colspan="{col_count}">Источник: <a href="/api/v1/files/{image_key}">Изображение источника</a></td></tr>')
+                    tbl_parts.append('  </tfoot>')
+                    
+                tbl_parts.append('</table>')
+                parts.append("\n".join(tbl_parts))
+        elif sec_type == "list":
+            items = content.get("items") or []
+            list_items = [f"  <li>{item}</li>" for item in items]
+            list_str = "\n".join(list_items)
+            parts.append(f'<ul data-type="list">\n{list_str}\n</ul>')
+        elif sec_type == "image":
+            caption = content.get("caption") or ""
+            image_key = content.get("image_key") or ""
+            description = content.get("description") or ""
+            
+            img_parts = [f'<div data-type="image">', '  <figure>']
+            if image_key:
+                img_parts.append(f'    <img src="/api/v1/files/{image_key}" alt="{caption}">')
+            if caption:
+                img_parts.append(f'    <figcaption>{caption}</figcaption>')
+            img_parts.append('  </figure>')
+            if description:
+                img_parts.append(f'  <p>{description}</p>')
+            img_parts.append('</div>')
+            parts.append("\n".join(img_parts))
+        elif sec_type == "formula":
+            latex = content.get("latex") or ""
+            meaning = content.get("meaning") or ""
+            image_key = content.get("image_key")
+            
+            f_parts = [f'<section data-type="formula" class="formula-container">']
+            if latex:
+                f_parts.append(f'  <span class="latex">$${latex}$$</span>')
+            if meaning:
+                f_parts.append(f'  <p><em>Физический смысл: {meaning}</em></p>')
+            if image_key:
+                f_parts.append('  <figure>')
+                f_parts.append(f'    <img src="/api/v1/files/{image_key}" alt="{meaning or "formula"}">')
+                f_parts.append('  </figure>')
+            f_parts.append('</section>')
+            parts.append("\n".join(f_parts))
+        else:
+            parts.append(f'<p data-type="{sec_type}">{str(content)}</p>')
+            
+    return "\n".join(parts)
+
