@@ -621,6 +621,7 @@ def run_rag_index_step(
 ):
     """RAG index step — submit to RAG Builder, then exit.
 
+    Deletes existing chunks first, then triggers re-indexation.
     BackgroundTaskPoller handles waiting for completion and notifying the orchestrator.
     """
     if trace_id:
@@ -631,6 +632,8 @@ def run_rag_index_step(
         async def _submit_rag_index():
             client = RAGBuilderClient()
             try:
+                # Delete existing chunks first (mirrors run_reprocess_step)
+                await client.delete_index(str(document_id))
                 result = await client.index_document(
                     document_id=document_id,
                     sections=sections or [],

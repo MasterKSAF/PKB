@@ -46,7 +46,7 @@ async def complete(
     for attempt in range(3):
         try:
             t0 = time.monotonic()
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT) as client:
                 resp = await client.post(
                     f"{settings.LLM_API_URL}/chat/completions",
                     json=payload,

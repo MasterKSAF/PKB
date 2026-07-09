@@ -94,7 +94,7 @@ async def search_chunks(request: SearchRequest):
                     c.chunk_index   AS chunk_index,
                     s.clause        AS clause,
                     s.path          AS section_path,
-                    s.bbox          AS section_bbox,
+                    NULLIF(s.bbox, 'null'::jsonb) AS section_bbox,
                     s.title         AS section_title,
                     c.page          AS page,
                     c.content       AS content

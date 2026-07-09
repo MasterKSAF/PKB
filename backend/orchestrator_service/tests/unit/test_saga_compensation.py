@@ -93,11 +93,11 @@ class TestSagaCoordinator:
         ) as mock_delete:
             await saga.compensate(task_id=1, failed_step="rag_index", task=task)
 
-        # delete_document должен быть вызван с document_id=100
+        # delete_document должен быть вызван с document_id=100 (registry_creation)
         mock_delete.assert_awaited_once_with(100)
 
-        # Компенсация должна отметить шаг
-        saga.task_repo.compensate_task_step.assert_called_once()
+        # Компенсация должна отметить registry_creation (completed) + rag_index (сам упавший)
+        assert saga.task_repo.compensate_task_step.call_count == 2
 
         # Task должен быть помечен как failed
         saga.task_repo.set_task_error.assert_called_once()
@@ -110,6 +110,7 @@ class TestSagaCoordinator:
     ):
         """Stateless шаги (upload, preview_ocr, preview_converter, full_ocr, full_converter)
         не имеют компенсации — проверяем, что compensate пропускает их.
+        Шаги с компенсацией (registry_creation) чистятся даже при падении.
         """
         saga = mock_task_repo
         saga.task_repo.get_task_steps.return_value = [
@@ -127,8 +128,8 @@ class TestSagaCoordinator:
         ) as mock_delete:
             await saga.compensate(task_id=1, failed_step="registry_creation", task=task)
 
-        # Нет шагов ДО registry_creation с компенсацией — delete не вызывается
-        mock_delete.assert_not_called()
+        # registry_creation упал, но он имеет delete_registry_document — delete вызывается
+        mock_delete.assert_awaited_once()
 
         # Task error всё равно устанавливается
         saga.task_repo.set_task_error.assert_called_once()
@@ -396,29 +397,16 @@ class TestCompensateRagIndex:
         assert "rag_index" in SagaCoordinator.COMPENSATION_ACTIONS
         assert SagaCoordinator.COMPENSATION_ACTIONS["rag_index"] == "delete_from_vector_index"
 
-    async def test_compensate_rag_index_calls_delete_index(
+    async def test_compensate_rag_index_calls_delete_index_on_following_step_failure(
         self, mock_task_repo
     ):
-        """Если rag_index выполнен и следующий шаг (или он сам) упал —
-        Saga компенсирует через delete_from_vector_index.
+        """Если rag_index выполнен и ПОСЛЕДУЮЩИЙ шаг упал —
+        Saga компенсирует rag_index через delete_from_vector_index.
         """
         saga = mock_task_repo
-        # failed_step — rag_index. Ранее завершённый registry_creation
-        # не считается, если rag_index падает ПОСЛЕ него (но для теста
-        # достаточно того, что rag_index с output_data имеет compensation).
-        # Чтобы вызвать компенсацию для rag_index, нужно чтобы
-        # СЛЕДУЮЩИЙ шаг упал. Для простоты тестируем compensate на rag_index.
-        # По текущей логике: failed_step — rag_index, ищем completed
-        # шаги ДО него (step_index меньше failed_index) и компенсируем их.
-        # rag_index имеет компенсацию, но он сам — failed, поэтому
-        # компенсация не вызывается (только completed-шаги).
-        # Этот тест проверяет, что rag_index СООТВЕТСТВУЕТ compensation action,
-        # а реальная компенсация срабатывает, когда ПОСЛЕ rag_index падает.
-        from app.core.pipeline.saga import SagaCoordinator
-
         saga.task_repo.get_task_steps.return_value = [
             MockStep("registry_creation", 4, status="completed", output_data={"registry_id": 100}),
-            MockStep("rag_index", 5, status="failed"),
+            MockStep("rag_index", 5, status="completed", output_data={"document_id": "42"}),
             MockStep("downstream_step", 6, status="failed"),
         ]
 
@@ -428,19 +416,43 @@ class TestCompensateRagIndex:
             "app.services.rag_client.RAGBuilderClient.delete_index",
             new=AsyncMock(),
         ) as mock_delete_index:
-            # failed_step=downstream_step: до него completed registry_creation
-            # И compensated через delete_registry_document.
-            # rag_index в списке НЕ completed — не компенсируется.
             await saga.compensate(
                 task_id=1, failed_step="downstream_step", task=task,
             )
 
-        # rag_index НЕ completed → не компенсируется
-        # registry_creation completed → компенсируется
-        # delete_index (rag) НЕ вызывается
-        # Вместо этого вызывается delete_document (registry)
-        # Этот тест проверяет текущее поведение.
+        # rag_index completed до downstream_step → компенсируется
+        mock_delete_index.assert_awaited_once_with("42")
 
+    async def test_compensate_rag_index_on_own_failure(
+        self, mock_task_repo
+    ):
+        """Если rag_index сам упал — Saga также компенсирует его
+        через delete_from_vector_index (очистка частичных чанков).
+        """
+        saga = mock_task_repo
+        saga.task_repo.get_task_steps.return_value = [
+            MockStep("registry_creation", 4, status="completed", output_data={"registry_id": 100}),
+            MockStep("rag_index", 5, status="failed", output_data={"document_id": "42"}),
+        ]
+
+        task = MockTask()
+
+        with patch(
+            "app.services.rag_client.RAGBuilderClient.delete_index",
+            new=AsyncMock(),
+        ) as mock_delete_index, patch(
+            "app.services.registry_client.RegistryServiceClient.delete_document",
+            new=AsyncMock(),
+        ) as mock_delete_doc:
+            await saga.compensate(
+                task_id=1, failed_step="rag_index", task=task,
+            )
+
+        # registry_creation (completed) → delete_document
+        mock_delete_doc.assert_awaited_once()
+        # rag_index (сам упавший) → delete_index
+        mock_delete_index.assert_awaited_once_with("42")
+    
     async def test_compensate_rag_index_after_its_failure(self):
         """Если падает шаг ПОСЛЕ rag_index, и rag_index completed,
         вызывается delete_from_vector_index.

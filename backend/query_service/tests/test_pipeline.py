@@ -5,7 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 
 from app.clients.registry_client import normalize_term, enrich_query
 from app.clients.rag_client import Chunk, search
-from app.services.pipeline import _build_llm_mock, _enrich_citations
+from app.services.pipeline import (
+    _build_llm_mock,
+    _enrich_citations,
+    _normalize_source_refs,
+    _clean_content,
+)
 
 
 # ── registry_client ──────────────────────────────────────────────────────────
@@ -146,6 +151,54 @@ def test_enrich_citations_filters_unused():
     _, used = _enrich_citations(text, chunks)
     assert used == [0]
     assert 1 not in used
+
+
+def test_normalize_source_refs_combined_format():
+    text = "Текст [source:1, 4, 5, 6]."
+    result = _normalize_source_refs(text)
+    assert "[source:1]" in result
+    assert "[source:4]" in result
+    assert "[source:5]" in result
+    assert "[source:6]" in result
+    assert "[source:1, 4, 5, 6]" not in result
+
+
+def test_normalize_source_refs_range_format():
+    text = "Текст [source:1-3]."
+    result = _normalize_source_refs(text)
+    assert "[source:1]" in result
+    assert "[source:2]" in result
+    assert "[source:3]" in result
+    assert "[source:1-3]" not in result
+
+
+def test_normalize_source_refs_single_unchanged():
+    text = "Текст [source:0]."
+    result = _normalize_source_refs(text)
+    assert result == text
+
+
+def test_enrich_citations_handles_combined_source_refs():
+    chunks = [
+        Chunk(chunk_id=1, document_id=10, document_title="Д1", section_id=100,
+              page=1, content="a", excerpt="a", score=1.0,
+              clause="1", section_title="Р1", confidence=1.0),
+        Chunk(chunk_id=2, document_id=20, document_title="Д2", section_id=200,
+              page=2, content="b", excerpt="b", score=1.0,
+              clause="2", section_title="Р2", confidence=1.0),
+    ]
+    text = "Согласно [source:0, 1]."
+    enriched, used = _enrich_citations(text, chunks)
+    assert "[source:" not in enriched
+    assert "document_id:10" in enriched
+    assert "document_id:20" in enriched
+    assert used == [0, 1]
+
+
+def test_clean_content_strips_combined_source_refs():
+    text = "Ответ [source:1, 4, 5]."
+    result = _clean_content("assistant", text)
+    assert "[source:" not in result
 
 
 def test_enrich_citations_out_of_range_ignored():

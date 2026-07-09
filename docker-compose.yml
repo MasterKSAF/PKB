@@ -409,7 +409,7 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-https://routerai.ru/api/v1}
       LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-v4-flash}
       LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-4096}
-      LLM_TIMEOUT: ${LLM_TIMEOUT:-60}
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-180}
       CONFIDENCE_THRESHOLD: "0.55"
       REGISTRY_SERVICE_URL: http://registry:8084
     depends_on:
@@ -482,10 +482,12 @@ services:
           POSTGRES_USER: pkb
           POSTGRES_PASSWORD: pkb
           POSTGRES_DB: pkb_neuro
-          SEARCH_STRATEGY: dense_rerank
-          SEARCH_TOP_K: "10"
+          SEARCH_STRATEGY: hybrid_rrf_rerank
+          SEARCH_TOP_K: "20"
+          SEARCH_MIN_SCORE: "0.6"
+          SEARCH_INPUT_MIN_SCORE: "0.3"
           CONTEXT_EXPANSION: "2"
-          # Множитель: top_k * fetch_multiplier = 10*2 = 20 кандидатов на rerank
+          # Множитель: top_k * fetch_multiplier = 20*2 = 40 кандидатов на rerank
           RERANKER_FETCH_MULTIPLIER: "2"
     depends_on:
       postgres:
@@ -523,12 +525,13 @@ services:
       MOCK_RAG_ENABLED: ${MOCK_RAG_ENABLED:-false}
       MOCK_REGISTRY_ENABLED: ${MOCK_REGISTRY_ENABLED:-false}
       MOCK_LLM_ENABLED: ${MOCK_LLM_ENABLED:-false}
-      LLM_API_URL: ${LLM_API_BASE_URL:-https://routerai.ru/api/v1}
-      LLM_API_KEY: ${ROUTERAI_API_KEY:-}
+      LLM_API_URL: ${LLM_API_URL:-${LLM_API_BASE_URL:-https://routerai.ru/api/v1}}
+      LLM_API_KEY: ${LLM_API_KEY:-${ROUTERAI_API_KEY:-}}
       LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-v4-flash}
       LLM_TEMPERATURE: "0.2"
       LLM_MAX_TOKENS: "8196"
       LLM_TOP_P: "0.95"
+      LLM_TIMEOUT: ${LLM_TIMEOUT:-180}
     depends_on:
       postgres:
         condition: service_healthy

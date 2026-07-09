@@ -230,6 +230,9 @@ async def hybrid_search(
             if tei is not None:
                 results = tei
                 logger.info("S2 dense_rerank: TEI rerank succeeded")
+                min_score = settings.search_min_score
+                if min_score > 0 and results:
+                    results = {k: v for k, v in results.items() if v >= min_score}
                 return results, total_found
         results = _raw_scores(dense_ids, top_k)[0]
 
@@ -264,6 +267,9 @@ async def hybrid_search(
             if tei is not None:
                 results = tei
                 logger.info("S5 hybrid_rerank: TEI rerank succeeded")
+                min_score = settings.search_min_score
+                if min_score > 0 and results:
+                    results = {k: v for k, v in results.items() if v >= min_score}
                 return results, total_found
         results, _ = _merge_simple(dense_ids, sparse_ids, top_k)
 
@@ -291,8 +297,27 @@ async def hybrid_search(
             if tei is not None:
                 results = tei
                 logger.info("S7 hybrid_rrf_rerank: TEI rerank succeeded")
+                # Apply min_score filter before returning
+                min_score = settings.search_min_score
+                if min_score > 0 and results:
+                    filtered = {k: v for k, v in results.items() if v >= min_score}
+                    if filtered:
+                        results = filtered
+                    else:
+                        results = {}
+                        total_found = 0
                 return results, total_found
         results, _ = _merge_rrf(dense_ids, sparse_ids, top_k, settings.search_rrf_k)
+
+    # Apply min_score filter
+    min_score = settings.search_min_score
+    if min_score > 0 and results:
+        filtered = {k: v for k, v in results.items() if v >= min_score}
+        if filtered:
+            results = filtered
+        else:
+            results = {}
+            total_found = 0
 
     logger.info(
         "Search completed: %d results (total_found=%d), strategy=%s",
@@ -327,4 +352,40 @@ async def _run_dense_sparse(
         if not dense_ids:
             raise
 
+    input_min_score = get_settings().search_input_min_score
+    if input_min_score > 0 and (dense_ids or sparse_ids):
+        all_ids_list = list(dict.fromkeys(dense_ids + sparse_ids))
+        if all_ids_list:
+            filtered = await _filter_by_dense_similarity(
+                conn, query_embedding, all_ids_list, input_min_score
+            )
+            dense_ids = [i for i in dense_ids if i in filtered]
+            sparse_ids = [i for i in sparse_ids if i in filtered]
+
     return dense_ids, sparse_ids
+
+
+async def _filter_by_dense_similarity(
+    conn: asyncpg.Connection,
+    query_embedding: list[float],
+    candidate_ids: list[int],
+    min_similarity: float,
+) -> set[int]:
+    """Фильтр кандидатов по косинусному сходству до reranker."""
+    if not candidate_ids:
+        return set()
+    rows = await conn.fetch(
+        """
+        SELECT id, 1.0 - (embedding <=> $1::halfvec) AS sim
+        FROM rag.document_chunks
+        WHERE id = ANY($2::bigint[])
+        """,
+        query_embedding,
+        candidate_ids,
+    )
+    kept = {row["id"] for row in rows if row["sim"] >= min_similarity}
+    logger.info(
+        "Input score filter: %d -> %d candidates (min_sim=%.2f)",
+        len(candidate_ids), len(kept), min_similarity,
+    )
+    return kept

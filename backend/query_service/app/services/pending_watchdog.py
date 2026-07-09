@@ -5,12 +5,13 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from ..config import get_settings
 from ..models import ChatMessage
 
 logger = logging.getLogger("query_service")
 
-# сообщение считается зависшим если не менялось более 30с
-_STATE_TIMEOUT = timedelta(seconds=30)
+# сообщение считается зависшим если не менялось более N секунд
+_STATE_TIMEOUT = timedelta(seconds=get_settings().LLM_TIMEOUT + 30)
 _PENDING_STATUSES = ("pending", "enriching", "searching", "generating", "enriching_citations")
 
 

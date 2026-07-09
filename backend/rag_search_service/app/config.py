@@ -92,6 +92,8 @@ class Settings(BaseSettings):
     search_max_top_k: int = Field(default=100, alias="SEARCH_MAX_TOP_K")
     search_rrf_k: int = Field(default=60, alias="SEARCH_RRF_K")
     search_fetch_multiplier: int = Field(default=2, alias="SEARCH_FETCH_MULTIPLIER")
+    search_min_score: float = Field(default=0.0, alias="SEARCH_MIN_SCORE")
+    search_input_min_score: float = Field(default=0.0, alias="SEARCH_INPUT_MIN_SCORE")
     context_expansion: int = Field(default=2, alias="CONTEXT_EXPANSION")
 
     # --- Reranker (TEI) ---
@@ -134,6 +136,8 @@ def _apply_yaml_overrides(settings: Settings) -> Settings:
         "rag.embedding_dim": ("embedding_dim", "EMBEDDING_DIM"),
         "rag.top_k": ("search_top_k", "SEARCH_TOP_K"),
         "rag.context_expansion": ("context_expansion", "CONTEXT_EXPANSION"),
+        "rag.min_score": ("search_min_score", "SEARCH_MIN_SCORE"),
+        "rag.input_min_score": ("search_input_min_score", "SEARCH_INPUT_MIN_SCORE"),
         "rag.rerank_url": ("reranker_base_url", "RERANKER_BASE_URL"),
         "rag.rerank_model": ("reranker_model", "RERANKER_MODEL"),
         "rag.rerank_top_n": ("rerank_top_n", "RERANK_TOP_N"),

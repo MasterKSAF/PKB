@@ -18,6 +18,7 @@ _SYSTEM_PROMPT = (
     "Если во фрагментах нет ответа — прямо сообщи об этом, не домысливай. "
     "После каждого утверждения, основанного на фрагменте, ставь ссылку в формате [source:N], "
     "где N — индекс фрагмента начиная с 0 (например: [source:0], [source:2]). "
+    "Не объединяй индексы через запятую или дефис — используй отдельные [source:N] для каждого фрагмента. "
     "Не пиши идентификаторы документов в тексте — только [source:N]."
 )
 
@@ -29,6 +30,8 @@ _SUMMARY_PROMPT = (
 
 _FINAL_ASSISTANT_STATUSES = ("answered", "not_found")
 _SOURCE_REF_RE = re.compile(r"\[source:(\d+)\]")
+_SOURCE_REF_COMBINED_RE = re.compile(r"\[source:\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
+_SOURCE_REF_RANGE_RE = re.compile(r"\[source:(\d+)-(\d+)\]")
 _OLD_MARKER_RE = re.compile(r"\s*%\[[^\]]*\]%")
 
 _ROUTER_PROMPT = (
@@ -47,12 +50,27 @@ _SUMMARY_MAX_TOKENS = 1024
 _RECENT_KEEP_MESSAGES = 4
 
 
+def _normalize_source_refs(text: str) -> str:
+    text = _SOURCE_REF_RANGE_RE.sub(
+        lambda m: "".join(
+            f"[source:{i}]" for i in range(int(m.group(1)), int(m.group(2)) + 1)
+        ),
+        text,
+    )
+    text = _SOURCE_REF_COMBINED_RE.sub(
+        lambda m: "".join(f"[source:{i.strip()}]" for i in m.group(1).split(",")),
+        text,
+    )
+    return text
+
+
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
 def _clean_content(role: str, content: str) -> str:
     if role == "assistant":
+        content = _normalize_source_refs(content)
         content = _SOURCE_REF_RE.sub("", content)
         content = _OLD_MARKER_RE.sub("", content)
     return content
@@ -77,7 +95,8 @@ def _enrich_citations(
         page = f", стр. {chunk.page}" if chunk.page else ""
         return f"[document_id:{chunk.document_id}, section_id:{chunk.section_id}{clause}{page}]"
 
-    enriched = _SOURCE_REF_RE.sub(replace, llm_text)
+    normalized = _normalize_source_refs(llm_text)
+    enriched = _SOURCE_REF_RE.sub(replace, normalized)
     return enriched, used_indices
 
 
@@ -277,7 +296,7 @@ async def run_pipeline(
             try:
                 llm_result = await asyncio.wait_for(
                     _answer_from_chat(user_query, history, summary, settings),
-                    timeout=120.0,
+                    timeout=settings.LLM_TIMEOUT,
                 )
                 processing_time_ms = int((_utcnow() - t_start).total_seconds() * 1000)
                 async with session_factory() as db:
@@ -347,7 +366,10 @@ async def run_pipeline(
                     llm_text = _build_llm_mock(enriched_query, chunks)
                     break
                 messages = _build_messages(summary, history, chunks, enriched_query)
-                result = await llm_client.complete(messages, cache_key=str(session_id))
+                result = await asyncio.wait_for(
+                    llm_client.complete(messages, cache_key=str(session_id)),
+                    timeout=settings.LLM_TIMEOUT,
+                )
                 llm_text = result.content
                 prompt_tokens = result.prompt_tokens
                 completion_tokens = result.completion_tokens
@@ -383,7 +405,7 @@ async def run_pipeline(
             logger.warning("citation enrichment skipped", extra={"message_id": message_id}, exc_info=True)
             final_text = llm_text
             used_indices = sorted({
-                int(m.group(1)) for m in _SOURCE_REF_RE.finditer(llm_text)
+                int(m.group(1)) for m in _SOURCE_REF_RE.finditer(_normalize_source_refs(llm_text))
                 if int(m.group(1)) < len(chunks)
             })
 

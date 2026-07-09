@@ -1,7 +1,7 @@
 ﻿from __future__ import annotations
 
 from loguru import logger
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rag_builder.models.db import RagDocumentChunk
@@ -21,6 +21,7 @@ class ChunkRepository:
                 chunk_index=c.chunk_index,
                 content=c.content,
                 embedding=e,
+                tsv=func.to_tsvector("russian", c.content),
                 strategy=c.strategy,
                 page=c.page,
                 indexing_txn_id=c.indexing_txn_id,

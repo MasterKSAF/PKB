@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = Field(..., alias="LLM_MODEL")
     LLM_API_KEY: str = Field(default="", alias="LLM_API_KEY")
     LLM_MAX_TOKENS: int = Field(default=8196, alias="LLM_MAX_TOKENS")
+    LLM_TIMEOUT: int = Field(default=120, alias="LLM_TIMEOUT")
 
     OTEL_EXPORTER_OTLP_ENDPOINT: str = Field(
         default="signoz-otel-collector:4317",

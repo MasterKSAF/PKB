@@ -46,7 +46,8 @@ class SagaCoordinator:
     async def compensate(
         self, task_id: int, failed_step: str, task=None
     ) -> None:
-        """Run compensation for all completed steps before the failed one.
+        """Run compensation for all completed steps before the failed one,
+        and also for the failed step itself if it has side-effects.
 
         Args:
             task_id: ID задачи
@@ -61,11 +62,13 @@ class SagaCoordinator:
         )
         steps = await self.task_repo.get_task_steps(task_id)
 
-        # Find the index of the failed step
+        # Find the index and object of the failed step
         failed_index = None
+        failed_step_obj = None
         for step in steps:
             if step.step_name == failed_step:
                 failed_index = step.step_index
+                failed_step_obj = step
                 break
 
         if failed_index is None:
@@ -102,6 +105,23 @@ class SagaCoordinator:
                 logger.error(
                     f"Compensation failed for step {step.step_name}: {e}",
                     extra={"task_id": task_id, "step_id": step.id},
+                )
+
+        # Also compensate the failed step itself if it has side-effects
+        # (e.g. rag_index may have partial chunks that need cleanup)
+        failed_action = self.COMPENSATION_ACTIONS.get(failed_step)
+        if failed_action is not None and failed_step_obj is not None:
+            try:
+                await self._execute_compensation(failed_action, failed_step_obj, task=task)
+                await self.task_repo.compensate_task_step(failed_step_obj.id)
+                logger.info(
+                    f"Compensated failed step {failed_step} via {failed_action}",
+                    extra={"task_id": task_id, "step_id": failed_step_obj.id},
+                )
+            except Exception as e:
+                logger.error(
+                    f"Compensation failed for failed step {failed_step}: {e}",
+                    extra={"task_id": task_id, "step_id": failed_step_obj.id},
                 )
 
         # Mark task with error info

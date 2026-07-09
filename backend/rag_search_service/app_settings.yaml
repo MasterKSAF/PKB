@@ -12,13 +12,13 @@ rag:
   # Стратегия поиска (P13-4, rag_experiments_methodology.md)
   # Доступные стратегии:
   #   S1: dense              — только dense (векторный поиск)
-  #   S2: dense_rerank       — dense + cross-encoder rerank (ПРОДАКШН)
+  #   S2: dense_rerank       — dense + cross-encoder rerank
   #   S3: sparse             — только sparse (BM25/pg_trgm)
   #   S4: hybrid             — dense + sparse, простое слияние (среднее скоров)
   #   S5: hybrid_rerank      — S4 + cross-encoder rerank
   #   S6: hybrid_rrf         — dense + sparse, RRF (k=60) без rerank
-  #   S7: hybrid_rrf_rerank  — S6 + cross-encoder rerank
-  search_strategy: dense_rerank
+  #   S7: hybrid_rrf_rerank  — S6 + cross-encoder rerank (ПРОДАКШН)
+  search_strategy: hybrid_rrf_rerank
 
   # Размерность эмбеддингов (должна совпадать с VECTOR() в БД)
   # Qwen3-Embedding-4B: 2560 / 2048 / 1536
@@ -40,7 +40,7 @@ rag:
   rerank_top_n: 50
 
   # Количество результатов в ответе (фиксировано, не передаётся клиентом)
-  top_k: 10
+  top_k: 20
 
   # Context expansion: количество соседних чанков до/после
   context_expansion: 2
