@@ -51,6 +51,7 @@ class DocumentSchema(BaseModel):
     updated_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
     title_key: Optional[str] = None
+    file_name: Optional[str] = None
     preview_snapshot: Optional[dict] = None
 
     model_config = {

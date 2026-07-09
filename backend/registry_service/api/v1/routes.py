@@ -788,7 +788,7 @@ def create_document(
             'title_hash_sha256', 'file_size_bytes', 'processing_status', 'chunk_count',
             'successor_doc_id', 'predecessor_doc_id', 'created_by', 'updated_by',
             'classifier_code', 'industry_code', 'enterprise_id', 'draft_id', 'valid_from', 'valid_until',
-            'current_version_id', 'preview_snapshot',
+            'current_version_id', 'preview_snapshot', 'title_key',
         }}
         
         if 'source_draft_id' in payload:

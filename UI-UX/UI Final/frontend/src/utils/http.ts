@@ -819,6 +819,7 @@ function mapGatewayDocumentsResponse(payload: any): Document[] {
       documentKey: doc.document_key ?? doc.file_hash_sha256 ?? '',
       titleKey: doc.title_key ?? '',
       titleHashSha256: doc.title_hash_sha256 ?? '',
+      fileName: doc.file_name ?? doc.original_filename ?? '',
       validFrom: doc.valid_from ?? '',
       validUntil: doc.valid_until ?? '',
       classifierCode,

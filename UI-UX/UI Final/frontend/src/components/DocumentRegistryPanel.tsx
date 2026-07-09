@@ -237,6 +237,7 @@ const buildDemoDetail = (document: Document | null) => {
     doc_code: document.id.toUpperCase(),
     source_type: document.type,
     file_name: document.fileName || document.name,
+    title_key: document.titleKey || '',
     status: document.indexStatus === 'Индексировано' ? 'published' : 'processing',
     era: 'CURRENT',
     validity_status: document.indexStatus === 'Индексировано' ? 'active' : 'pending',
@@ -398,7 +399,7 @@ const buildPreviewText = (
     detail?.latest_version?.version ? `Последняя версия: ${detail.latest_version.version}` : '',
     versions.length ? `Версии: ${versions.map((item) => item.label).join(', ')}` : '',
     history.length ? `История: ${history.map((item) => `${item.action ?? 'Событие'} ${item.at ?? ''}`.trim()).join(' · ')}` : '',
-    errors.length ? `Последняя ошибка: ${(errors[0] as any)?.error_message ?? 'не указана'}` : '',
+    errors.length ? `Последняя ошибка: ${(errors[0] as any)?.error_message || (errors[0] as any)?.error_code || 'не указана'}` : '',
     parameters?.extraction_confidence ? `Точность извлечения: ${Math.round(parameters.extraction_confidence * 100)}%` : '',
   ];
 
@@ -720,7 +721,8 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const errors = (workMode === 'prod' ? (errorsQuery.data ?? []) : buildDemoErrors(selectedDocument))
     .filter((error: unknown) => {
       const record = error as Record<string, unknown>;
-      return record && (record.error_message || record.error_code || record.message);
+      const msg = record.error_message ?? record.message ?? record.error_code ?? '';
+      return Boolean(msg) && String(msg).toLowerCase() !== 'unknown';
     });
   const historyRows = useMemo(() => normalizeHistoryRows(history), [history]);
   const parameters = workMode === 'prod' ? parametersQuery.data : buildDemoParameters(selectedDocument);
@@ -1438,9 +1440,9 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                             </Typography>
                           </Box>
                         ))}
-                        {errors.length > 0 && ((errors[0] as any)?.error_message || (errors[0] as any)?.error_code || (errors[0] as any)?.message) && (
+                        {errors.length > 0 && (
                           <Alert severity="warning" variant="outlined" sx={{ borderRadius: 2 }}>
-                            Последняя ошибка: {(errors[0] as any)?.error_message || (errors[0] as any)?.message || (errors[0] as any)?.error_code}
+                            Последняя ошибка: {(errors[0] as any)?.error_message || (errors[0] as any)?.error_code || 'не указана'}
                           </Alert>
                         )}
                         {!historyRows.length && !errors.length && (

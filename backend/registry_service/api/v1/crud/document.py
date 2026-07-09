@@ -59,6 +59,7 @@ def populate_document_extra_fields(db: Session, documents: List[Document]) -> No
     from api.v1.models import DocumentVersion
     from sqlalchemy import func
     version_counts = {}
+    first_version_files = {}
     if doc_ids:
         version_rows = db.query(
             DocumentVersion.document_id,
@@ -69,11 +70,31 @@ def populate_document_extra_fields(db: Session, documents: List[Document]) -> No
             DocumentVersion.document_id
         ).all()
         version_counts = {r[0]: r[1] for r in version_rows}
-        
+
+        # Batch query source_filename from first version of each document
+        from sqlalchemy import func, select
+        min_version_subq = db.query(
+            func.min(DocumentVersion.id).label('min_id')
+        ).filter(
+            DocumentVersion.document_id.in_(doc_ids),
+            DocumentVersion.source_filename.isnot(None),
+            DocumentVersion.source_filename != ''
+        ).group_by(
+            DocumentVersion.document_id
+        ).subquery()
+        file_rows = db.query(
+            DocumentVersion.document_id,
+            DocumentVersion.source_filename
+        ).filter(
+            DocumentVersion.id.in_(select(min_version_subq.c.min_id))
+        ).all()
+        first_version_files = {r.document_id: r.source_filename for r in file_rows}
+
     for doc in documents:
         doc.mks_name = mks_names.get(doc.mks_oks_code) if doc.mks_oks_code else None
         doc.okstu_name = okstu_names.get(doc.okstu_code) if doc.okstu_code else None
         doc.total_versions = version_counts.get(doc.id, 0)
+        doc.file_name = first_version_files.get(doc.id)
 
 
 def get_documents(
@@ -699,6 +720,7 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
             'issuing_body': metadata.get('issuing_body'),
             'file_hash_sha256': file_hash_raw.strip() if file_hash_raw and file_hash_raw.strip() else None,
             'title_hash_sha256': title_hash,
+            'title_key': metadata.get('title_key'),
             'created_at': datetime.now(timezone.utc),
             'updated_at': datetime.now(timezone.utc)
         }

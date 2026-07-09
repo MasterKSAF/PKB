@@ -277,6 +277,8 @@ export const MOCK_DOCUMENTS: Document[] = [
     sectionId: 'kb-hull',
     group: 'kb-hull',
     sourceType: 'DWG',
+    fileName: 'Чертеж СЕВ-22-01.pdf',
+    titleKey: 'chertezh-sev-22-01',
   },
   {
     id: 'd2',
@@ -290,6 +292,8 @@ export const MOCK_DOCUMENTS: Document[] = [
     sectionId: 'kb-machinery',
     group: 'kb-machinery',
     sourceType: 'PDF',
+    fileName: 'Регламент сборки судна.pdf',
+    titleKey: 'reglament-sborki-sudna',
   },
   {
     id: 'd3',
@@ -303,6 +307,8 @@ export const MOCK_DOCUMENTS: Document[] = [
     sectionId: 'kb-fire',
     group: 'kb-fire',
     sourceType: 'PDF',
+    fileName: 'Отчет об испытаниях 2024.pdf',
+    titleKey: 'otchet-ob-ispytaniyakh-2024',
   },
   {
     id: 'd4',
@@ -316,6 +322,8 @@ export const MOCK_DOCUMENTS: Document[] = [
     sectionId: 'kb-materials',
     group: 'kb-materials',
     sourceType: 'XLSX',
+    fileName: 'Спецификация материала.xlsx',
+    titleKey: 'spetsifikatsiya-materiala',
   },
 ];
 
