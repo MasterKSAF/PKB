@@ -18,12 +18,30 @@ HEALTH_SERVICES = [
     "pkb-rag-builder", "pkb-rag-search", "pkb-query",
     "pkb-orchestrator", "pkb-gateway",
 ]
-KNOWN_SERVICES = {
-    "gateway", "orchestrator", "parser", "converter-validator",
-    "rag-builder", "rag-search", "registry", "auth", "query",
-    "postgres", "redis", "minio", "infinity",
-    "celery-worker",
+# Контейнеры с префиксом pkb- (по умолчанию для service_diagnostics)
+# Ключ — короткое имя, значение — имя контейнера (None если pkb-{key})
+SERVICE_CONTAINERS: dict[str, str | None] = {
+    # pkb-префикс (None = pkb-{name})
+    "orchestrator": None,
+    "parser": None,
+    "converter-validator": None,
+    "rag-builder": None,
+    "rag-search": None,
+    "registry": None,
+    "auth": None,
+    "query": None,
+    "celery-worker": None,
+    "frontend": None,
+    "gateway": None,  # сам себе
+    # Инфраструктура
+    "postgres": None,
+    "redis": None,
+    "minio": None,
+    "infinity": None,
+    # Без префикса pkb-
+    "docling-serve": "docling-serve-cpu",
 }
+KNOWN_SERVICES = set(SERVICE_CONTAINERS.keys())
 START_TIME = time.time()
 
 
@@ -297,8 +315,16 @@ def logs_errors(log_lines=20) -> list:
 # Диагностика одного сервиса
 # ---------------------------------------------------------------------------
 
+def _container_name(name: str) -> str:
+    """Вернуть имя Docker-контейнера для короткого имени сервиса."""
+    override = SERVICE_CONTAINERS.get(name)
+    if override:
+        return override
+    return f"pkb-{name}"
+
+
 def service_diagnostics(name: str, log_lines=20) -> list:
-    container = f"pkb-{name}"
+    container = _container_name(name)
     lines = []
     lines.append(f"[Service: {name}]")
 

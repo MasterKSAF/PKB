@@ -1099,10 +1099,43 @@ async def health_ready():
 
 from gateway.diagnostics import (
     KNOWN_SERVICES,
+    _container_name,
     build_service_diagnostics,
     build_summary,
     build_system_logs,
 )
+
+
+@app.get("/api/v1/system/logs/{service_name}")
+async def gateway_raw_logs(service_name: str, request: Request):
+    """Сырые docker-логи сервиса (без обёртки diagnostics).
+
+    Параметры:
+      lines — количество строк (по умолч. 50, макс. 500)
+    """
+    from urllib.parse import parse_qs
+
+    if service_name not in KNOWN_SERVICES:
+        services = ", ".join(sorted(KNOWN_SERVICES))
+        return Response(
+            content=f"Unknown service: {service_name}\nKnown: {services}\n",
+            media_type="text/plain", status_code=404,
+        )
+
+    params = parse_qs(request.url.query)
+    n = params.get("lines", ["50"])[0]
+    lines = min(int(n) if n.isdigit() else 50, 500)
+    container = _container_name(service_name)
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["sh", "-c", f"docker logs {container} --tail {lines} 2>&1"],
+            capture_output=True, text=True, timeout=30,
+        )
+        body = r.stdout or r.stderr
+    except Exception as e:
+        body = str(e)
+    return Response(content=body, media_type="text/plain")
 
 
 @app.get("/api/v1/system/diagnostics")
