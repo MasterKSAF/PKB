@@ -59,7 +59,6 @@ def test_document_pages_content_md_and_html(client):
     assert p1_md_data["page"] == 1
     assert p1_md_data["blocks"][0]["content"] == "This is **bold** text."
     assert p1_md_data["markdown"] == "\n\nThis is **bold** text."
-    assert p1_md_data["content"] == "\n\nThis is **bold** text."
 
     # Page 2 (Table block)
     res_p2_md = client.get(f"/api/v1/registry/documents/{doc_id}/pages/2/content_md")
@@ -68,7 +67,6 @@ def test_document_pages_content_md_and_html(client):
     assert p2_md_data["page"] == 2
     assert "| Col 1 | Col 2 |" in p2_md_data["blocks"][0]["content"]
     assert "| Col 1 | Col 2 |" in p2_md_data["markdown"]
-    assert "| Col 1 | Col 2 |" in p2_md_data["content"]
 
     # 3. Test GET /registry/documents/{id}/pages/{page_num}/content_html
     # Page 1 (Text block wrapped in <p>)
@@ -78,7 +76,6 @@ def test_document_pages_content_md_and_html(client):
     assert p1_html_data["page"] == 1
     assert p1_html_data["blocks"][0]["content"] == "<p>This is **bold** text.</p>"
     assert p1_html_data["html"] == '<p data-type="text">This is **bold** text.</p>'
-    assert p1_html_data["content"] == '<p data-type="text">This is **bold** text.</p>'
 
     # Page 2 (Table block converted to <table>)
     res_p2_html = client.get(f"/api/v1/registry/documents/{doc_id}/pages/2/content_html")
@@ -92,7 +89,6 @@ def test_document_pages_content_md_and_html(client):
     assert '<table data-type="table">' in p2_html_data["html"]
     assert '<th>Col 1</th>' in p2_html_data["html"]
     assert '<td>val 1</td>' in p2_html_data["html"]
-    assert p2_html_data["content"] == p2_html_data["html"]
 
     # 4. Test 404 for invalid page and invalid document
     res_invalid_page = client.get(f"/api/v1/registry/documents/{doc_id}/pages/99/content_md")

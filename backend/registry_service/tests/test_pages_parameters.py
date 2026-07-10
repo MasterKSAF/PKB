@@ -126,7 +126,7 @@ def test_document_pages_and_parameters(client):
     assert "image_key" in page2_prev_data
     assert "p2.png" in page2_prev_data["image_key"]
     # Preview text_layer uses markdown-formatted content
-    assert page2_prev_data["text_layer"] == "E = mc^2"
+    assert page2_prev_data["text_layer"] == "$$E = mc^2$$\n*Физический смысл: Mass-energy equivalence*"
 
     # 6. Test GET /registry/documents/{id}/parameters
     params_res = client.get(f"/api/v1/registry/documents/{doc_id}/parameters")

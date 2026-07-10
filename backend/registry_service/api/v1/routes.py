@@ -621,8 +621,7 @@ def get_document_page_markdown_endpoint(
                 'width': 595.0,
                 'height': 842.0,
                 'blocks': blocks,
-                'markdown': markdown,
-                'content': markdown
+                'markdown': markdown
             }
         }
     except HTTPException:
@@ -662,8 +661,7 @@ def get_document_page_html_endpoint(
                 'width': 595.0,
                 'height': 842.0,
                 'blocks': blocks,
-                'html': html,
-                'content': html
+                'html': html
             }
         }
     except HTTPException:

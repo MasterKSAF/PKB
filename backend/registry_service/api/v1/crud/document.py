@@ -989,12 +989,98 @@ def get_page_blocks(db: Session, document_id: int, page_num: int) -> List[Dict[s
     return blocks
 
 
-def get_page_blocks_md(db: Session, document_id: int, page_num: int) -> List[Dict[str, Any]]:
-    """Retrieve and map document sections on a specific page as blocks with Markdown content.
-
-    For image-type blocks, generates markdown image syntax directly in `content`:
-      ![alt](/api/v1/files/{image_key})
+def render_section_content_to_md(sec_type: str, content: Any) -> str:
+    """Helper to render a document section's JSON content to markdown.
+    Handles fallback GFM table construction, lists, images, and formulas dynamically.
     """
+    if not isinstance(content, dict):
+        return str(content or "")
+        
+    if sec_type == "text":
+        return content.get("markdown") or content.get("text") or ""
+    elif sec_type == "textBlock":
+        block = content.get("block") or []
+        return "\n\n".join(block)
+    elif sec_type == "headerFooter":
+        return content.get("text") or ""
+    elif sec_type == "table":
+        if "markdown" in content and content["markdown"]:
+            return content["markdown"]
+        if not content.get("columns") and not content.get("rows"):
+            return content.get("text") or content.get("markdown") or ""
+            
+        caption = content.get("caption") or ""
+        columns = content.get("columns") or []
+        rows = content.get("rows") or []
+        footnotes = content.get("footnotes") or []
+        image_key = content.get("image_key")
+        
+        col_count = len(columns)
+        if rows:
+            col_count = max(col_count, max(len(row) for row in rows))
+        if col_count == 0:
+            col_count = 1
+        
+        padded_columns = list(columns)
+        while len(padded_columns) < col_count:
+            padded_columns.append("")
+        
+        tbl_parts = []
+        if caption:
+            tbl_parts.append(caption)
+        
+        header_line = "| " + " | ".join(padded_columns) + " |"
+        delimiters = "| " + " | ".join([":---"] * col_count) + " |"
+        tbl_parts.append(header_line)
+        tbl_parts.append(delimiters)
+        
+        for row in rows:
+            padded_row = list(row)
+            while len(padded_row) < col_count:
+                padded_row.append(None)
+            row_str = "| " + " | ".join([str(val) if val is not None else " " for val in padded_row]) + " |"
+            tbl_parts.append(row_str)
+            
+        for fn in footnotes:
+            tbl_parts.append(f"\\* {fn}")
+            
+        tbl_md = "\n".join(tbl_parts)
+        if image_key:
+            tbl_md += f"\n\n![{caption or 'table'}](/api/v1/files/{image_key})"
+        return tbl_md
+    elif sec_type == "list":
+        items = content.get("items") or []
+        return "\n".join([f"* {item}" for item in items])
+    elif sec_type == "image":
+        caption = content.get("caption") or ""
+        image_key = content.get("image_key") or ""
+        description = content.get("description") or ""
+        img_parts = []
+        if image_key:
+            img_parts.append(f"![{caption}](/api/v1/files/{image_key})")
+        if caption or description:
+            sep = " — " if (caption and description) else ""
+            img_parts.append(f"*{caption}{sep}{description}*")
+        return "\n".join(img_parts)
+    elif sec_type == "formula":
+        latex = content.get("latex") or ""
+        meaning = content.get("meaning") or ""
+        image_key = content.get("image_key")
+        f_parts = []
+        if latex:
+            f_parts.append(f"$${latex}$$")
+        if meaning:
+            f_parts.append(f"*Физический смысл: {meaning}*")
+        f_md = "\n".join(f_parts)
+        if image_key:
+            f_md += f"\n\n![Формула: {latex}](/api/v1/files/{image_key})"
+        return f_md
+    else:
+        return str(content)
+
+
+def get_page_blocks_md(db: Session, document_id: int, page_num: int) -> List[Dict[str, Any]]:
+    """Retrieve and map document sections on a specific page as blocks with Markdown content."""
     sections = (
         db.query(DocumentSection)
         .filter(DocumentSection.document_id == document_id, DocumentSection.page == page_num)
@@ -1003,19 +1089,16 @@ def get_page_blocks_md(db: Session, document_id: int, page_num: int) -> List[Dic
     )
     blocks = []
     for idx, sec in enumerate(sections, 1):
-        md_content = ""
-        if isinstance(sec.content, dict):
-            md_content = sec.content.get("markdown") or sec.content.get("text") or sec.content.get("latex") or ""
-            image_key = sec.content.get("image_key")
-            # Для image-блоков вставляем markdown-ссылку на картинку
-            if image_key and not md_content:
-                alt = sec.type_ or "image"
-                md_content = f"![{alt}](/api/v1/files/{image_key})"
-        else:
-            md_content = str(sec.content or "")
-
+        md_content = render_section_content_to_md(sec.type_, sec.content)
         blocks.append({
             "number": idx,
+            "id": sec.id,
+            "section_id": sec.id,
+            "parent_id": sec.parent_id,
+            "clause": sec.clause,
+            "title": sec.title,
+            "level": sec.level,
+            "path": str(sec.path) if sec.path is not None else None,
             "type": sec.type_,
             "bbox": sec.bbox,
             "content": md_content,
@@ -1083,13 +1166,20 @@ def get_page_blocks_html(db: Session, document_id: int, page_num: int) -> List[D
             if "html" in sec.content and sec.content["html"]:
                 html_content = sec.content["html"]
             else:
-                raw_text = sec.content.get("markdown") or sec.content.get("text") or sec.content.get("latex") or ""
-                html_content = convert_markdown_to_html(raw_text, sec.type_)
+                raw_markdown = render_section_content_to_md(sec.type_, sec.content)
+                html_content = convert_markdown_to_html(raw_markdown, sec.type_)
         else:
             html_content = convert_markdown_to_html(str(sec.content or ""), sec.type_)
 
         blocks.append({
             "number": idx,
+            "id": sec.id,
+            "section_id": sec.id,
+            "parent_id": sec.parent_id,
+            "clause": sec.clause,
+            "title": sec.title,
+            "level": sec.level,
+            "path": str(sec.path) if sec.path is not None else None,
             "type": sec.type_,
             "bbox": sec.bbox,
             "content": html_content,
@@ -1110,6 +1200,13 @@ def get_page_blocks_raw(db: Session, document_id: int, page_num: int) -> List[Di
     for idx, sec in enumerate(sections, 1):
         blocks.append({
             "number": idx,
+            "id": sec.id,
+            "section_id": sec.id,
+            "parent_id": sec.parent_id,
+            "clause": sec.clause,
+            "title": sec.title,
+            "level": sec.level,
+            "path": str(sec.path) if sec.path is not None else None,
             "type": sec.type_,
             "bbox": sec.bbox,
             "content": sec.content,
@@ -1130,98 +1227,16 @@ def get_page_content_md_str(db: Session, document_id: int, page_num: int) -> str
     
     parts = []
     for sec in sections:
-        sec_type = sec.type_
-        content = sec.content
-        if not isinstance(content, dict):
-            parts.append(str(content or ""))
+        md_content = render_section_content_to_md(sec.type_, sec.content)
+        if not md_content:
             continue
             
-        if sec_type == "text":
-            text = content.get("markdown") or content.get("text") or ""
-            parts.append(f"\n\n{text}")
-        elif sec_type == "textBlock":
-            block = content.get("block") or []
-            if block:
-                parts.append("\n\n" + "\n\n".join(block))
-        elif sec_type == "headerFooter":
-            text = content.get("text") or ""
-            parts.append(f"\n\n*{text}*")
-        elif sec_type == "table":
-            if "markdown" in content and content["markdown"]:
-                tbl_md = content["markdown"]
-            else:
-                caption = content.get("caption") or ""
-                columns = content.get("columns") or []
-                rows = content.get("rows") or []
-                footnotes = content.get("footnotes") or []
-                image_key = content.get("image_key")
-                
-                col_count = len(columns)
-                if rows:
-                    col_count = max(col_count, max(len(row) for row in rows))
-                if col_count == 0:
-                    col_count = 1
-                
-                padded_columns = list(columns)
-                while len(padded_columns) < col_count:
-                    padded_columns.append("")
-                
-                tbl_parts = []
-                if caption:
-                    tbl_parts.append(caption)
-                
-                header_line = "| " + " | ".join(padded_columns) + " |"
-                delimiters = "| " + " | ".join([":---"] * col_count) + " |"
-                tbl_parts.append(header_line)
-                tbl_parts.append(delimiters)
-                
-                for row in rows:
-                    padded_row = list(row)
-                    while len(padded_row) < col_count:
-                        padded_row.append(None)
-                    row_str = "| " + " | ".join([str(val) if val is not None else " " for val in padded_row]) + " |"
-                    tbl_parts.append(row_str)
-                    
-                for fn in footnotes:
-                    tbl_parts.append(f"\\* {fn}")
-                    
-                tbl_md = "\n".join(tbl_parts)
-                if image_key:
-                    tbl_md += f"\n\n![{caption or 'table'}](/api/v1/files/{image_key})"
-                
-            parts.append(tbl_md)
-        elif sec_type == "list":
-            items = content.get("items") or []
-            list_parts = []
-            for item in items:
-                list_parts.append(f"* {item}")
-            parts.append("\n".join(list_parts))
-        elif sec_type == "image":
-            caption = content.get("caption") or ""
-            image_key = content.get("image_key") or ""
-            description = content.get("description") or ""
-            img_parts = []
-            if image_key:
-                img_parts.append(f"![{caption}](/api/v1/files/{image_key})")
-            if caption or description:
-                sep = " — " if (caption and description) else ""
-                img_parts.append(f"*{caption}{sep}{description}*")
-            parts.append("\n".join(img_parts))
-        elif sec_type == "formula":
-            latex = content.get("latex") or ""
-            meaning = content.get("meaning") or ""
-            image_key = content.get("image_key")
-            f_parts = []
-            if latex:
-                f_parts.append(f"$${latex}$$")
-            if meaning:
-                f_parts.append(f"*Физический смысл: {meaning}*")
-            f_md = "\n".join(f_parts)
-            if image_key:
-                f_md += f"\n\n![Формула: {latex}](/api/v1/files/{image_key})"
-            parts.append(f_md)
+        if sec.type_ in ("text", "textBlock"):
+            parts.append(f"\n\n{md_content}")
+        elif sec.type_ == "headerFooter":
+            parts.append(f"\n\n*{md_content}*")
         else:
-            parts.append(str(content))
+            parts.append(md_content)
             
     return "\n".join(parts)
 
