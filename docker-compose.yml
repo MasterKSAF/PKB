@@ -333,7 +333,7 @@ services:
     image: quay.io/docling-project/docling-serve-cpu:latest
     container_name: docling-serve-cpu
     restart: unless-stopped
-    cpus: "10"
+    cpus: "12"
     ports:
       - "5001:5001"
     environment:

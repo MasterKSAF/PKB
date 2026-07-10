@@ -85,7 +85,7 @@ class ChatSource(Base):
     page_number: Mapped[int | None] = mapped_column(Integer)
     clause: Mapped[str | None] = mapped_column(String(256))
     section_title: Mapped[str | None] = mapped_column(String(256))
-    excerpt: Mapped[str | None] = mapped_column(String(512))
+    excerpt: Mapped[str | None] = mapped_column(Text)
     text: Mapped[str | None] = mapped_column(Text)
     score: Mapped[float | None] = mapped_column(Float)
     confidence: Mapped[float | None] = mapped_column(Float)

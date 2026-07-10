@@ -86,6 +86,8 @@ export type GatewayTaskStepStatus = {
   status: string;
   errorCode?: string | null;
   errorMessage?: string | null;
+  inputData?: Record<string, unknown> | null;
+  outputData?: Record<string, unknown> | null;
   startedAt?: string;
   completedAt?: string;
 };
@@ -1378,6 +1380,8 @@ function mapGatewayTaskStatusDetail(payload: any): GatewayTaskStatusDetail {
         status: String(step?.status ?? 'pending'),
         errorCode: step?.error_code ?? step?.errorCode ?? outputData?.error_code ?? outputError?.code ?? null,
         errorMessage: step?.error_message ?? step?.errorMessage ?? outputData?.error_message ?? outputError?.message ?? null,
+        inputData: (step?.input_data ?? step?.inputData ?? null) as Record<string, unknown> | null,
+        outputData: (outputData && Object.keys(outputData).length > 0 ? outputData : null) as Record<string, unknown> | null,
         startedAt: step?.started_at ?? step?.startedAt,
         completedAt: step?.completed_at ?? step?.completedAt,
       };
@@ -1441,7 +1445,7 @@ function mapGatewayDraftRecord(payload: any) {
 
   return {
     ...data,
-    draft_id: data.draft_id,
+    draft_id: data.draft_id ?? data.id,
     task_id: data.task_id ?? data.taskId,
     version_id: data.version_id ?? data.versionId,
     file_key: data.file_key ?? data.fileKey,
@@ -1948,7 +1952,68 @@ export const draftsApi = {
   },
 };
 
+export type GatewayTaskListItem = {
+  taskId: string;
+  draftId: string;
+  documentId?: string;
+  pipelineType: string;
+  status: string;
+  pipelineStage: string;
+  progressPercent: number;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type GatewayTaskListResponse = {
+  items: GatewayTaskListItem[];
+  meta: {
+    total: number;
+    page: number;
+    page_size: number;
+  };
+};
+
+function mapGatewayTaskListItem(item: any): GatewayTaskListItem {
+  return {
+    taskId: toGatewayStringId(item.task_id ?? item.id, 'task'),
+    draftId: toGatewayStringId(item.draft_id ?? item.draftId),
+    documentId: toGatewayStringId(item.document_id ?? item.documentId),
+    pipelineType: String(item.pipeline_type ?? item.pipelineType ?? ''),
+    status: String(item.status ?? 'unknown'),
+    pipelineStage: String(item.pipeline_stage ?? item.pipelineStage ?? ''),
+    progressPercent: normalizeProgressPercent(item.progress_percent ?? item.progressPercent ?? item.progress),
+    errorCode: item.error_code ?? item.errorCode ?? null,
+    errorMessage: item.error_message ?? item.errorMessage ?? null,
+    createdAt: item.created_at ?? item.createdAt,
+    updatedAt: item.updated_at ?? item.updatedAt,
+  };
+}
+
 export const tasksApi = {
+  /** GET /api/v1/tasks/ — список задач с фильтрацией и пагинацией. */
+  list: async (params?: {
+    draftId?: string | number;
+    status?: string;
+    pipelineType?: string;
+    page?: number;
+    pageSize?: number;
+  }): Promise<GatewayTaskListResponse> => {
+    const query: Record<string, string> = {};
+    if (params?.draftId != null) query.draft_id = String(params.draftId);
+    if (params?.status) query.status = params.status;
+    if (params?.pipelineType) query.pipeline_type = params.pipelineType;
+    if (params?.page) query.page = String(params.page);
+    if (params?.pageSize) query.page_size = String(params.pageSize);
+    const response = await gatewayRequest<any>(() => apiClient.get('/tasks/', { params: query }));
+    const data = response.data?.data ?? response.data ?? {};
+    const items = Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [];
+    return {
+      items: items.map(mapGatewayTaskListItem),
+      meta: data.meta ?? { total: items.length, page: params?.page ?? 1, page_size: params?.pageSize ?? (items.length || 50) },
+    };
+  },
   detail: async (taskId: string): Promise<GatewayTaskStatusDetail> => {
     const response = await gatewayRequest<any>(() => apiClient.get(`/tasks/${taskId}/status`));
     return mapGatewayTaskStatusDetail(response.data);

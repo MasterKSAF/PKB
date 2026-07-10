@@ -21,6 +21,7 @@ import { KnowledgeProcessing } from './components/KnowledgeProcessing';
 import { Monitor } from './components/Monitor';
 import { History } from './components/History';
 import { AdminPanel } from './components/AdminPanel';
+import { TaskJournal } from './components/TaskJournal';
 import { VideoGuideDialog } from './components/VideoGuideDialog';
 import { LoginScreen } from './components/LoginScreen';
 import {
@@ -207,6 +208,8 @@ export default function App() {
         return <Monitor />;
       case 'admin':
         return <AdminPanel />;
+      case 'taskJournal':
+        return <TaskJournal />;
       default:
         return renderUnavailableContent();
     }

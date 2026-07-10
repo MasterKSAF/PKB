@@ -15,9 +15,6 @@ class SourceLocator(BaseModel):
     clause: str | None = Field(default=None, description="Номер пункта (напр. 6.1)")
     path: str | None = Field(default=None, description="Путь секции (напр. 6/6.1)")
     page: int | None = Field(default=None, description="Номер страницы (1-based)")
-    bbox: list[float] | None = Field(
-        default=None, description="Координаты [x1, y1, x2, y2], нормализованные 0..1"
-    )
     section_title: str | None = Field(default=None, description="Название раздела")
     content: str = Field(..., description="Текст чанка (excerpt для ответа)")
 

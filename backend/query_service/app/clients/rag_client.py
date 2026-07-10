@@ -121,6 +121,13 @@ async def search(
                 data = resp.json()
                 _circuit_open_until = 0.0
                 return [_parse_chunk(r) for r in data.get("results", [])]
+        except httpx.HTTPStatusError as exc:
+            if 400 <= exc.response.status_code < 500:
+                raise RuntimeError(f"RAG search failed (client error): {exc}")
+            last_exc = exc
+            if attempt < 2:
+                await asyncio.sleep(backoff)
+                backoff *= 2
         except Exception as exc:
             last_exc = exc
             if attempt < 2:

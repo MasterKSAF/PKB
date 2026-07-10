@@ -1,4 +1,4 @@
-export type AppTab = 'chat' | 'search' | 'documents' | 'knowledgeProcessing' | 'history' | 'qa' | 'admin';
+export type AppTab = 'chat' | 'search' | 'documents' | 'knowledgeProcessing' | 'history' | 'qa' | 'admin' | 'taskJournal';
 
 export type UserRole = 'user' | 'knowledgeAdmin' | 'systemAdmin';
 
@@ -30,6 +30,7 @@ export const TAB_TITLES: Record<AppTab, string> = {
   history: 'История',
   qa: 'QA',
   admin: 'Администрирование',
+  taskJournal: 'Журнал задач',
 };
 
 export const TAB_DESCRIPTIONS: Record<AppTab, string> = {
@@ -40,12 +41,13 @@ export const TAB_DESCRIPTIONS: Record<AppTab, string> = {
   history: '',
   qa: '',
   admin: '',
+  taskJournal: '',
 };
 
 export const ROLE_TAB_ACCESS: Record<UserRole, AppTab[]> = {
   user: ['chat', 'documents', 'history'],
   knowledgeAdmin: ['chat', 'documents', 'knowledgeProcessing', 'history'],
-  systemAdmin: ['chat', 'documents', 'knowledgeProcessing', 'history', 'qa', 'admin'],
+  systemAdmin: ['chat', 'documents', 'knowledgeProcessing', 'history', 'qa', 'admin', 'taskJournal'],
 };
 
 const GATEWAY_TAB_ACCESS: Record<string, AppTab[]> = {
@@ -59,6 +61,7 @@ const GATEWAY_TAB_ACCESS: Record<string, AppTab[]> = {
   monitor: ['qa'],
   qa: ['qa'],
   admin: ['admin'],
+  taskJournal: ['taskJournal'],
 };
 
 export const ADMIN_SECTIONS_ACCESS: Record<UserRole, string[]> = {
@@ -94,7 +97,11 @@ export function getAccessibleTabs(
   if (permissions?.can_manage_registry || permissions?.can_manage_classifiers) {
     mapped.push('qa');
   }
-  return Array.from(new Set(mapped));
+  const result = Array.from(new Set(mapped));
+  if (result.includes('admin') && !result.includes('taskJournal')) {
+    result.push('taskJournal');
+  }
+  return result;
 }
 
 export function getProdStartTab(

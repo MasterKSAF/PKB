@@ -176,7 +176,6 @@ async def search_chunks(request: SearchRequest):
                     clause=row.get("clause"),
                     path=str(row["section_path"]) if row.get("section_path") else None,
                     page=row.get("page"),
-                    bbox=row.get("section_bbox"),
                     section_title=row.get("section_title"),
                     content=row["content"],
                 )

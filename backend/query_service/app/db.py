@@ -29,6 +29,7 @@ _PG_MIGRATIONS = (
     "ALTER TABLE chat_sources ADD COLUMN IF NOT EXISTS citation_index INTEGER",
     "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS prompt_tokens INTEGER",
     "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS completion_tokens INTEGER",
+    "ALTER TABLE chat_sources ALTER COLUMN excerpt TYPE TEXT USING excerpt::TEXT",
     "CREATE EXTENSION IF NOT EXISTS pg_trgm",
     "CREATE INDEX IF NOT EXISTS ix_chat_messages_content_trgm ON chat_messages USING gin (content gin_trgm_ops)",
     "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS content_tsv tsvector",

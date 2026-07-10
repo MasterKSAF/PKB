@@ -26,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
+@router.get(
+    "",
+    response_model=TaskListResponse,
+    responses={400: {"description": "Ошибка пагинации"}},
+)
 @router.get(
     "/",
     response_model=TaskListResponse,

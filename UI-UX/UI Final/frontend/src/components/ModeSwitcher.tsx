@@ -29,6 +29,7 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  ClipboardList,
   Edit3,
   MoreVertical,
   Moon,
@@ -51,6 +52,7 @@ const NAV_ITEMS: Array<{ value: AppTab; label: string; icon: React.ReactNode }> 
   { value: 'history', label: 'История', icon: <History size={18} /> },
   { value: 'qa', label: 'QA', icon: <BarChart3 size={18} /> },
   { value: 'admin', label: 'Администрирование', icon: <Settings size={18} /> },
+  { value: 'taskJournal', label: 'Журнал задач', icon: <ClipboardList size={18} /> },
 ];
 
 const KNOWLEDGE_PROCESSING_SECTIONS: Array<{ value: KnowledgeProcessingSection; label: string; description: string }> = [
@@ -124,7 +126,9 @@ export const ModeSwitcher: React.FC = () => {
     () => getAccessibleTabs(currentRole, currentUser?.availableTabs, workMode, currentUser?.permissions),
     [currentRole, currentUser?.availableTabs, currentUser?.permissions, workMode],
   );
-  const visibleNavItems = NAV_ITEMS.filter((item) => availableTabs.includes(item.value));
+  const visibleNavItems = NAV_ITEMS.filter((item) =>
+    item.value === 'taskJournal' ? availableTabs.includes('admin') : availableTabs.includes(item.value),
+  );
   // chatTreeOpen в сторе (uiStore) — управляется из Chat.tsx
   const [knowledgeProcessingTreeOpen, setKnowledgeProcessingTreeOpen] = React.useState(false);
   const [expandedProjects, setExpandedProjects] = React.useState<Record<string, boolean>>({});
