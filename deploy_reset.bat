@@ -36,9 +36,10 @@ if errorlevel 1 (
 )
 echo.
 
-:: ── 1. Остановка сервисов ────────────────────────────────────────────────────
-echo %YELLOW%[1/3] Stopping services...%NC%
-docker compose down
+:: ── 1. Остановка только сервисов с данными (infinity не трогаем) ──────────────
+echo %YELLOW%[1/3] Stopping postgres and minio (keeping infinity)...%NC%
+docker compose stop postgres minio 2>nul
+docker compose rm -fs postgres minio 2>nul
 echo.
 
 :: ── 2. Удаление volumes (huggingface_cache — кеш Infinity — оставляем) ───────

@@ -73,6 +73,9 @@ kilo.jsonc
 .codegraph/
 **/.codegraph/
 
+# Local Docker overrides (CPU/mem for dev machines)
+docker-compose.override.yml
+
 # Local TODO lists
 todo.md
 .coa/

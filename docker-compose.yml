@@ -188,7 +188,7 @@ services:
     image: michaelf34/infinity:latest-cpu
     container_name: pkb-infinity
     restart: unless-stopped
-    cpus: "4"
+    cpus: "12"
     mem_limit: 4g
     memswap_limit: 0
     volumes:
@@ -333,7 +333,7 @@ services:
     image: quay.io/docling-project/docling-serve-cpu:latest
     container_name: docling-serve-cpu
     restart: unless-stopped
-    cpus: "12"
+    cpus: "10"
     ports:
       - "5001:5001"
     environment:
@@ -361,6 +361,7 @@ services:
     image: pkb/parser:local
     container_name: pkb-parser
     restart: unless-stopped
+    cpus: "4"
     ports:
       - "8087:8087"
     volumes:
@@ -648,6 +649,7 @@ services:
       LOG_LEVEL: DEBUG
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
+      REDIS_URL: redis://redis:6379/0
       REGISTRY_SERVICE_URL: http://registry:8084
       OCR_ENABLED: "false"
       PARSER_FALLBACK_TO_OCR: "false"
