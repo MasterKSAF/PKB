@@ -1,13 +1,15 @@
 """
 PKB Neuroassistant — Diagnostics module (встроен в Gateway)
 
-Собирает диагностику сервера: система, Docker, Git, логи.
-Работает через Docker socket (/var/run/docker.sock) и git из корня проекта.
+Собирает диагностику сервера: система, Docker, Git, логи, pipeline, очередь.
+Работает через Docker socket (/var/run/docker.sock), HTTP к internal-сервисам, git.
 """
 
+import json
 import os
 import subprocess
 import time
+import urllib.request
 from pathlib import Path
 
 PROJECT_DIR = os.environ.get("PROJECT_DIR", "/project")
@@ -42,6 +44,18 @@ SERVICE_CONTAINERS: dict[str, str | None] = {
     "docling-serve": "docling-serve-cpu",
 }
 KNOWN_SERVICES = set(SERVICE_CONTAINERS.keys())
+# Внутренние HTTP endpoints сервисов (Docker network)
+SERVICE_HTTP: dict[str, tuple[str, int]] = {
+    "orchestrator": ("orchestrator", 8081),
+    "registry": ("registry", 8084),
+    "parser": ("parser", 8087),
+    "converter-validator": ("converter-validator", 8086),
+    "rag-builder": ("rag-builder", 8090),
+    "rag-search": ("rag-search", 8091),
+    "query": ("query", 8083),
+    "auth": ("auth", 8082),
+    "docling-serve": ("docling-serve-cpu", 5001),
+}
 START_TIME = time.time()
 
 
@@ -84,7 +98,288 @@ def _git_lines(cmd, timeout=30) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Блоки диагностики
+# HTTP helper — опрос internal-сервисов
+# ---------------------------------------------------------------------------
+
+def _http_get(host: str, port: int, path: str, timeout=10) -> dict | list | str | None:
+    """GET к internal-сервису, возвращает распаршенный JSON или None."""
+    import socket
+    old_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(timeout)
+    try:
+        req = urllib.request.Request(f"http://{host}:{port}{path}")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode()
+            ct = resp.headers.get("Content-Type", "")
+            if "application/json" in ct:
+                return json.loads(body)
+            return body
+    except Exception:
+        return None
+    finally:
+        socket.setdefaulttimeout(old_timeout)
+
+
+# ---------------------------------------------------------------------------
+# Блоки диагностики — Orchestrator / Pipeline
+# ---------------------------------------------------------------------------
+
+def orchestrator_tasks() -> list:
+    """Статистика задач пайплайна + активные задачи + зависшие."""
+    lines = []
+    lines.append("[Pipeline: tasks]")
+
+    stats = _http_get("orchestrator", 8081, "/api/v1/tasks/stats")
+    if stats and isinstance(stats, dict):
+        total = stats.get("total", 0)
+        by_status = stats.get("by_status", {})
+        by_stage = stats.get("by_stage", {})
+        lines.append(f"  Total: {total}")
+        lines.append(f"  By status: {by_status}")
+        lines.append(f"  By stage:  {by_stage}")
+    else:
+        lines.append("  (unreachable)")
+
+    # Активные задачи (status=active + их шаги)
+    tasks_data = _http_get("orchestrator", 8081, "/api/v1/tasks/")
+    if tasks_data and isinstance(tasks_data, (list, dict)):
+        tasks = tasks_data if isinstance(tasks_data, list) else \
+                tasks_data.get("tasks", tasks_data.get("items", []))
+        active = [t for t in tasks if t.get("status") in ("active", "pending")]
+        if active:
+            lines.append(f"\n  Active tasks ({len(active)}):")
+            for t in active:
+                tid = t.get("task_id") or t.get("id")
+                stage = t.get("pipeline_stage", "?")
+                pct = t.get("progress_percent", 0)
+                created = (t.get("created_at") or "")[:19]
+                updated = (t.get("updated_at") or "")[:19]
+                lines.append(f"    #{tid} stage={stage} {pct}% created={created} updated={updated}")
+
+                # Шаги активной задачи
+                steps = _http_get("orchestrator", 8081, f"/api/v1/tasks/{tid}/steps")
+                if steps and isinstance(steps, (list, dict)):
+                    step_list = steps if isinstance(steps, list) else steps.get("steps", [])
+                    for s in step_list:
+                        sn = s.get("step_name", "?")
+                        st = s.get("status", "?")
+                        ss = s.get("started_at", "") or ""
+                        sc = s.get("completed_at", "") or ""
+                        lines.append(f"      - {sn:25s} {st:12s} started={ss[:19]} completed={sc[:19]}")
+        else:
+            lines.append("\n  (no active tasks)")
+
+        # Недавно завершённые (последние 5)
+        completed = [t for t in tasks if t.get("status") == "completed"][-5:]
+        if completed:
+            lines.append(f"\n  Recently completed ({len(completed)}):")
+            for t in completed:
+                tid = t.get("task_id") or t.get("id")
+                stage = t.get("pipeline_stage", "?")
+                created = (t.get("created_at") or "")[:19]
+                updated = (t.get("updated_at") or "")[:19]
+                lines.append(f"    #{tid} stage={stage} created={created} finished={updated}")
+
+    return lines
+
+
+def orchestrator_queue() -> list:
+    """Очередь документов (ожидающие / в обработке)."""
+    lines = []
+    lines.append("[Pipeline: document queue]")
+    queue = _http_get("orchestrator", 8081, "/api/v1/documents/queue")
+    if queue and isinstance(queue, dict):
+        entries = queue.get("queue", queue.get("items", []))
+        meta = queue.get("meta", {})
+        lines.append(f"  Total in queue: {meta.get('total', len(entries))}")
+        if entries:
+            for e in entries[:10]:  # первые 10
+                doc_id = e.get("document_id") or e.get("id", "?")
+                status = e.get("status", "?")
+                created = (e.get("created_at") or "")[:19]
+                lines.append(f"    doc#{doc_id} status={status} created={created}")
+    else:
+        lines.append("  (unreachable or empty)")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Блоки диагностики — PostgreSQL (через docker exec)
+# ---------------------------------------------------------------------------
+
+def _psql(sql: str, timeout=10) -> str | None:
+    """Выполнить SQL через docker exec в pkb-postgres, вернуть текст."""
+    return run(
+        ["docker", "exec", "pkb-postgres",
+         "psql", "-U", "pkb", "-d", "pkb_neuro",
+         "-t", "-A", "-c", sql],
+        timeout=timeout,
+    )
+
+
+def _redis_cmd(cmd: str, timeout=10) -> str | None:
+    """Выполнить команду Redis через docker exec."""
+    return run(
+        ["docker", "exec", "pkb-redis",
+         "redis-cli", "-n", "0"] + cmd.split(),
+        timeout=timeout,
+    )
+
+
+def pipeline_db_info() -> list:
+    """Прямые SQL-запросы к pipeline.tasks и task_steps."""
+    lines = []
+    lines.append("[Pipeline: DB]")
+
+    # Сводка по статусам
+    summary = _psql("SELECT status, COUNT(*) FROM pipeline.tasks WHERE deleted_at IS NULL GROUP BY status ORDER BY status")
+    if summary:
+        lines.append("  Tasks by status:")
+        for row in summary.split("\n"):
+            row = row.strip()
+            if row:
+                parts = row.split("|")
+                if len(parts) >= 2:
+                    lines.append(f"    {parts[0]}: {parts[1]}")
+    else:
+        lines.append("  (DB unreachable)")
+
+    # Задачи, running > 5 минут (потенциально зависшие)
+    stuck = _psql(
+        "SELECT id, status, pipeline_stage, current_step_name, "
+        "EXTRACT(EPOCH FROM (NOW() - updated_at))::int AS stuck_sec "
+        "FROM pipeline.tasks "
+        "WHERE deleted_at IS NULL AND status IN ('active','pending') "
+        "AND updated_at < NOW() - INTERVAL '5 minutes' "
+        "ORDER BY updated_at"
+    )
+    if stuck and stuck.strip():
+        lines.append("\n  Stuck tasks (>5min without update):")
+        for row in stuck.split("\n"):
+            row = row.strip()
+            if row:
+                parts = row.split("|")
+                if len(parts) >= 5:
+                    lines.append(f"    #{parts[0]} {parts[1]} stage={parts[2]} step={parts[3]} stuck={parts[4]}s")
+    else:
+        lines.append("\n  (no stuck tasks)")
+
+    # Шаги в статусе running (по всем задачам)
+    running_steps = _psql(
+        "SELECT ts.task_id, ts.step_name, ts.status, "
+        "EXTRACT(EPOCH FROM (NOW() - ts.started_at))::int AS running_sec, "
+        "ts.started_at::text "
+        "FROM pipeline.task_steps ts "
+        "WHERE ts.deleted_at IS NULL AND ts.status IN ('running','pending') "
+        "ORDER BY ts.task_id, ts.id"
+    )
+    if running_steps and running_steps.strip():
+        lines.append("\n  Running/pending steps:")
+        for row in running_steps.split("\n"):
+            row = row.strip()
+            if row:
+                parts = row.split("|")
+                if len(parts) >= 5:
+                    lines.append(f"    task#{parts[0]} {parts[1]:25s} {parts[2]:10s} {parts[3]}s started={parts[4][:19]}")
+    else:
+        lines.append("\n  (no running steps)")
+
+    return lines
+
+
+def document_db_info() -> list:
+    """Статистика документов registry через SQL."""
+    lines = []
+    lines.append("[Registry: DB stats]")
+
+    total = _psql("SELECT COUNT(*) FROM registry.documents WHERE deleted_at IS NULL")
+    if total and total.strip():
+        lines.append(f"  Documents: {total.strip()}")
+    else:
+        lines.append("  (DB unreachable or empty)")
+        return lines
+
+    drafts = _psql("SELECT COUNT(*) FROM registry.drafts WHERE deleted_at IS NULL")
+    if drafts and drafts.strip():
+        lines.append(f"  Drafts: {drafts.strip()}")
+
+    versions = _psql("SELECT COUNT(*) FROM registry.document_versions WHERE deleted_at IS NULL")
+    if versions and versions.strip():
+        lines.append(f"  Versions: {versions.strip()}")
+
+    # Ошибки (последние 5)
+    errs = _psql(
+        "SELECT id, task_id, error_code, error_message, created_at::text "
+        "FROM pipeline.tasks "
+        "WHERE deleted_at IS NULL AND error_code IS NOT NULL "
+        "ORDER BY created_at DESC LIMIT 5"
+    )
+    if errs and errs.strip():
+        lines.append("\n  Recent task errors:")
+        for row in errs.split("\n"):
+            row = row.strip()
+            if row:
+                parts = row.split("|")
+                if len(parts) >= 5:
+                    lines.append(f"    #{parts[0]} task#{parts[1]} [{parts[2]}] {parts[3][:80]} @ {parts[4][:19]}")
+
+    return lines
+
+
+def celery_queue_info() -> list:
+    """Очередь Celery через Redis."""
+    lines = []
+    lines.append("[Celery]")
+
+    # Основная очередь
+    qlen = _redis_cmd("LLEN celery")
+    if qlen and qlen.strip():
+        lines.append(f"  Queue 'celery': {qlen.strip()} items")
+    else:
+        qlen = _redis_cmd("LLEN celery")
+        if qlen is None:
+            lines.append("  (Redis unreachable)")
+            return lines
+        lines.append(f"  Queue 'celery': 0 items")
+
+    # Другие очереди
+    for q in ["celery.preview", "celery.full", "celery.registry", "celery.rag"]:
+        items = _redis_cmd(f"LLEN {q}")
+        if items and items.strip() and items.strip() != "0":
+            lines.append(f"  Queue '{q}': {items.strip()} items")
+
+    # Зарезервированные задачи
+    reserved = _redis_cmd("LLEN celery.reserved")
+    if reserved and reserved.strip() and reserved.strip() != "0":
+        lines.append(f"  Reserved: {reserved.strip()} tasks")
+
+    # Celery inspect — scheduled, active, reserved
+    scheduled = _redis_cmd("ZCARD celery.scheduled")
+    if scheduled and scheduled.strip() and scheduled.strip() != "0":
+        lines.append(f"  Scheduled: {scheduled.strip()} tasks")
+
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Блоки диагностики — Registry
+# ---------------------------------------------------------------------------
+
+def registry_info() -> list:
+    """Статистика документов в реестре."""
+    lines = []
+    lines.append("[Registry: documents]")
+    data = _http_get("registry", 8084, "/api/v1/registry/documents?limit=1")
+    if data and isinstance(data, dict):
+        total = data.get("meta", data).get("total", "?")
+        lines.append(f"  Total documents: {total}")
+    else:
+        lines.append("  (unreachable)")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Блоки диагностики — система
 # ---------------------------------------------------------------------------
 
 def system_info() -> list:
@@ -407,12 +702,28 @@ def build_summary(log_lines=20, verbose=False) -> str:
     lines.append("=" * 52)
     lines.append("")
 
-    # Compact blocks (всегда)
+    # System always
     for block in [system_info, health_checks]:
         lines += block()
         lines.append("")
-
     lines += docker_containers_compact()
+    lines.append("")
+
+    # Pipeline / Orchestrator always (live data)
+    lines += orchestrator_tasks()
+    lines.append("")
+    lines += orchestrator_queue()
+    lines.append("")
+
+    # DB / Celery всегда
+    lines += pipeline_db_info()
+    lines.append("")
+    lines += document_db_info()
+    lines.append("")
+    lines += celery_queue_info()
+    lines.append("")
+
+    lines += registry_info()
     lines.append("")
 
     lines += git_status_compact()
@@ -448,6 +759,32 @@ def build_service_diagnostics(name: str, log_lines=20) -> str:
     lines += service_diagnostics(name, log_lines)
     lines.append("")
 
+    # Специфичные блоки для каждого сервиса
+    if name == "orchestrator":
+        lines += orchestrator_tasks()
+        lines.append("")
+        lines += orchestrator_queue()
+    elif name == "registry":
+        lines += registry_info()
+    elif name == "parser":
+        # HTTP health + статус активных задач через parser API
+        parser_health = _http_get("parser", 8087, "/api/v1/health")
+        if parser_health:
+            h = json.dumps(parser_health, ensure_ascii=False) if isinstance(parser_health, dict) else parser_health
+            lines.append(f"[Parser HTTP health]")
+            lines.append(f"  {h}")
+        # Статус задач 11,12 если они активны
+        for tid in [11, 12]:
+            st = _http_get("orchestrator", 8081, f"/api/v1/tasks/{tid}/status")
+            if st:
+                lines.append(f"\n[Task #{tid} status]")
+                if isinstance(st, dict):
+                    for k, v in st.items():
+                        lines.append(f"  {k}: {v}")
+                else:
+                    lines.append(f"  {st}")
+
+    lines.append("")
     lines.append("=" * 52)
     lines.append(f"   Complete: {name}")
     lines.append("=" * 52)
