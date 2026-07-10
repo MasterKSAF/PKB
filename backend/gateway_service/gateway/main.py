@@ -433,6 +433,7 @@ class RBACMiddleware(BaseHTTPMiddleware):
                 or path == "/api/v1/system/mode"
                 or path == "/api/v1/system/diagnostics"
                 or path.startswith("/api/v1/system/diagnostics/")
+                or path.startswith("/api/v1/system/logs/")
                 or path.startswith("/api/v1/files/")
             ):
                 if not user_context["is_authenticated"]:

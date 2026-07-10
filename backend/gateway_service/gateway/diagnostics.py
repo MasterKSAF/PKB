@@ -299,11 +299,11 @@ def document_db_info() -> list:
         lines.append("  (DB unreachable or empty)")
         return lines
 
-    drafts = _psql("SELECT COUNT(*) FROM registry.drafts WHERE deleted_at IS NULL")
+    drafts = _psql("SELECT COUNT(*) FROM registry.drafts")
     if drafts and drafts.strip():
         lines.append(f"  Drafts: {drafts.strip()}")
 
-    versions = _psql("SELECT COUNT(*) FROM registry.document_versions WHERE deleted_at IS NULL")
+    versions = _psql("SELECT COUNT(*) FROM registry.document_versions")
     if versions and versions.strip():
         lines.append(f"  Versions: {versions.strip()}")
 

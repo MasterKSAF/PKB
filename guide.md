@@ -28,11 +28,23 @@
 При жалобе «сервер не работает / ошибка» — не гадать, а собирать диагностику системно:
 
 1. **Gateway diagnostics** (публичный, не требует auth):
-   - `GET /api/v1/system/diagnostics` — быстрая сводка
-   - `GET /api/v1/system/diagnostics?verbose=true` — полная (dmesg, порты, диски, compose, volumes, git, ошибки)
-   - `GET /api/v1/system/diagnostics/{service}` — по конкретному сервису
-   - `GET /api/v1/system/diagnostics/{service}?log_lines=100` — больше строк лога (по умолчанию 20)
+   - `GET /api/v1/system/diagnostics` — быстрая сводка + pipeline/БД/Celery
+   - `GET /api/v1/system/diagnostics?verbose=true` — полная (dmesg, порты, диски, compose, volumes, git, ошибки, pipeline, БД, Redis)
+   - `GET /api/v1/system/diagnostics/{service}` — по конкретному сервису (включая docling-serve, celery-worker)
+   - `GET /api/v1/system/diagnostics/{service}?logs=200` — больше строк лога (параметр `logs`, не `log_lines`)
    - `GET /api/v1/system/diagnostics/system` — логи ядра
+   - `GET /api/v1/system/logs/{service}?lines=500` — сырые docker-логи (без обёртки diagnostics; макс 500 строк)
+
+   **Что показывает diagnostics всегда (без verbose):**
+   - `[Pipeline: tasks]` — статистика задач: total, by_status, by_stage; активные задачи с пошаговой разбивкой (status, started_at, completed_at каждого шага); недавно завершённые
+   - `[Pipeline: document queue]` — очередь документов оркестратора
+   - `[Pipeline: DB]` — SQL-запросы напрямую в PostgreSQL: сводка по статусам; задачи, не обновлявшиеся >5 мин (потенциально зависшие) с указанием шага и времени; running/pending шаги всех задач
+   - `[Registry: DB stats]` — количество документов/draft'ов/версий; последние ошибки
+   - `[Celery]` — длина очередей через Redis (LLEN), зарезервированные и запланированные задачи
+   - `[Registry: documents]` — количество документов в реестре через Registry API
+
+   **Поддерживаемые сервисы для {service}:**
+   gateway, orchestrator, parser, converter-validator, rag-builder, rag-search, registry, auth, query, celery-worker, frontend, postgres, redis, minio, infinity, docling-serve
 
 2. **Health endpoints:**
    - `GET /api/v1/health` — gateway health
