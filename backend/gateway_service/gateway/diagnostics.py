@@ -63,8 +63,11 @@ START_TIME = time.time()
 # Helpers
 # ---------------------------------------------------------------------------
 
-def run(cmd, timeout=30, cwd=None) -> str:
-    """Запускает команду, возвращает stdout. При ошибке — stderr."""
+def run(cmd, timeout=10, cwd=None) -> str:
+    """Запускает команду, возвращает stdout. При ошибке — stderr.
+
+    timeout=10 — агрессивный таймаут: лучше показать (unreachable) чем ждать 30с.
+    """
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
         out = r.stdout.strip()
@@ -77,12 +80,12 @@ def run(cmd, timeout=30, cwd=None) -> str:
         return str(e)
 
 
-def run_lines(cmd, timeout=30, cwd=None) -> list:
+def run_lines(cmd, timeout=10, cwd=None) -> list:
     out = run(cmd, timeout, cwd=cwd)
     return out.split("\n") if out else []
 
 
-def _git(cmd, timeout=30) -> str:
+def _git(cmd, timeout=10) -> str:
     """Запускает git-команду в PROJECT_DIR. Возвращает stdout при успехе, иначе пустую строку."""
     try:
         r = subprocess.run(['git'] + cmd, capture_output=True, text=True, timeout=timeout, cwd=PROJECT_DIR)
@@ -101,7 +104,7 @@ def _git_lines(cmd, timeout=30) -> list:
 # HTTP helper — опрос internal-сервисов
 # ---------------------------------------------------------------------------
 
-def _http_get(host: str, port: int, path: str, timeout=10) -> dict | list | str | None:
+def _http_get(host: str, port: int, path: str, timeout=5) -> dict | list | str | None:
     """GET к internal-сервису, возвращает распаршенный JSON или None."""
     import socket
     old_timeout = socket.getdefaulttimeout()
@@ -207,7 +210,7 @@ def orchestrator_queue() -> list:
 # Блоки диагностики — PostgreSQL (через docker exec)
 # ---------------------------------------------------------------------------
 
-def _psql(sql: str, timeout=10) -> str | None:
+def _psql(sql: str, timeout=5) -> str | None:
     """Выполнить SQL через docker exec в pkb-postgres, вернуть текст."""
     return run(
         ["docker", "exec", "pkb-postgres",
@@ -217,7 +220,7 @@ def _psql(sql: str, timeout=10) -> str | None:
     )
 
 
-def _redis_cmd(cmd: str, timeout=10) -> str | None:
+def _redis_cmd(cmd: str, timeout=5) -> str | None:
     """Выполнить команду Redis через docker exec."""
     return run(
         ["docker", "exec", "pkb-redis",
@@ -593,7 +596,7 @@ def logs_errors(log_lines=20) -> list:
         lines.append("  (no services)")
         return lines
     found = False
-    for svc in services:
+    for svc in services[:10]:  # макс 10 сервисов — остальные пропускаем
         errors = run(['docker', 'compose', 'logs', '--tail=100', svc], cwd=PROJECT_DIR).split("\n")
         errs = [e for e in errors if any(x in e.lower() for x in ['error', 'traceback', 'exception', 'fail', 'critical'])]
         if errs:
