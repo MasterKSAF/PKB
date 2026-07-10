@@ -188,6 +188,7 @@ services:
     image: michaelf34/infinity:latest-cpu
     container_name: pkb-infinity
     restart: unless-stopped
+    cpus: "4"
     mem_limit: 4g
     memswap_limit: 0
     volumes:
@@ -332,6 +333,7 @@ services:
     image: quay.io/docling-project/docling-serve-cpu:latest
     container_name: docling-serve-cpu
     restart: unless-stopped
+    cpus: "12"
     ports:
       - "5001:5001"
     environment:
@@ -558,6 +560,7 @@ services:
     image: pkb/orchestrator:local
     container_name: pkb-orchestrator
     restart: unless-stopped
+    cpus: "1"
     ports:
       - "8081:8081"
     volumes:
@@ -583,6 +586,7 @@ services:
       PARSER_FALLBACK_TO_OCR: "false"
       CONVERTER_SERVICE_URL: http://converter-validator:8086
       PIPELINE__AUTO_APPROVE_ENABLED: "true"
+      MAX_CONCURRENT_TASKS: "3"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8081 --reload
     depends_on:
       postgres:
@@ -625,6 +629,7 @@ services:
     image: pkb/orchestrator:local
     container_name: pkb-celery-worker
     restart: unless-stopped
+    cpus: "2"
     working_dir: /app
     volumes:
       - ./backend/orchestrator_service/app:/app/app

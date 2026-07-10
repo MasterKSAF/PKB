@@ -5,7 +5,7 @@ Supports dual mode: real API calls or mock/stub mode for each external service.
 
 from typing import Optional
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import AliasChoices, ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -177,6 +177,7 @@ class PipelineConfig(BaseSettings):
     # Max concurrent pipeline tasks (preview + full)
     MAX_CONCURRENT_TASKS: int = Field(
         default=4,
+        validation_alias=AliasChoices("MAX_CONCURRENT_TASKS", "PIPELINE_MAX_CONCURRENT"),
         description="Max number of concurrent active pipeline tasks",
     )
 

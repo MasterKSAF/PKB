@@ -30,7 +30,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
 import { type Document } from '../utils/mockData';
-import { apiClient, documentsApi } from '../utils/http';
+import { apiClient, documentsApi, registryApi } from '../utils/http';
 import { buildMarkdownFromBlocks } from '../utils/markdownBuilder';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -573,6 +573,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
+  const [pageMenuAnchorEl, setPageMenuAnchorEl] = useState<null | HTMLElement>(null);
 
   const sourceFilterOptions = useMemo(
     () =>
@@ -870,6 +871,59 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
             : 'Не удалось получить файл через сервер.',
       );
     }
+  };
+
+  const handleDownloadJson = async () => {
+    if (!selectedDocument) return;
+
+    setDownloadError('');
+    try {
+      let payload: Record<string, unknown>;
+      if (workMode === 'prod') {
+        const [detailData, sectionsData] = await Promise.all([
+          registryApi.document(selectedDocument.id),
+          registryApi.documentSections(selectedDocument.id),
+        ]);
+        payload = { document: detailData, sections: sectionsData };
+      } else {
+        payload = {
+          document: buildDemoDetail(selectedDocument),
+          sections: [],
+          preview: buildDemoPages(selectedDocument, buildDemoDetail(selectedDocument)),
+        };
+      }
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const fileName = selectedDocument.fileName || selectedDocument.name || 'document';
+      link.download = fileName.includes('.') ? fileName.replace(/\.[^.]+$/, '.json') : `${fileName}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Не удалось выгрузить JSON документа.');
+    }
+  };
+
+  const handleDownloadPageMd = () => {
+    if (!currentPreviewText || !selectedDocument) return;
+    const baseName = (selectedDocument.fileName || selectedDocument.name || 'page').replace(/\.[^.]+$/, '');
+    downloadPreviewFile(`${baseName}-${previewPageIndex + 1}`, currentPreviewText, 'md');
+  };
+
+  const handleDownloadPageJson = () => {
+    if (!selectedDocument) return;
+    const raw = pageContentQuery.data?.text;
+    if (!raw) return;
+    const blob = new Blob([JSON.stringify(raw, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const baseName = (selectedDocument.fileName || selectedDocument.name || 'page').replace(/\.[^.]+$/, '');
+    link.download = `${baseName}-${previewPageIndex + 1}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleSaveValidity = async () => {
@@ -1202,9 +1256,36 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                         >
                           Назад
                         </Button>
-                        <Typography variant="caption" color="text.secondary">
-                          Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
-                        </Typography>
+                        <Stack direction="row" spacing={0} sx={{ alignItems: 'center' }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                            Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            onClick={(event) => setPageMenuAnchorEl(event.currentTarget)}
+                            sx={{ width: 22, height: 22, ml: 0.25 }}
+                          >
+                            <MoreVertical size={12} />
+                          </IconButton>
+                          <Menu
+                            anchorEl={pageMenuAnchorEl}
+                            open={Boolean(pageMenuAnchorEl)}
+                            onClose={() => setPageMenuAnchorEl(null)}
+                          >
+                            <MenuItem onClick={() => { setPageMenuAnchorEl(null); handleDownloadPageMd(); }}>
+                              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                                <Download size={14} />
+                                <span>Скачать страницу MD</span>
+                              </Stack>
+                            </MenuItem>
+                            <MenuItem onClick={() => { setPageMenuAnchorEl(null); handleDownloadPageJson(); }}>
+                              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                                <Download size={14} />
+                                <span>Скачать страницу JSON</span>
+                              </Stack>
+                            </MenuItem>
+                          </Menu>
+                        </Stack>
                         <Button
                           variant="outlined"
                           size="small"
@@ -1482,7 +1563,18 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
             >
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
                 <Download size={15} />
-                <span>Скачать</span>
+                <span>Скачать PDF</span>
+              </Stack>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setActionsAnchorEl(null);
+                void handleDownloadJson();
+              }}
+            >
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                <Download size={15} />
+                <span>Скачать JSON</span>
               </Stack>
             </MenuItem>
             <MenuItem
@@ -1554,9 +1646,36 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                 >
                 Назад
               </Button>
-              <Typography variant="caption" color="text.secondary">
-                Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
-              </Typography>
+              <Stack direction="row" spacing={0} sx={{ alignItems: 'center' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                  Страница {previewPages.length ? previewPageIndex + 1 : 0} из {previewPages.length}
+                </Typography>
+                <IconButton
+                  size="small"
+                  onClick={(event) => setPageMenuAnchorEl(event.currentTarget)}
+                  sx={{ width: 22, height: 22, ml: 0.25 }}
+                >
+                  <MoreVertical size={12} />
+                </IconButton>
+                <Menu
+                  anchorEl={pageMenuAnchorEl}
+                  open={Boolean(pageMenuAnchorEl)}
+                  onClose={() => setPageMenuAnchorEl(null)}
+                >
+                  <MenuItem onClick={() => { setPageMenuAnchorEl(null); handleDownloadPageMd(); }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <Download size={14} />
+                      <span>Скачать страницу MD</span>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem onClick={() => { setPageMenuAnchorEl(null); handleDownloadPageJson(); }}>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <Download size={14} />
+                      <span>Скачать страницу JSON</span>
+                    </Stack>
+                  </MenuItem>
+                </Menu>
+              </Stack>
               <Button
                   variant="outlined"
                   onClick={() => setPreviewPageIndex((current) => Math.min(current + 1, previewPages.length - 1))}
@@ -1612,6 +1731,14 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
               onClick={() => downloadPreviewFile(selectedDocument.name, previewText, 'txt')}
             >
               Скачать срез
+            </Button>
+          )}
+          {selectedDocument && (
+            <Button
+              startIcon={<Download size={16} />}
+              onClick={() => void handleDownloadJson()}
+            >
+              Скачать JSON
             </Button>
           )}
           <Button onClick={() => setPreviewOpen(false)}>Закрыть</Button>
