@@ -161,7 +161,7 @@ class TestAutoApproveEnabled:
         ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ), patch(
-            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+            "app.tasks.pipeline_indexation.run_rag_index_step.delay",
         ):
             orchestrator = PipelineOrchestrator(db_session)
             await orchestrator._on_preview_completed(

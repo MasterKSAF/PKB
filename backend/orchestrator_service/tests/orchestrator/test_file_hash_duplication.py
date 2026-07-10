@@ -170,7 +170,7 @@ class TestFileHashDuplication:
         ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ), patch(
-            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+            "app.tasks.pipeline_indexation.run_rag_index_step.delay",
         ), patch(
             "app.tasks.pipeline_indexation.run_activate_document_step.delay",
         ):
@@ -275,7 +275,7 @@ class TestFileHashDuplication:
         ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ), patch(
-            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+            "app.tasks.pipeline_indexation.run_rag_index_step.delay",
         ), patch(
             "app.tasks.pipeline_indexation.run_activate_document_step.delay",
         ):

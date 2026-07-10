@@ -1082,104 +1082,20 @@ class PipelineOrchestrator:
                 progress_percent=90,
             )
 
-            from app.tasks.pipeline_formation import run_rag_index_step
+            from app.tasks.pipeline_indexation import run_rag_index_step
 
-            # Extract sections for RAG Builder — priority chain:
-            # 1. registry_creation step output (saved by run_registry_step via create_document)
-            # 2. Registry API (get_document_sections) — fallback if step output empty
-            # 3. full_converter output (content[]) — fallback if Registry unavailable
-            # 4. full_ocr output (sections from parser) — legacy path
-            sections = None
             document_id = getattr(task, 'document_id', None) or task.draft_id
-
-            # Priority 1: из step output registry_creation (уже с section_id от Registry)
-            for s in steps:
-                if s.step_name == "registry_creation" and s.output_data:
-                    sections = s.output_data.get("sections")
-                    step_doc_id = s.output_data.get("document_id")
-                    if step_doc_id:
-                        document_id = step_doc_id
-                    if sections:
-                        logger.info(
-                            f"Got {len(sections)} sections from registry_creation output",
-                            extra={"task_id": task.id, "draft_id": task.draft_id},
-                        )
-                    break
-
-            # Priority 2: читаем из Registry API
-            if not sections:
-                registry = RegistryServiceClient()
-                sec_result = await registry.get_document_sections(document_id)
-                sec_data = sec_result.get("data", {})
-                sections = sec_data.get("sections", [])
-                await registry.close()
-                if sections:
-                    logger.info(
-                        f"Got {len(sections)} sections via get_document_sections",
-                        extra={"task_id": task.id, "draft_id": task.draft_id},
-                    )
-
-            # Priority 3: fallback к конвертеру (content[] → section format с ручным ID)
-            if not sections:
-                for s in steps:
-                    if s.step_name == "full_converter" and s.output_data:
-                        content_items = (s.output_data.get("document") or {}).get("content")
-                        if content_items:
-                            sections = []
-                            for idx, item in enumerate(content_items):
-                                sec = dict(item)
-                                sec["section_id"] = idx + 1
-                                sections.append(sec)
-                            logger.info(
-                                f"Extracted {len(sections)} sections from full_converter content",
-                                extra={"task_id": task.id, "draft_id": task.draft_id},
-                            )
-                        break
-
-            # Priority 4: legacy fallback к OCR/parser
-            if not sections:
-                for s in steps:
-                    if s.step_name == "full_ocr" and s.output_data:
-                        sections = s.output_data.get("sections")
-                        if sections:
-                            logger.info(
-                                f"Extracted {len(sections)} sections from full_ocr output",
-                                extra={"task_id": task.id, "draft_id": task.draft_id},
-                            )
-                        break
-
-            # Fix document_id in sections to match actual registry document_id
-            if sections:
-                for s in sections:
-                    s['document_id'] = document_id
-
-                # Сохраняем sections в Registry (upsert по document_id)
-                reg_save = RegistryServiceClient()
-                await reg_save.create_document({
-                    "document_id": document_id,
-                    "draft_id": task.draft_id,
-                    "document": {"sections": sections},
-                })
-                await reg_save.close()
-                logger.info(
-                    f"Saved {len(sections)} sections to Registry via upsert",
-                    extra={"task_id": task.id, "draft_id": task.draft_id,
-                           "document_id": document_id},
-                )
 
             logger.info(
                 "Enqueuing RAG index step",
                 extra={
-                    "celery_task": "tasks.pipeline.run_rag_index_step",
+                    "celery_task": "tasks.pipeline.indexation.run_rag_index_step",
                     "queue": "pipeline",
-                    "params": {"task_id": task.id, "draft_id": task.draft_id,
-                               "document_id": document_id,
-                               "sections_count": len(sections) if sections else 0},
+                    "params": {"task_id": task.id, "document_id": document_id},
                 },
             )
             run_rag_index_step.delay(
-                task.id, task.draft_id, document_id,
-                sections=sections, trace_id=trace_id,
+                str(task.id), str(document_id),
             )
 
         elif step_name == "rag_index":

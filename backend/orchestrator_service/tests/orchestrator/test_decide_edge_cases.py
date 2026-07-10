@@ -270,7 +270,7 @@ class TestDecideWithMetadataOverrides:
         ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ), patch(
-            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+            "app.tasks.pipeline_indexation.run_rag_index_step.delay",
         ):
             mock_reg = mock_reg_cls.return_value
             mock_reg.get_draft = AsyncMock(return_value={
@@ -659,7 +659,7 @@ class TestDecideConfirmAction:
         ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ), patch(
-            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+            "app.tasks.pipeline_indexation.run_rag_index_step.delay",
         ):
             mock_reg = mock_reg_cls.return_value
             mock_reg.get_draft = AsyncMock(return_value={
@@ -821,7 +821,7 @@ class TestDecideDuplicateFileAfterApprove:
         ), patch(
             "app.tasks.pipeline_formation.run_registry_step.delay",
         ), patch(
-            "app.tasks.pipeline_formation.run_rag_index_step.delay",
+            "app.tasks.pipeline_indexation.run_rag_index_step.delay",
         ):
             mock_reg = mock_reg_cls.return_value
             mock_reg.get_draft = AsyncMock(return_value={
