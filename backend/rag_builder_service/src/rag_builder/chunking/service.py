@@ -56,6 +56,13 @@ class ChunkingService:
             return [self._content_text_or_fallback(section.content, ("caption", "description"))]
         if section.type == "formula":
             return [self._content_text_or_fallback(section.content, ("latex", "meaning"))]
+        if section.type == "textBlock":
+            block = section.content.get("block") or []
+            text = "\n\n".join(
+                p.get("content", "") if isinstance(p, dict) else str(p)
+                for p in block
+            ).strip()
+            return self._split_tokens(text, settings.chunk_max_tokens, protected_span) if text else []
         text = str(section.content.get("text", "")).strip()
         return self._split_tokens(text, settings.chunk_max_tokens, protected_span)
 
@@ -81,19 +88,32 @@ class ChunkingService:
             return markdown
         columns_obj = content.get("columns", [])
         rows_obj = content.get("rows", [])
-        columns: Iterable[dict[str, object]] = columns_obj if isinstance(columns_obj, list) else []
-        rows: Iterable[dict[str, object]] = rows_obj if isinstance(rows_obj, list) else []
-        cols = [str(c.get("header", c.get("name", ""))) for c in columns]
-        lines = ["| " + " | ".join(cols) + " |", "| " + " | ".join(["---"] * len(cols)) + " |"]
+        columns: list = columns_obj if isinstance(columns_obj, list) else []
+        rows: list = rows_obj if isinstance(rows_obj, list) else []
+        # columns can be list of strings (header names) or list of dicts
+        cols = []
+        for c in columns:
+            if isinstance(c, dict):
+                cols.append(str(c.get("header", c.get("name", ""))))
+            else:
+                cols.append(str(c))
+        lines = ["| " + " | ".join(cols) + " |", "| " + " | ".join(["---"] * max(len(cols), 1)) + " |"]
         for row in rows:
-            cells_obj = row.get("cells", {})
-            cells: dict[str, object] = cells_obj if isinstance(cells_obj, dict) else {}
+            cells_obj = row.get("cells", [])
+            cells: list = cells_obj if isinstance(cells_obj, list) else []
             vals = []
-            for col in columns:
-                name = str(col.get("name"))
-                cell_obj = cells.get(name, {})
-                cell: dict[str, object] = cell_obj if isinstance(cell_obj, dict) else {}
-                vals.append(str(cell.get("label", cell.get("value", ""))))
+            for i, cell in enumerate(cells):
+                if isinstance(cell, dict):
+                    cell_content_blocks = cell.get("block") or cell.get("kids") or []
+                    val = cell_content_blocks[0].get("content", "") if cell_content_blocks else ""
+                    if not val:
+                        val = str(cell.get("label", cell.get("value", "")))
+                else:
+                    val = str(cell)
+                vals.append(val)
+            # Pad to match column count
+            while len(vals) < len(cols):
+                vals.append("")
             lines.append("| " + " | ".join(vals) + " |")
         return "\n".join(lines)
 
