@@ -9,6 +9,10 @@ from convertor_validator_service_lama.services.rich_document_package_assembler i
 from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentPackageAssemblyRequest,
 )
+from gost_20868_fixture_helpers import (
+    gost_20868_chunk_container_extract_results,
+    load_gost_20868_v2_chunk_container,
+)
 
 
 def _parse_result() -> ParseJobResult:
@@ -709,3 +713,66 @@ def test_assembler_expands_gost_reference_range_from_target_document_code() -> N
         "\u0413\u041e\u0421\u0422 20866-81",
         "\u0413\u041e\u0421\u0422 20867-81",
     ]
+
+def test_assembler_preserves_gost_20868_v2_chunk_container_layers() -> None:
+    data = load_gost_20868_v2_chunk_container()
+    fixture_sections_by_clause = {
+        section["clause"]: section
+        for section in data["sections"]
+    }
+
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="gost_20868_81.pdf",
+        document_code=data["document"]["doc_code"],
+        parse_result=_parse_result(),
+        extract_results=gost_20868_chunk_container_extract_results(data),
+    )
+
+    result = assemble_rich_document_package(request)
+    structure = result.package.document_structure
+
+    section_clauses = {section.clause for section in structure.sections}
+    assert {"title", "1", "6", "6.1", "9"}.issubset(section_clauses)
+
+    title_section = next(
+        section
+        for section in structure.sections
+        if section.clause == "title"
+    )
+    assert data["document"]["doc_code"] in title_section.content
+
+    assert [image.image_id for image in structure.images] == [
+        "figure-1",
+        "figure-2",
+    ]
+    assert structure.images[0].caption == (
+        fixture_sections_by_clause["figure-1"]["content"]["caption"]
+    )
+    assert structure.images[1].caption == (
+        fixture_sections_by_clause["figure-2"]["content"]["caption"]
+    )
+
+    assert len(structure.tables) == 1
+    assert structure.tables[0].table_id == "table-1"
+    assert structure.tables[0].caption == fixture_sections_by_clause["table-1"]["title"]
+    assert len(structure.tables[0].cells) == 12
+
+    assert len(structure.notes) == 1
+    assert structure.notes[0].note_id == "note"
+    assert structure.notes[0].text == fixture_sections_by_clause["note"]["content"]["text"]
+
+    assert len(structure.references) == 6
+    reference_types = [reference.reference_type for reference in structure.references]
+    assert reference_types.count("normative_reference") == 5
+    assert reference_types.count("table_reference") == 1
+
+    expected_target_document_codes = {
+        reference["target_doc_code"]
+        for section in data["sections"]
+        for reference in section.get("references") or []
+    }
+    actual_target_document_codes = {
+        reference.target_document_code
+        for reference in structure.references
+    }
+    assert actual_target_document_codes == expected_target_document_codes
