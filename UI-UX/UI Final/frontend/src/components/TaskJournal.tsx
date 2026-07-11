@@ -66,6 +66,14 @@ const headerCellSx = {
 
 type DraftOption = { id: string; label: string };
 
+function copyText(text: any) {
+  const s = JSON.stringify(text ?? {}, null, 2);
+  if (navigator.clipboard) { navigator.clipboard.writeText(s).catch(() => {}); return; }
+  const ta = document.createElement('textarea');
+  ta.value = s; ta.style.position = 'fixed'; document.body.appendChild(ta);
+  ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+}
+
 export const TaskJournal: React.FC = () => {
   const { themeMode } = useUIStore();
   const isLight = themeMode === 'light';
@@ -143,8 +151,8 @@ export const TaskJournal: React.FC = () => {
     .sort((a, b) => a.label.localeCompare(b.label));
 
   return (
-    <Container maxWidth={false} disableGutters sx={{ py: 3, width: '100%' }}>
-      <Stack spacing={2.5}>
+    <Container maxWidth={false} disableGutters sx={{ py: 2, width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxSizing: 'border-box' }}>
+      <Stack spacing={2} sx={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <Paper
           variant="outlined"
           sx={{
@@ -239,17 +247,19 @@ export const TaskJournal: React.FC = () => {
 
         {error && <Alert severity="error" variant="outlined" sx={{ borderRadius: 2 }}>{error}</Alert>}
 
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <Stack spacing={2} sx={{ flex: '0 0 440px', minWidth: 280 }}>
+        <Box sx={{ display: 'flex', gap: 2, flex: 1, minHeight: 0 }}>
+          <Box sx={{ flex: '0 0 440px', display: 'flex', flexDirection: 'column', gap: 2, minHeight: 0 }}>
             <Paper
               variant="outlined"
               sx={{
+                flex: 1,
                 p: 0,
                 borderRadius: 3,
                 bgcolor: 'rgba(7, 14, 22, 0.94)',
                 borderColor: 'rgba(198, 216, 240, 0.52)',
                 borderWidth: 1.5,
                 overflow: 'auto',
+                minHeight: 0,
               }}
             >
               <Typography sx={{ p: 1.5, pb: 1, fontWeight: 540, fontSize: '0.95rem', color: 'rgba(233, 237, 243, 0.92)', borderBottom: '1px solid rgba(198, 214, 236, 0.24)' }}>
@@ -262,7 +272,7 @@ export const TaskJournal: React.FC = () => {
                   <Table size="small" stickyHeader>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ ...headerCellSx, width: 50 }}>ID</TableCell>
+                        <TableCell sx={{ ...headerCellSx, width: 65 }}>ID</TableCell>
                         <TableCell sx={{ ...headerCellSx, width: 140 }}>Дата</TableCell>
                         <TableCell sx={headerCellSx}>Файл</TableCell>
                         <TableCell sx={{ ...headerCellSx, width: 90 }}>Статус</TableCell>
@@ -277,8 +287,8 @@ export const TaskJournal: React.FC = () => {
                           onClick={() => selectTask(t.taskId)}
                           sx={{ cursor: 'pointer' }}
                         >
-                          <TableCell sx={{ ...cellSx, width: 50, borderLeft: selectedTaskId === t.taskId ? '3px solid #26c6b0' : '3px solid transparent', bgcolor: selectedTaskId === t.taskId ? 'rgba(38, 198, 176, 0.40)' : undefined }}>
-                            <Typography sx={{ fontWeight: 600, color: selectedTaskId === t.taskId ? '#26c6b0' : '#9fd3ff', fontSize: '0.82rem' }}>#{t.taskId}</Typography>
+                          <TableCell sx={{ ...cellSx, width: 65, borderLeft: selectedTaskId === t.taskId ? '3px solid #26c6b0' : '3px solid transparent', bgcolor: selectedTaskId === t.taskId ? 'rgba(38, 198, 176, 0.40)' : undefined }}>
+                            <Typography sx={{ fontWeight: 600, color: selectedTaskId === t.taskId ? '#26c6b0' : '#9fd3ff', fontSize: '0.82rem' }}>{t.taskId}</Typography>
                           </TableCell>
                           <TableCell sx={{ ...cellSx, width: 140, whiteSpace: 'nowrap', bgcolor: selectedTaskId === t.taskId ? 'rgba(38, 198, 176, 0.40)' : undefined }}>{fmtDateTime(t.createdAt)}</TableCell>
                           <TableCell sx={{ ...cellSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', bgcolor: selectedTaskId === t.taskId ? 'rgba(38, 198, 176, 0.40)' : undefined }}>
@@ -298,12 +308,14 @@ export const TaskJournal: React.FC = () => {
             <Paper
               variant="outlined"
               sx={{
+                flex: 1,
                 p: 0,
                 borderRadius: 3,
                 bgcolor: 'rgba(7, 14, 22, 0.94)',
                 borderColor: 'rgba(198, 216, 240, 0.52)',
                 borderWidth: 1.5,
                 overflow: 'auto',
+                minHeight: 0,
               }}
             >
               <Typography sx={{ p: 1.5, pb: 1, fontWeight: 540, fontSize: '0.95rem', color: 'rgba(233, 237, 243, 0.92)', borderBottom: '1px solid rgba(198, 214, 236, 0.24)' }}>
@@ -361,29 +373,27 @@ export const TaskJournal: React.FC = () => {
                 </TableContainer>
               )}
             </Paper>
-          </Stack>
+          </Box>
 
-          {selectedStepIdx !== null && taskDetail?.steps[selectedStepIdx] && (() => {
-            const selectedStep = taskDetail.steps[selectedStepIdx];
-            return (<Paper
+          {selectedStepIdx !== null && taskDetail?.steps[selectedStepIdx] && (
+            <Paper
               variant="outlined"
               sx={{
-                flex: '1 1 500px',
+                flex: 1,
+                minWidth: 0,
                 p: 2,
                 borderRadius: 3,
                 bgcolor: 'rgba(7, 14, 22, 0.94)',
                 borderColor: 'rgba(152, 217, 216, 0.32)',
                 borderWidth: 1.5,
-                alignSelf: 'flex-start',
-                maxHeight: 700,
                 overflow: 'auto',
               }}
             >
               <Stack spacing={1.5}>
                 <Typography sx={{ fontWeight: 540, color: 'rgba(233, 237, 243, 0.92)' }}>
-                  {selectedStep.stepName} — полные данные
+                  {taskDetail.steps[selectedStepIdx].stepName} — полные данные
                 </Typography>
-                {selectedStep.errorMessage && <Alert severity="error" variant="outlined" sx={{ borderRadius: 1.5 }}>{selectedStep.errorMessage}</Alert>}
+                {taskDetail.steps[selectedStepIdx].errorMessage && <Alert severity="error" variant="outlined" sx={{ borderRadius: 1.5 }}>{taskDetail.steps[selectedStepIdx].errorMessage}</Alert>}
 
                 <Box sx={{
                   display: 'grid',
@@ -391,17 +401,17 @@ export const TaskJournal: React.FC = () => {
                   gap: '6px 16px',
                   fontSize: '0.84rem',
                 }}>
-                  <FieldLabel label="Step" value={selectedStep.stepName} isLight={isLight} />
-                  <FieldLabel label="Service" value={selectedStep.serviceName} isLight={isLight} />
-                  <FieldLabel label="Status" value={selectedStep.status} isLight={isLight} />
-                  <FieldLabel label="Error Code" value={selectedStep.errorCode ?? '—'} isLight={isLight} />
-                  <FieldLabel label="Started" value={selectedStep.startedAt ?? '—'} isLight={isLight} />
-                  <FieldLabel label="Completed" value={selectedStep.completedAt ?? '—'} isLight={isLight} />
+                  <FieldLabel label="Step" value={taskDetail.steps[selectedStepIdx].stepName} isLight={isLight} />
+                  <FieldLabel label="Service" value={taskDetail.steps[selectedStepIdx].serviceName} isLight={isLight} />
+                  <FieldLabel label="Status" value={taskDetail.steps[selectedStepIdx].status} isLight={isLight} />
+                  <FieldLabel label="Error Code" value={taskDetail.steps[selectedStepIdx].errorCode ?? '—'} isLight={isLight} />
+                  <FieldLabel label="Started" value={taskDetail.steps[selectedStepIdx].startedAt ?? '—'} isLight={isLight} />
+                  <FieldLabel label="Completed" value={taskDetail.steps[selectedStepIdx].completedAt ?? '—'} isLight={isLight} />
                 </Box>
 
                 <Typography variant="caption" sx={{ fontWeight: 600, color: 'rgba(198, 216, 240, 0.7)' }}>Input Data</Typography>
                 <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end', mt: -3, mb: 0.5 }}>
-                  <Button size="small" variant="outlined" onClick={() => navigator.clipboard.writeText(JSON.stringify(selectedStep.inputData, null, 2))}>
+                  <Button size="small" variant="outlined" onClick={() => copyText(taskDetail.steps[selectedStepIdx].inputData)}>
                     Копировать
                   </Button>
                 </Stack>
@@ -420,12 +430,12 @@ export const TaskJournal: React.FC = () => {
                     color: '#1e293b',
                   }}
                 >
-                  {JSON.stringify(selectedStep.inputData, null, 2)}
+                  {JSON.stringify(taskDetail.steps[selectedStepIdx].inputData, null, 2)}
                 </Box>
 
                 <Typography variant="caption" sx={{ fontWeight: 600, color: 'rgba(198, 216, 240, 0.7)' }}>Output Data</Typography>
                 <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end', mt: -3, mb: 0.5 }}>
-                  <Button size="small" variant="outlined" onClick={() => navigator.clipboard.writeText(JSON.stringify(selectedStep.outputData, null, 2))}>
+                  <Button size="small" variant="outlined" onClick={() => copyText(taskDetail.steps[selectedStepIdx].outputData)}>
                     Копировать
                   </Button>
                 </Stack>
@@ -444,12 +454,11 @@ export const TaskJournal: React.FC = () => {
                     color: '#1e293b',
                   }}
                 >
-                  {JSON.stringify(selectedStep.outputData, null, 2)}
+                  {JSON.stringify(taskDetail.steps[selectedStepIdx].outputData, null, 2)}
                 </Box>
               </Stack>
             </Paper>
-          );
-          })()}
+          )}
         </Box>
 
       </Stack>
