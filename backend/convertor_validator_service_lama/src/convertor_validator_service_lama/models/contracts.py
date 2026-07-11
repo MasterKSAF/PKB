@@ -46,12 +46,16 @@ class ParseJobRequest(BaseModel):
 
 LlamaExtractPassName = Literal[
     "document_boundaries",
+    "nested_documents",
     "title_metadata",
     "table_of_contents",
+    "table_of_contents_blocks",
     "sections",
     "tables",
     "images",
     "formulas",
+    "notes",
+    "references",
     "cross_references",
     "validation_critic",
 ]

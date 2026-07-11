@@ -65,6 +65,45 @@ def test_assembler_fills_document_structure_from_extract_artifacts() -> None:
                     ]
                 }
             ),
+            "table_of_contents_blocks": _extract_result(
+                {
+                    "table_of_contents_blocks": [
+                        {
+                            "toc_id": "toc-main",
+                            "title": "Table of contents",
+                            "namespace_id": "front_matter",
+                            "page_start": 1,
+                            "page_end": 1,
+                            "items": [
+                                {
+                                    "item_id": "toc-main-1",
+                                    "title": "1. Scope",
+                                    "level": 1,
+                                    "page": 1,
+                                    "path": "1",
+                                    "target_section_id": "section-1",
+                                }
+                            ],
+                        },
+                        {
+                            "toc_id": "toc-appendix",
+                            "title": "Appendix table of contents",
+                            "namespace_id": "appendix_a",
+                            "page_start": 10,
+                            "page_end": 10,
+                            "items": [
+                                {
+                                    "item_id": "toc-appendix-1",
+                                    "title": "A.1 Additional requirements",
+                                    "level": 1,
+                                    "page": 11,
+                                    "path": "appendix_a/a_1",
+                                }
+                            ],
+                        },
+                    ]
+                }
+            ),
             "nested_documents": _extract_result(
                 {
                     "nested_documents": [
@@ -155,6 +194,37 @@ def test_assembler_fills_document_structure_from_extract_artifacts() -> None:
                     ]
                 }
             ),
+            "notes": _extract_result(
+                {
+                    "notes": [
+                        {
+                            "note_id": "note-1",
+                            "namespace_id": "main_document",
+                            "section_id": "section-1",
+                            "text": "Note text",
+                            "page": 2,
+                            "bbox": [0.1, 0.2, 0.3, 0.4],
+                        }
+                    ]
+                }
+            ),
+            "references": _extract_result(
+                {
+                    "references": [
+                        {
+                            "reference_id": "reference-1",
+                            "namespace_id": "main_document",
+                            "section_id": "section-1",
+                            "reference_text": "\u0413\u041e\u0421\u0422 20862-81- \u0413\u041e\u0421\u0422 20867-81",
+                            "target_document_code": "GOST 123",
+                            "target_clause": "1.2",
+                            "reference_type": "normative_reference",
+                            "page": 3,
+                            "bbox": [0.1, 0.2, 0.3, 0.4],
+                        }
+                    ]
+                }
+            ),
             "cross_references": _extract_result(
                 {
                     "cross_references": [
@@ -188,6 +258,10 @@ def test_assembler_fills_document_structure_from_extract_artifacts() -> None:
 
     assert isinstance(structure, RichDocumentStructure)
     assert structure.document_boundaries[0].boundary_id == "boundary-1"
+    assert len(structure.table_of_contents_blocks) == 2
+    assert structure.table_of_contents_blocks[0].toc_id == "toc-main"
+    assert structure.table_of_contents_blocks[1].namespace_id == "appendix_a"
+    assert structure.table_of_contents_blocks[1].items[0].title == "A.1 Additional requirements"
     assert structure.table_of_contents[0].target_section_id == "section-1"
     assert structure.nested_documents[0].document_code == "APPENDIX-A"
 
@@ -224,12 +298,15 @@ def test_assembler_uses_empty_document_structure_when_extract_artifacts_are_abse
     structure = result.package.document_structure
 
     assert structure.document_boundaries == []
+    assert structure.table_of_contents_blocks == []
     assert structure.table_of_contents == []
     assert structure.nested_documents == []
     assert structure.sections == []
     assert structure.tables == []
     assert structure.images == []
     assert structure.formulas == []
+    assert structure.notes == []
+    assert structure.references == []
     assert structure.cross_references == []
     assert structure.quality_report is None
     assert structure.correction_proposals == []
@@ -597,3 +674,38 @@ def test_assembler_builds_document_structure_from_raw_response_items_when_top_le
 
     assert structure.diagnostics["parse_item_structure"]["sections_count"] == 3
     assert structure.diagnostics["parse_item_structure"]["namespaces_count"] == 2
+
+
+def test_assembler_expands_gost_reference_range_from_target_document_code() -> None:
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        parse_result=_parse_result(),
+        extract_results={
+            "references": _extract_result(
+                {
+                    "references": [
+                        {
+                            "reference_id": "reference-range",
+                            "reference_text": "External standard range",
+                            "target_document_code": "\u0413\u041e\u0421\u0422 20862-81- \u0413\u041e\u0421\u0422 20867-81",
+                            "reference_type": "normative_reference",
+                        }
+                    ]
+                }
+            )
+        },
+    )
+
+    result = assemble_rich_document_package(request)
+    reference = result.package.document_structure.references[0]
+
+    assert reference.target_document_code == "\u0413\u041e\u0421\u0422 20862-81"
+    assert reference.target_document_codes == [
+        "\u0413\u041e\u0421\u0422 20862-81",
+        "\u0413\u041e\u0421\u0422 20863-81",
+        "\u0413\u041e\u0421\u0422 20864-81",
+        "\u0413\u041e\u0421\u0422 20865-81",
+        "\u0413\u041e\u0421\u0422 20866-81",
+        "\u0413\u041e\u0421\u0422 20867-81",
+    ]

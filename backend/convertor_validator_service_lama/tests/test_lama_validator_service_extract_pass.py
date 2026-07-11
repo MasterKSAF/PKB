@@ -116,3 +116,109 @@ def test_run_extract_pass_with_polling_requires_project_id(monkeypatch) -> None:
             pass_name="sections",
             client=FakeLlamaExtractRestClient(),
         )
+
+def test_run_extract_pass_with_polling_uses_references_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="references",
+        client=client,
+    )
+
+    submit_call = client.calls[0]
+    request = submit_call[1]
+
+    assert request.pass_name == "references"
+    assert request.extraction_schema["properties"]["references"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["references"]
+    assert "GOST 20862-81 - GOST 20867-81" in (request.instructions or "")
+    assert "cross_references" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_keeps_explicit_references_payload(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="references",
+        extraction_schema={"type": "object", "properties": {"custom": {"type": "string"}}},
+        instructions="Custom references instructions.",
+        client=client,
+    )
+
+    submit_call = client.calls[0]
+    request = submit_call[1]
+
+    assert request.extraction_schema == {
+        "type": "object",
+        "properties": {"custom": {"type": "string"}},
+    }
+    assert request.instructions == "Custom references instructions."
+
+
+def test_run_extract_pass_with_polling_uses_notes_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="notes",
+        client=client,
+    )
+
+    submit_call = client.calls[0]
+    request = submit_call[1]
+
+    assert request.pass_name == "notes"
+    assert request.extraction_schema["properties"]["notes"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["notes"]
+    assert "Extract notes" in (request.instructions or "")
+    assert "external normative references" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_toc_blocks_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="table_of_contents_blocks",
+        client=client,
+    )
+
+    submit_call = client.calls[0]
+    request = submit_call[1]
+
+    assert request.pass_name == "table_of_contents_blocks"
+    assert request.extraction_schema["properties"]["table_of_contents_blocks"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["table_of_contents_blocks"]
+    assert "Extract all table-of-contents blocks" in (request.instructions or "")
+    assert "Do not merge" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_nested_documents_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="nested_documents",
+        client=client,
+    )
+
+    submit_call = client.calls[0]
+    request = submit_call[1]
+
+    assert request.pass_name == "nested_documents"
+    assert request.extraction_schema["properties"]["nested_documents"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["nested_documents"]
+    assert "Extract embedded" in (request.instructions or "")
+    assert "Do not flatten" in (request.instructions or "")

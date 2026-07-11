@@ -1,3 +1,7 @@
+from convertor_validator_service_lama.services.reference_normalizer import (
+    expand_gost_document_codes,
+    expand_gost_document_codes_from_values,
+)
 from typing import Any
 
 from pydantic import ValidationError
@@ -11,15 +15,18 @@ from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentFormula,
     RichDocumentImage,
     RichDocumentNestedDocument,
+    RichDocumentNote,
     RichDocumentNamespace,
     RichDocumentPackage,
     RichDocumentPackageArtifact,
     RichDocumentPackageAssemblyRequest,
     RichDocumentPackageAssemblyResult,
+    RichDocumentReference,
     RichDocumentSection,
     RichDocumentStructure,
     RichDocumentTable,
     RichDocumentTableCell,
+    RichDocumentTableOfContentsBlock,
     RichDocumentTableOfContentsItem,
 )
 from convertor_validator_service_lama.services.document_structure_assembler import (
@@ -213,6 +220,9 @@ def build_document_structure_from_artifacts(
         document_boundaries=_build_document_boundaries(
             artifacts.get("document_boundaries")
         ),
+        table_of_contents_blocks=_build_table_of_contents_blocks(
+            artifacts.get("table_of_contents_blocks")
+        ),
         table_of_contents=_build_table_of_contents(
             artifacts.get("table_of_contents")
         ),
@@ -223,6 +233,8 @@ def build_document_structure_from_artifacts(
         tables=_build_tables(artifacts.get("tables")),
         images=_build_images_from_artifact(artifacts.get("images")),
         formulas=_build_formulas_from_artifact(artifacts.get("formulas")),
+        notes=_build_notes(artifacts.get("notes")),
+        references=_build_references(artifacts.get("references")),
         cross_references=_build_cross_references(
             artifacts.get("cross_references")
         ),
@@ -471,6 +483,53 @@ def _build_document_boundaries(
     return boundaries
 
 
+def _build_table_of_contents_blocks(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentTableOfContentsBlock]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=(
+            "table_of_contents_blocks",
+            "toc_blocks",
+            "blocks",
+            "items",
+            "data",
+        ),
+    )
+
+    blocks: list[RichDocumentTableOfContentsBlock] = []
+    for fallback_index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            continue
+
+        item_rows = _list_from_value(
+            row.get("items")
+            or row.get("table_of_contents")
+            or row.get("toc")
+            or row.get("entries")
+        )
+
+        blocks.append(
+            RichDocumentTableOfContentsBlock(
+                toc_id=_first_str(
+                    row.get("toc_id"),
+                    row.get("block_id"),
+                    row.get("id"),
+                    row.get("uid"),
+                )
+                or f"toc-{fallback_index}",
+                title=_first_str(row.get("title"), row.get("heading"), row.get("name")),
+                namespace_id=_first_str(row.get("namespace_id"), row.get("namespace")),
+                page_start=_first_int(row.get("page_start"), row.get("page")),
+                page_end=_first_int(row.get("page_end"), row.get("page")),
+                items=_build_table_of_contents_items_from_rows(item_rows),
+                raw=row,
+            )
+        )
+
+    return blocks
+
+
 def _build_table_of_contents(
     artifact: RichDocumentPackageArtifact | None,
 ) -> list[RichDocumentTableOfContentsItem]:
@@ -479,6 +538,12 @@ def _build_table_of_contents(
         preferred_keys=("table_of_contents", "toc", "items", "data"),
     )
 
+    return _build_table_of_contents_items_from_rows(rows)
+
+
+def _build_table_of_contents_items_from_rows(
+    rows: list[Any],
+) -> list[RichDocumentTableOfContentsItem]:
     items: list[RichDocumentTableOfContentsItem] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -778,6 +843,110 @@ def _build_formulas_from_rows(rows: list[Any]) -> list[RichDocumentFormula]:
         )
 
     return formulas
+
+
+def _build_notes(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentNote]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("notes", "items", "data"),
+    )
+
+    notes: list[RichDocumentNote] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        note_text = _first_str(row.get("text"), row.get("content"), row.get("note"))
+        if note_text is None:
+            continue
+
+        notes.append(
+            RichDocumentNote(
+                note_id=_first_str(row.get("note_id"), row.get("id"), row.get("uid")),
+                namespace_id=_first_str(row.get("namespace_id"), row.get("namespace")),
+                section_id=_first_str(row.get("section_id"), row.get("source_id")),
+                text=note_text,
+                page=_first_int(row.get("page")),
+                bbox=_bbox(row.get("bbox")),
+                raw=row,
+            )
+        )
+
+    return notes
+
+
+
+def _build_references(
+    artifact: RichDocumentPackageArtifact | None,
+) -> list[RichDocumentReference]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("references", "normative_references", "items", "data"),
+    )
+
+    references: list[RichDocumentReference] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        reference_text = _first_str(
+            row.get("reference_text"),
+            row.get("text"),
+            row.get("title"),
+            row.get("context"),
+        )
+        if reference_text is None:
+            continue
+
+        target_document_code = _first_str(
+            row.get("target_document_code"),
+            row.get("target_doc_code"),
+            row.get("document_code"),
+            row.get("doc_code"),
+        )
+        target_document_codes = expand_gost_document_codes_from_values(
+            reference_text,
+            target_document_code,
+        )
+        target_document_code_expansion = expand_gost_document_codes(
+            target_document_code
+        )
+        if target_document_code_expansion:
+            target_document_code = target_document_code_expansion[0]
+        elif target_document_code is None and target_document_codes:
+            target_document_code = target_document_codes[0]
+
+        references.append(
+            RichDocumentReference(
+                reference_id=_first_str(
+                    row.get("reference_id"),
+                    row.get("id"),
+                    row.get("uid"),
+                ),
+                namespace_id=_first_str(row.get("namespace_id"), row.get("namespace")),
+                section_id=_first_str(row.get("section_id"), row.get("source_id")),
+                reference_text=reference_text,
+                target_document_code=target_document_code,
+                target_document_codes=target_document_codes,
+                target_clause=_first_str(
+                    row.get("target_clause"),
+                    row.get("clause"),
+                    row.get("target_section"),
+                ),
+                reference_type=_first_str(
+                    row.get("reference_type"),
+                    row.get("type"),
+                    row.get("kind"),
+                ),
+                page=_first_int(row.get("page")),
+                bbox=_bbox(row.get("bbox")),
+                raw=row,
+            )
+        )
+
+    return references
 
 
 def _build_cross_references(
