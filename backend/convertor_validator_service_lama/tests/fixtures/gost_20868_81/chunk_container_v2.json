@@ -1,0 +1,324 @@
+{
+  "metadata": {
+    "schema": "schema_registry_for_rag_v2",
+    "document_id": 420000
+  },
+  "document": {
+    "id": 420000,
+    "pkb_code": "04",
+    "doc_code": "ГОСТ 20868-81",
+    "title": "СТОЙКИ УСТАНОВОЧНЫЕ КРЕПЕЖНЫЕ. Технические требования",
+    "validity_status": "active",
+    "era": "USSR",
+    "page_count": 2
+  },
+  "sections": [
+    {
+      "section_id": 1,
+      "parent_id": null,
+      "clause": "title",
+      "title": "Титульная часть",
+      "level": 0,
+      "path": "title",
+      "page": 1,
+      "type": "text",
+      "content": {
+        "text": "Межгосударственный стандарт ГОСТ 20868-81. Стойки установочные крепежные. Технические требования."
+      },
+      "references": []
+    },
+    {
+      "section_id": 2,
+      "parent_id": null,
+      "clause": "1",
+      "title": null,
+      "level": 1,
+      "path": "1",
+      "page": 1,
+      "type": "text",
+      "content": {
+        "text": "Настоящий стандарт распространяется на металлические крепежные установочные стойки, предназначенные для монтажа радиоэлектронной аппаратуры, и устанавливает технические требования."
+      },
+      "references": []
+    },
+    {
+      "section_id": 3,
+      "parent_id": null,
+      "clause": "2",
+      "title": null,
+      "level": 1,
+      "path": "2",
+      "page": 1,
+      "type": "text",
+      "content": {
+        "text": "Крепежные установочные стойки следует изготовлять по ГОСТ 20862-81 — ГОСТ 20867-81."
+      },
+      "references": [
+        {
+          "target_doc_code": "ГОСТ 20862-81",
+          "type": "normative_reference"
+        },
+        {
+          "target_doc_code": "ГОСТ 20867-81",
+          "type": "normative_reference"
+        }
+      ]
+    },
+    {
+      "section_id": 4,
+      "parent_id": null,
+      "clause": "3",
+      "title": null,
+      "level": 1,
+      "path": "3",
+      "page": 1,
+      "type": "text",
+      "content": {
+        "text": "Резьбы — по ГОСТ 24705-81 и ГОСТ 16093-81."
+      },
+      "references": [
+        {
+          "target_doc_code": "ГОСТ 24705-81",
+          "type": "normative_reference"
+        },
+        {
+          "target_doc_code": "ГОСТ 16093-81",
+          "type": "normative_reference"
+        }
+      ]
+    },
+    {
+      "section_id": 5,
+      "parent_id": null,
+      "clause": "4",
+      "title": null,
+      "level": 1,
+      "path": "4",
+      "page": 1,
+      "type": "text",
+      "content": {
+        "text": "Размеры сбегов резьбы, недорезов и фасок на конце резьбы стоек — по ГОСТ 10549-80."
+      },
+      "references": [
+        {
+          "target_doc_code": "ГОСТ 10549-80",
+          "type": "normative_reference"
+        }
+      ]
+    },
+    {
+      "section_id": 6,
+      "parent_id": null,
+      "clause": "5",
+      "title": null,
+      "level": 1,
+      "path": "5",
+      "page": 1,
+      "type": "text",
+      "content": {
+        "text": "Неуказанные предельные отклонения размеров: отверстий — H14, валов — h14."
+      },
+      "references": []
+    },
+    {
+      "section_id": 7,
+      "parent_id": null,
+      "clause": "6",
+      "title": "Допуски формы и расположения поверхностей",
+      "level": 1,
+      "path": "6",
+      "page": 1,
+      "type": "text",
+      "content": {
+        "text": "Допуски формы и расположения поверхностей установлены в зависимости от степени точности установочных стоек."
+      },
+      "references": []
+    },
+    {
+      "section_id": 8,
+      "parent_id": 7,
+      "clause": "6.1",
+      "title": "Допуск соосности",
+      "level": 2,
+      "path": "6/6.1",
+      "page": 1,
+      "type": "text",
+      "content": {
+        "text": "Допуск соосности оси отверстия относительно оси поверхности либо относительно отверстия должен соответствовать приведенной в таблице."
+      },
+      "references": [
+        {
+          "target_doc_code": "table_1",
+          "type": "table_reference"
+        }
+      ]
+    },
+    {
+      "section_id": 9,
+      "parent_id": 8,
+      "clause": "figure-1",
+      "title": "Чертеж 1",
+      "level": 3,
+      "path": "6/6.1/figure1",
+      "page": 1,
+      "type": "image",
+      "content": {
+        "caption": "Соосность отверстия относительно поверхности"
+      },
+      "references": []
+    },
+    {
+      "section_id": 10,
+      "parent_id": 8,
+      "clause": "figure-2",
+      "title": "Чертеж 2",
+      "level": 3,
+      "path": "6/6.1/figure2",
+      "page": 1,
+      "type": "image",
+      "content": {
+        "caption": "Соосность отверстия относительно отверстия"
+      },
+      "references": []
+    },
+    {
+      "section_id": 11,
+      "parent_id": 8,
+      "clause": "table-1",
+      "title": "Допуск соосности",
+      "level": 3,
+      "path": "6/6.1/table1",
+      "page": 2,
+      "type": "table",
+      "content": {
+        "headers": [
+          "L, мм",
+          "Нормальная",
+          "Повышенная"
+        ],
+        "rows": [
+          [
+            "6-50",
+            "0.10",
+            "0.05"
+          ],
+          [
+            "50-80",
+            "0.12",
+            "0.06"
+          ],
+          [
+            ">80",
+            "0.15",
+            "0.08"
+          ]
+        ]
+      },
+      "references": []
+    },
+    {
+      "section_id": 12,
+      "parent_id": 7,
+      "clause": "6.2",
+      "title": null,
+      "level": 2,
+      "path": "6/6.2",
+      "page": 2,
+      "type": "text",
+      "content": {
+        "text": "Допуск перпендикулярности поверхности относительно оси отверстия."
+      },
+      "references": []
+    },
+    {
+      "section_id": 13,
+      "parent_id": 7,
+      "clause": "6.3",
+      "title": null,
+      "level": 2,
+      "path": "6/6.3",
+      "page": 2,
+      "type": "text",
+      "content": {
+        "text": "Допуск параллельности поверхности относительно поверхности."
+      },
+      "references": []
+    },
+    {
+      "section_id": 14,
+      "parent_id": 7,
+      "clause": "note",
+      "title": "Примечание",
+      "level": 2,
+      "path": "6/note",
+      "page": 2,
+      "type": "text",
+      "content": {
+        "text": "Степень точности стоек устанавливается в конструкторской документации."
+      },
+      "references": []
+    },
+    {
+      "section_id": 15,
+      "parent_id": 7,
+      "clause": "6.4",
+      "title": null,
+      "level": 2,
+      "path": "6/6.4",
+      "page": 2,
+      "type": "text",
+      "content": {
+        "text": "Неуказанные допуски формы и расположения поверхностей."
+      },
+      "references": []
+    },
+    {
+      "section_id": 16,
+      "parent_id": null,
+      "clause": "7",
+      "title": null,
+      "level": 1,
+      "path": "7",
+      "page": 2,
+      "type": "text",
+      "content": {
+        "text": "На поверхности стоек не допускаются острые кромки, трещины, заусенцы."
+      },
+      "references": []
+    },
+    {
+      "section_id": 17,
+      "parent_id": null,
+      "clause": "8",
+      "title": null,
+      "level": 1,
+      "path": "8",
+      "page": 2,
+      "type": "text",
+      "content": {
+        "text": "В резьбовых отверстиях не допускаются рваные края и выкрашивание ниток резьбы."
+      },
+      "references": []
+    },
+    {
+      "section_id": 18,
+      "parent_id": null,
+      "clause": "9",
+      "title": null,
+      "level": 1,
+      "path": "9",
+      "page": 2,
+      "type": "text",
+      "content": {
+        "text": "На резьбовых концах не допускается уменьшение высоты профиля резьбы."
+      },
+      "references": []
+    }
+  ],
+  "terminology": [],
+  "options": {
+    "source": "docling",
+    "contains_images": true,
+    "contains_tables": true
+  }
+}
