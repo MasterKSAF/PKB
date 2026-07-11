@@ -163,6 +163,99 @@ def run_parse_job_with_polling(
 
 
 
+
+_DOCUMENT_BOUNDARIES_EXTRACTION_INSTRUCTIONS = (
+    "Extract high-level document boundaries from the parsed technical document. "
+    "Identify the main document, appendices, embedded documents, front matter "
+    "and other large structural regions when present. Preserve boundary_id, "
+    "boundary_type, title, page_start and page_end when available."
+)
+
+
+def _default_document_boundaries_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "document_boundaries": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "boundary_id": {"type": "string"},
+                        "boundary_type": {"type": "string"},
+                        "title": {"type": "string"},
+                        "page_start": {"type": "integer"},
+                        "page_end": {"type": "integer"},
+                    },
+                    "required": ["boundary_type"],
+                },
+            },
+        },
+        "required": ["document_boundaries"],
+    }
+
+
+_TITLE_METADATA_EXTRACTION_INSTRUCTIONS = (
+    "Extract title-page and document-level metadata from the parsed technical "
+    "document. Preserve official title text and document identifiers exactly "
+    "when available. Return document_code, title, document_type, status, "
+    "organization, approval_date, effective_date and raw_title_text when present."
+)
+
+
+def _default_title_metadata_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "title_metadata": {
+                "type": "object",
+                "properties": {
+                    "document_code": {"type": "string"},
+                    "title": {"type": "string"},
+                    "document_type": {"type": "string"},
+                    "status": {"type": "string"},
+                    "organization": {"type": "string"},
+                    "approval_date": {"type": "string"},
+                    "effective_date": {"type": "string"},
+                    "raw_title_text": {"type": "string"},
+                },
+            },
+        },
+        "required": ["title_metadata"],
+    }
+
+
+_TABLE_OF_CONTENTS_EXTRACTION_INSTRUCTIONS = (
+    "Extract the primary flat table of contents from the parsed technical "
+    "document. Preserve each entry title exactly. Include item_id, level, page, "
+    "path and target_section_id when available. For multiple separate TOC "
+    "blocks, use the table_of_contents_blocks pass instead."
+)
+
+
+def _default_table_of_contents_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "table_of_contents": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "item_id": {"type": "string"},
+                        "title": {"type": "string"},
+                        "level": {"type": "integer"},
+                        "page": {"type": "integer"},
+                        "path": {"type": "string"},
+                        "target_section_id": {"type": "string"},
+                    },
+                    "required": ["title"],
+                },
+            },
+        },
+        "required": ["table_of_contents"],
+    }
+
 _NESTED_DOCUMENTS_EXTRACTION_INSTRUCTIONS = (
     "Extract embedded, appended or nested documents from the parsed technical "
     "document. Preserve each nested document as a separate object. Do not "
@@ -242,6 +335,160 @@ def _default_table_of_contents_blocks_extraction_schema() -> dict[str, object]:
         "required": ["table_of_contents_blocks"],
     }
 
+
+_SECTIONS_EXTRACTION_INSTRUCTIONS = (
+    "Extract the hierarchical body sections of the parsed technical document. "
+    "Preserve section numbering and headings exactly. Include section_id, "
+    "parent_section_id, clause, title, level, path, page_start, page_end, bbox, "
+    "section_type and content when available. Do not flatten appendices or "
+    "embedded document namespaces."
+)
+
+
+def _default_sections_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "sections": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "section_id": {"type": "string"},
+                        "parent_section_id": {"type": "string"},
+                        "clause": {"type": "string"},
+                        "title": {"type": "string"},
+                        "level": {"type": "integer"},
+                        "path": {"type": "string"},
+                        "page_start": {"type": "integer"},
+                        "page_end": {"type": "integer"},
+                        "bbox": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                        },
+                        "section_type": {"type": "string"},
+                        "content": {},
+                    },
+                    "required": ["title"],
+                },
+            },
+        },
+        "required": ["sections"],
+    }
+
+
+_TABLES_EXTRACTION_INSTRUCTIONS = (
+    "Extract tables from the parsed technical document. Preserve table captions, "
+    "page and bbox when available. Return both structured cells and row objects "
+    "when present. Cells may contain text, markdown, images and formulas."
+)
+
+
+def _default_tables_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "tables": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "table_id": {"type": "string"},
+                        "caption": {"type": "string"},
+                        "page": {"type": "integer"},
+                        "bbox": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                        },
+                        "cells": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "row_index": {"type": "integer"},
+                                    "column_index": {"type": "integer"},
+                                    "text": {"type": "string"},
+                                    "markdown": {"type": "string"},
+                                    "images": {"type": "array"},
+                                    "formulas": {"type": "array"},
+                                },
+                                "required": ["row_index", "column_index"],
+                            },
+                        },
+                        "rows": {"type": "array"},
+                    },
+                },
+            },
+        },
+        "required": ["tables"],
+    }
+
+
+_IMAGES_EXTRACTION_INSTRUCTIONS = (
+    "Extract figures and standalone images from the parsed technical document. "
+    "Preserve image_id, caption, alt_text, page, bbox and storage_uri when "
+    "available. Use captions from nearby figure titles when possible."
+)
+
+
+def _default_images_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "images": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "image_id": {"type": "string"},
+                        "caption": {"type": "string"},
+                        "alt_text": {"type": "string"},
+                        "page": {"type": "integer"},
+                        "bbox": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                        },
+                        "storage_uri": {"type": "string"},
+                    },
+                },
+            },
+        },
+        "required": ["images"],
+    }
+
+
+_FORMULAS_EXTRACTION_INSTRUCTIONS = (
+    "Extract formulas and equations from the parsed technical document. "
+    "Preserve formula_id, expression, latex, page, bbox and parameter "
+    "definitions when available."
+)
+
+
+def _default_formulas_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "formulas": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "formula_id": {"type": "string"},
+                        "expression": {"type": "string"},
+                        "latex": {"type": "string"},
+                        "page": {"type": "integer"},
+                        "bbox": {
+                            "type": "array",
+                            "items": {"type": "number"},
+                        },
+                        "parameters": {"type": "array"},
+                    },
+                },
+            },
+        },
+        "required": ["formulas"],
+    }
+
 _NOTES_EXTRACTION_INSTRUCTIONS = (
     "Extract notes, remarks, footnotes and normative document notes from the "
     "parsed technical document. Preserve the original note text exactly. "
@@ -317,14 +564,106 @@ def _default_references_extraction_schema() -> dict[str, object]:
     }
 
 
+_CROSS_REFERENCES_EXTRACTION_INSTRUCTIONS = (
+    "Extract explicit cross references between sections, clauses, tables, "
+    "figures, formulas and external documents. Preserve reference_id, "
+    "source_id, target_id, target_document_code, reference_type, context and "
+    "note when available. Keep this pass focused on source-to-target links; "
+    "use the references pass for the normative reference list itself."
+)
+
+
+def _default_cross_references_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "cross_references": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "reference_id": {"type": "string"},
+                        "source_id": {"type": "string"},
+                        "target_id": {"type": "string"},
+                        "target_document_code": {"type": "string"},
+                        "reference_type": {"type": "string"},
+                        "context": {"type": "string"},
+                        "note": {"type": "string"},
+                    },
+                },
+            },
+        },
+        "required": ["cross_references"],
+    }
+
+
+_VALIDATION_CRITIC_EXTRACTION_INSTRUCTIONS = (
+    "Review the assembled rich document extraction artifacts for structural "
+    "quality. Return a quality_report object and correction_proposals array. "
+    "The quality_report should include score and issues when possible. "
+    "Correction proposals should be machine-readable objects with kind, target, "
+    "reason and suggested_value when available."
+)
+
+
+def _default_validation_critic_extraction_schema() -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            "quality_report": {
+                "type": "object",
+                "properties": {
+                    "score": {"type": "number"},
+                    "issues": {"type": "array"},
+                    "summary": {"type": "string"},
+                },
+            },
+            "correction_proposals": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {"type": "string"},
+                        "target": {"type": "string"},
+                        "reason": {"type": "string"},
+                        "suggested_value": {},
+                    },
+                },
+            },
+        },
+        "required": ["quality_report", "correction_proposals"],
+    }
+
+
 def _default_extraction_schema(
     pass_name: LlamaExtractPassName,
 ) -> dict[str, object]:
+    if pass_name == "document_boundaries":
+        return _default_document_boundaries_extraction_schema()
+
+    if pass_name == "title_metadata":
+        return _default_title_metadata_extraction_schema()
+
     if pass_name == "nested_documents":
         return _default_nested_documents_extraction_schema()
 
+    if pass_name == "table_of_contents":
+        return _default_table_of_contents_extraction_schema()
+
     if pass_name == "table_of_contents_blocks":
         return _default_table_of_contents_blocks_extraction_schema()
+
+    if pass_name == "sections":
+        return _default_sections_extraction_schema()
+
+    if pass_name == "tables":
+        return _default_tables_extraction_schema()
+
+    if pass_name == "images":
+        return _default_images_extraction_schema()
+
+    if pass_name == "formulas":
+        return _default_formulas_extraction_schema()
 
     if pass_name == "notes":
         return _default_notes_extraction_schema()
@@ -332,21 +671,54 @@ def _default_extraction_schema(
     if pass_name == "references":
         return _default_references_extraction_schema()
 
+    if pass_name == "cross_references":
+        return _default_cross_references_extraction_schema()
+
+    if pass_name == "validation_critic":
+        return _default_validation_critic_extraction_schema()
+
     return {}
 
 
 def _default_instructions(pass_name: LlamaExtractPassName) -> str | None:
+    if pass_name == "document_boundaries":
+        return _DOCUMENT_BOUNDARIES_EXTRACTION_INSTRUCTIONS
+
+    if pass_name == "title_metadata":
+        return _TITLE_METADATA_EXTRACTION_INSTRUCTIONS
+
     if pass_name == "nested_documents":
         return _NESTED_DOCUMENTS_EXTRACTION_INSTRUCTIONS
 
+    if pass_name == "table_of_contents":
+        return _TABLE_OF_CONTENTS_EXTRACTION_INSTRUCTIONS
+
     if pass_name == "table_of_contents_blocks":
         return _TOC_BLOCKS_EXTRACTION_INSTRUCTIONS
+
+    if pass_name == "sections":
+        return _SECTIONS_EXTRACTION_INSTRUCTIONS
+
+    if pass_name == "tables":
+        return _TABLES_EXTRACTION_INSTRUCTIONS
+
+    if pass_name == "images":
+        return _IMAGES_EXTRACTION_INSTRUCTIONS
+
+    if pass_name == "formulas":
+        return _FORMULAS_EXTRACTION_INSTRUCTIONS
 
     if pass_name == "notes":
         return _NOTES_EXTRACTION_INSTRUCTIONS
 
     if pass_name == "references":
         return _REFERENCES_EXTRACTION_INSTRUCTIONS
+
+    if pass_name == "cross_references":
+        return _CROSS_REFERENCES_EXTRACTION_INSTRUCTIONS
+
+    if pass_name == "validation_critic":
+        return _VALIDATION_CRITIC_EXTRACTION_INSTRUCTIONS
 
     return None
 

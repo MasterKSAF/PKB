@@ -222,3 +222,180 @@ def test_run_extract_pass_with_polling_uses_nested_documents_defaults(monkeypatc
     assert request.extraction_schema["required"] == ["nested_documents"]
     assert "Extract embedded" in (request.instructions or "")
     assert "Do not flatten" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_document_boundaries_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="document_boundaries",
+        client=client,
+    )
+
+    request = client.calls[0][1]
+
+    assert request.pass_name == "document_boundaries"
+    assert request.extraction_schema["properties"]["document_boundaries"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["document_boundaries"]
+    assert "Extract high-level document boundaries" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_title_metadata_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="title_metadata",
+        client=client,
+    )
+
+    request = client.calls[0][1]
+
+    assert request.pass_name == "title_metadata"
+    assert request.extraction_schema["properties"]["title_metadata"]["type"] == "object"
+    assert request.extraction_schema["required"] == ["title_metadata"]
+    assert "Extract title-page" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_table_of_contents_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="table_of_contents",
+        client=client,
+    )
+
+    request = client.calls[0][1]
+
+    assert request.pass_name == "table_of_contents"
+    assert request.extraction_schema["properties"]["table_of_contents"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["table_of_contents"]
+    assert "Extract the primary flat table of contents" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_sections_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="sections",
+        client=client,
+    )
+
+    request = client.calls[0][1]
+
+    assert request.pass_name == "sections"
+    assert request.extraction_schema["properties"]["sections"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["sections"]
+    assert "Extract the hierarchical body sections" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_tables_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="tables",
+        client=client,
+    )
+
+    request = client.calls[0][1]
+
+    assert request.pass_name == "tables"
+    assert request.extraction_schema["properties"]["tables"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["tables"]
+    assert "Extract tables" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_images_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="images",
+        client=client,
+    )
+
+    request = client.calls[0][1]
+
+    assert request.pass_name == "images"
+    assert request.extraction_schema["properties"]["images"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["images"]
+    assert "Extract figures and standalone images" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_formulas_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="formulas",
+        client=client,
+    )
+
+    request = client.calls[0][1]
+
+    assert request.pass_name == "formulas"
+    assert request.extraction_schema["properties"]["formulas"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["formulas"]
+    assert "Extract formulas and equations" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_cross_references_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="cross_references",
+        client=client,
+    )
+
+    request = client.calls[0][1]
+
+    assert request.pass_name == "cross_references"
+    assert request.extraction_schema["properties"]["cross_references"]["type"] == "array"
+    assert request.extraction_schema["required"] == ["cross_references"]
+    assert "Extract explicit cross references" in (request.instructions or "")
+
+
+def test_run_extract_pass_with_polling_uses_validation_critic_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "project-123")
+
+    client = FakeLlamaExtractRestClient()
+
+    run_extract_pass_with_polling(
+        parse_job_id="parse-job-123",
+        pass_name="validation_critic",
+        client=client,
+    )
+
+    request = client.calls[0][1]
+
+    assert request.pass_name == "validation_critic"
+    assert request.extraction_schema["properties"]["quality_report"]["type"] == "object"
+    assert request.extraction_schema["properties"]["correction_proposals"]["type"] == "array"
+    assert request.extraction_schema["required"] == [
+        "quality_report",
+        "correction_proposals",
+    ]
+    assert "Review the assembled rich document extraction artifacts" in (
+        request.instructions or ""
+    )
