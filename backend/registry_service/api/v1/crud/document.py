@@ -1026,14 +1026,36 @@ def render_section_content_to_md(sec_type: str, content: Any) -> str:
     elif sec_type == "headerFooter":
         return content.get("text") or ""
     elif sec_type == "table":
-        if "markdown" in content and content["markdown"]:
-            return content["markdown"]
-        if not content.get("columns") and not content.get("rows"):
-            return content.get("text") or content.get("markdown") or ""
-            
+        #
+        # TABLE
+        #
+        # if "markdown" in content and content["markdown"]:
+        #     return content["markdown"]
+        # if not content.get("columns") and not content.get("rows"):
+        #     return content.get("text") or content.get("markdown") or ""
+
+        """
+        Parsing table data
+        """
+
+        row_data, data_rows = [], []
+        raw_rows = content.get("rows")
+
+        for i in range(0, len(raw_rows)):
+            row = raw_rows[i]
+            if row.get("type", "") == "table row":
+                for k in range(0, len(row["cells"])):
+                    cells_text = row["cells"][k]["kids"][0]["content"]
+                    row_data.append(cells_text)
+            data_rows.append(row_data)
+            row_data = []
+        rows = data_rows
+
+
         caption = content.get("caption") or ""
-        columns = content.get("columns") or []
-        rows = content.get("rows") or []
+        # rows = content.get("rows") or []
+        columns = content.get("columns") or []      # column headers
+
         footnotes = content.get("footnotes") or []
         image_key = content.get("image_key")
         
@@ -1070,6 +1092,9 @@ def render_section_content_to_md(sec_type: str, content: Any) -> str:
         if image_key:
             tbl_md += f"\n\n![{caption or 'table'}](/api/v1/files/{image_key})"
         return tbl_md
+
+        # EOF TABLE
+
     elif sec_type == "list":
         items = content.get("items") or []
         return "\n".join([f"* {item}" for item in items])
