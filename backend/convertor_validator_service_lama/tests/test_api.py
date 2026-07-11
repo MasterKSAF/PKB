@@ -59,11 +59,12 @@ def test_extract_pass_dry_run_returns_extract_payload() -> None:
     assert data["mode"] == "extract_pass_dry_run"
     assert data["parse_job_id"] == "parse-job-123"
     assert data["pass_name"] == "sections"
-    assert data["extract_payload"] == {
-        "parse_job_id": "parse-job-123",
-        "pass_name": "sections",
-        "base_url": "https://api.cloud.llamaindex.ai",
-    }
+    extract_payload = data["extract_payload"]
+    assert extract_payload["parse_job_id"] == "parse-job-123"
+    assert extract_payload["pass_name"] == "sections"
+    assert extract_payload["base_url"] == "https://api.cloud.llamaindex.ai"
+    assert extract_payload["extraction_schema"]
+    assert extract_payload["instructions"]
 
 
 def test_extract_passes_dry_run_returns_all_extract_payloads() -> None:
@@ -78,11 +79,12 @@ def test_extract_passes_dry_run_returns_all_extract_payloads() -> None:
     assert data["mode"] == "extract_passes_dry_run"
     assert data["parse_job_id"] == "parse-job-123"
     assert len(data["extract_payloads"]) == 13
-    assert data["extract_payloads"][0] == {
-        "parse_job_id": "parse-job-123",
-        "pass_name": "document_boundaries",
-        "base_url": "https://api.cloud.llamaindex.ai",
-    }
+    first_payload = data["extract_payloads"][0]
+    assert first_payload["parse_job_id"] == "parse-job-123"
+    assert first_payload["pass_name"] == "document_boundaries"
+    assert first_payload["base_url"] == "https://api.cloud.llamaindex.ai"
+    assert first_payload["extraction_schema"]
+    assert first_payload["instructions"]
     assert data["extract_payloads"][-1]["pass_name"] == "validation_critic"
 
 
@@ -128,7 +130,11 @@ def test_rich_document_package_dry_run_returns_package_preview() -> None:
     assert data["parse_payload"]["source_pdf_path"] == "D:/tmp/source.pdf"
     assert len(data["extract_payloads"]) == 13
     assert data["extract_payloads"][0]["pass_name"] == "document_boundaries"
+    assert data["extract_payloads"][0]["extraction_schema"]
+    assert data["extract_payloads"][0]["instructions"]
     assert data["extract_payloads"][-1]["pass_name"] == "validation_critic"
+    assert data["extract_payloads"][-1]["extraction_schema"]
+    assert data["extract_payloads"][-1]["instructions"]
     assert data["final_correction_policy"] == "python_validator_assembler_applies_final_corrections"
 
 

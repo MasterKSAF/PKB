@@ -52,6 +52,7 @@ def build_extract_pass_dry_run_response(
         parse_job_id=request.parse_job_id,
         pass_name=request.pass_name,
     )
+    extract_payload.update(build_extract_pass_defaults(request.pass_name))
     return ExtractPassDryRunResponse(
         parse_job_id=request.parse_job_id,
         pass_name=request.pass_name,
@@ -64,13 +65,14 @@ def build_extract_passes_dry_run_response(
 ) -> ExtractPassesDryRunResponse:
     client = LlamaExtractClient(get_settings())
     pass_plan = build_extract_pass_plan_response()
-    extract_payloads = [
-        client.build_extract_payload(
+    extract_payloads = []
+    for item in pass_plan.passes:
+        extract_payload = client.build_extract_payload(
             parse_job_id=request.parse_job_id,
             pass_name=item.name,
         )
-        for item in pass_plan.passes
-    ]
+        extract_payload.update(build_extract_pass_defaults(item.name))
+        extract_payloads.append(extract_payload)
     return ExtractPassesDryRunResponse(
         parse_job_id=request.parse_job_id,
         extract_payloads=extract_payloads,
