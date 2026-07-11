@@ -1,8 +1,18 @@
-# Исправлено: Ошибка 500 при загрузке документов
+# План на сессию
 
-**Корневая причина**: В контейнере `pkb-parser` (`python:3.11-slim`) отсутствовали системные библиотеки, необходимые Docling (`DocumentConverter`). При парсинге PDF возникала ошибка `libxcb.so.1: cannot open shared object file`.
+## [in_progress] Исправление ошибки чата
+- [done] bbox-string: убран json.dumps() в postgres_chunk_repository.py
+- [done] SourceLocator: удалён bbox из response.py/search.py
+- [done] Retry: 4xx сразу фейл без retry (rag_client.py)
+- [done] Excerpt: VARCHAR(512)→Text + ALTER
+- [blocked] Деплой на сервер — нет доступа
 
-**Что сделано:**
-1. В `backend/parser_service/Dockerfile` добавлены пакеты: `libxcb1`, `libgl1`, `libglib2.0-0t64`
-2. В запущенный контейнер доустановлены вручную: `libglib2.0-0t64`, `libgomp1`
-3. Проверено тестом `test_quick.py` — весь пайплайн (preview → approve → full → registry → rag_index) завершён успешно
+## [pending] Исправление отображения таблиц
+- [done] get_page_blocks: вызывает render_section_content_to_md
+- [done] render_section_content_to_md: читает "block" и "kids"
+- [done] hierarchy_builder.py: columns извлекаются из первой строки
+- [pending] Проверить, почему парсер хранит таблицы как type="text" вместо "table"
+- [blocked] Деплой на сервер — нет доступа
+
+## [pending] Diagnostics timeout
+- [done] Таймауты снижены 30→10с/10→5с

@@ -228,6 +228,8 @@ class JsonStandardizer(BaseStandardizer):
             elif t == "table":
                 block_item["number_of_rows"] = el.get("number of rows", 0)
                 block_item["number_of_columns"] = el.get("number of columns", 0)
+                if "content" in el and el["content"]:
+                    block_item["content"] = el["content"]
 
                 if "caption" in el:
                     cap = el["caption"]

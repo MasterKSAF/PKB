@@ -135,6 +135,12 @@ def _build_content_item(
         }
         if block.get("rows"):
             content["rows"] = block["rows"]
+        # Extract columns from parser's `content` field (pipe-separated headers)
+        # html_to_json.py stores headers as ' | '.join(header_cells) in `content`
+        if not content["columns"]:
+            content_str = block.get("content") or ""
+            if "|" in content_str:
+                content["columns"] = [c.strip() for c in content_str.split("|")]
     elif out_type == "image":
         content = {
             "caption": block.get("content") or block.get("caption"),

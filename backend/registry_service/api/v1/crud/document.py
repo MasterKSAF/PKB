@@ -995,9 +995,8 @@ def get_page_blocks(db: Session, document_id: int, page_num: int) -> List[Dict[s
     )
     blocks = []
     for idx, sec in enumerate(sections, 1):
-        text_content = ""
         if isinstance(sec.content, dict):
-            text_content = sec.content.get("text") or sec.content.get("latex") or sec.content.get("markdown") or ""
+            text_content = render_section_content_to_md(sec.type_, sec.content)
         else:
             text_content = str(sec.content or "")
 
@@ -1045,7 +1044,8 @@ def render_section_content_to_md(sec_type: str, content: Any) -> str:
             row = raw_rows[i]
             if row.get("type", "") == "table row":
                 for k in range(0, len(row["cells"])):
-                    cells_text = row["cells"][k]["kids"][0]["content"]
+                    cell_block = row["cells"][k].get("block") or row["cells"][k].get("kids") or []
+                    cells_text = cell_block[0]["content"] if cell_block else ""
                     row_data.append(cells_text)
             data_rows.append(row_data)
             row_data = []
