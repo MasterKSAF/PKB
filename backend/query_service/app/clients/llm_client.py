@@ -11,10 +11,18 @@ _DEFAULT_TOP_P = 0.95
 
 
 class LLMResult:
-    __slots__ = ("content", "prompt_tokens", "completion_tokens", "duration_ms")
+    __slots__ = ("content", "tool_calls", "prompt_tokens", "completion_tokens", "duration_ms")
 
-    def __init__(self, content: str, prompt_tokens: int, completion_tokens: int, duration_ms: int):
+    def __init__(
+        self,
+        content: str | None,
+        tool_calls: list[dict] | None,
+        prompt_tokens: int,
+        completion_tokens: int,
+        duration_ms: int,
+    ):
         self.content = content
+        self.tool_calls = tool_calls
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
         self.duration_ms = duration_ms
@@ -24,6 +32,7 @@ async def complete(
     messages: list[dict],
     cache_key: str | None = None,
     max_tokens: int | None = None,
+    tools: list[dict] | None = None,
 ) -> LLMResult:
     settings = get_settings()
 
@@ -35,6 +44,9 @@ async def complete(
         "top_p": _DEFAULT_TOP_P,
         "stream": False,
     }
+    if tools:
+        payload["tools"] = tools
+        payload["tool_choice"] = "auto"
     if cache_key:
         payload["user"] = cache_key
     headers = {"Content-Type": "application/json"}
@@ -58,17 +70,20 @@ async def complete(
             usage = data.get("usage", {})
             prompt_tokens = usage.get("prompt_tokens", 0)
             completion_tokens = usage.get("completion_tokens", 0)
-            content = data["choices"][0]["message"]["content"]
-            if not content:
+            message = data["choices"][0]["message"]
+            content = message.get("content")
+            tool_calls = message.get("tool_calls")
+            if not content and not tool_calls:
                 logger.warning(
                     "llm attempt=%d/3 empty_content model=%s", attempt + 1, settings.LLM_MODEL,
                 )
-                raise ValueError("LLM returned empty content")
+                raise ValueError("LLM returned empty content and no tool calls")
             logger.info(
-                "llm_complete model=%s prompt_tokens=%d completion_tokens=%d duration_ms=%d",
+                "llm_complete model=%s prompt_tokens=%d completion_tokens=%d duration_ms=%d tool_calls=%s",
                 settings.LLM_MODEL, prompt_tokens, completion_tokens, duration_ms,
+                len(tool_calls) if tool_calls else 0,
             )
-            return LLMResult(content, prompt_tokens, completion_tokens, duration_ms)
+            return LLMResult(content, tool_calls, prompt_tokens, completion_tokens, duration_ms)
         except Exception as exc:
             last_exc = exc
             if isinstance(exc, httpx.HTTPStatusError):

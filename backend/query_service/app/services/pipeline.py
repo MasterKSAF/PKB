@@ -1,4 +1,5 @@
-﻿import asyncio
+import asyncio
+import json
 import logging
 import re
 from datetime import datetime, timezone
@@ -14,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
     "Ты — ассистент по инженерным нормативно-техническим документам ПКБ. "
-    "Отвечай строго на основе предоставленных фрагментов документов. "
-    "Если во фрагментах нет ответа — прямо сообщи об этом, не домысливай. "
-    "После каждого утверждения, основанного на фрагменте, ставь ссылку в формате [source:N], "
-    "где N — индекс фрагмента начиная с 0 (например: [source:0], [source:2]). "
+    "У тебя есть инструмент rag_search для поиска по документам. "
+    "Используй его когда нужна конкретная техническая информация из нормативных документов. "
+    "Если вопрос можно решить на основе истории диалога — отвечай напрямую без поиска. "
+    "После каждого утверждения, основанного на найденном фрагменте, ставь ссылку [source:N], "
+    "где N — индекс фрагмента из результата поиска начиная с 0. "
     "Не объединяй индексы через запятую или дефис — используй отдельные [source:N] для каждого фрагмента. "
     "Не пиши идентификаторы документов в тексте — только [source:N]."
 )
@@ -34,16 +36,25 @@ _SOURCE_REF_COMBINED_RE = re.compile(r"\[source:\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
 _SOURCE_REF_RANGE_RE = re.compile(r"\[source:(\d+)-(\d+)\]")
 _OLD_MARKER_RE = re.compile(r"\s*%\[[^\]]*\]%")
 
-_ROUTER_PROMPT = (
-    "Ты определяешь нужен ли поиск по инженерным документам для ответа на вопрос пользователя. "
-    "Ответь одним словом: RAG — если нужен поиск по документам, CHAT — если можно ответить на основе истории диалога. "
-    "Только одно слово, без объяснений."
-)
+_RAG_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "rag_search",
+        "description": (
+            "Поиск по инженерным нормативно-техническим документам ПКБ. "
+            "Вызывай когда нужна конкретная техническая информация из нормативных документов."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Поисковый запрос на русском языке"},
+            },
+            "required": ["query"],
+        },
+    },
+}
 
-_CHAT_SYSTEM_PROMPT = (
-    "Ты — ассистент по инженерным нормативно-техническим документам ПКБ. "
-    "Отвечай на вопрос на основе истории диалога. Будь краток и по делу."
-)
+_MAX_TOOL_ITERS = 5
 
 _CONTEXT_TOKEN_BUDGET = 6000
 _SUMMARY_MAX_TOKENS = 1024
@@ -90,7 +101,6 @@ def _enrich_citations(
         if n not in seen:
             seen.add(n)
             used_indices.append(n)
-        title = chunk.document_title or ""
         clause = f" §{chunk.clause}" if chunk.clause else ""
         page = f", стр. {chunk.page}" if chunk.page else ""
         return f"[document_id:{chunk.document_id}, section_id:{chunk.section_id}{clause}{page}]"
@@ -98,6 +108,15 @@ def _enrich_citations(
     normalized = _normalize_source_refs(llm_text)
     enriched = _SOURCE_REF_RE.sub(replace, normalized)
     return enriched, used_indices
+
+
+def _format_chunks(chunks: list[rag_client.Chunk], start_index: int) -> str:
+    parts = []
+    for i, c in enumerate(chunks):
+        clause = f" §{c.clause}" if c.clause else ""
+        page = f", стр. {c.page}" if c.page else ""
+        parts.append(f"[{start_index + i}] «{c.document_title}»{clause}{page}:\n{c.content}")
+    return "\n\n".join(parts)
 
 
 async def _load_session_meta(
@@ -145,7 +164,8 @@ async def _summarize(prev_summary: str | None, messages: list[dict], settings) -
         {"role": "system", "content": _SUMMARY_PROMPT},
         {"role": "user", "content": base + f"Добавь в резюме переписку:\n{convo}"},
     ]
-    return await llm_client.complete(prompt, max_tokens=_SUMMARY_MAX_TOKENS)
+    result = await llm_client.complete(prompt, max_tokens=_SUMMARY_MAX_TOKENS)
+    return result.content or ""
 
 
 async def _prepare_context(
@@ -180,29 +200,6 @@ async def _prepare_context(
     return summary, [{"role": m["role"], "content": m["content"]} for m in history]
 
 
-def _build_messages(
-    summary: str | None,
-    history: list[dict],
-    chunks: list[rag_client.Chunk],
-    user_query: str,
-) -> list[dict]:
-    context_parts = [
-        f"[{i}] «{c.document_title}», {c.clause}, стр. {c.page}:\n{c.content}"
-        for i, c in enumerate(chunks)
-    ]
-    context_block = "\n\n".join(context_parts)
-
-    messages: list[dict] = [{"role": "system", "content": _SYSTEM_PROMPT}]
-    if summary:
-        messages.append({"role": "system", "content": f"Резюме предыдущего диалога:\n{summary}"})
-    messages.extend(history)
-    messages.append({
-        "role": "user",
-        "content": f"Фрагменты документов:\n{context_block}\n\nВопрос: {user_query}",
-    })
-    return messages
-
-
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -231,31 +228,57 @@ def _build_llm_mock(query: str, chunks: list[rag_client.Chunk]) -> str:
     return " ".join(parts)
 
 
-async def _needs_rag(user_query: str, history: list[dict], settings) -> bool:
-    if settings.MOCK_LLM_ENABLED:
-        return True
-    messages = [
-        {"role": "system", "content": _ROUTER_PROMPT},
-        *history[-4:],
-        {"role": "user", "content": user_query},
-    ]
-    try:
-        result = await asyncio.wait_for(
-            llm_client.complete(messages, max_tokens=5),
-            timeout=10.0,
-        )
-        return "CHAT" not in result.content.upper()
-    except Exception:
-        return True
+async def _run_tool_loop(
+    messages: list[dict],
+    settings,
+    valid_at: str,
+    message_id: str,
+) -> tuple[str, list[rag_client.Chunk], int, int]:
+    all_chunks: list[rag_client.Chunk] = []
+    total_prompt = 0
+    total_completion = 0
 
+    for _ in range(_MAX_TOOL_ITERS):
+        result = await llm_client.complete(messages, tools=[_RAG_TOOL])
+        total_prompt += result.prompt_tokens
+        total_completion += result.completion_tokens
 
-async def _answer_from_chat(user_query: str, history: list[dict], summary: str | None, settings) -> llm_client.LLMResult:
-    messages = [{"role": "system", "content": _CHAT_SYSTEM_PROMPT}]
-    if summary:
-        messages.append({"role": "system", "content": f"Резюме предыдущего диалога:\n{summary}"})
-    messages.extend(history)
-    messages.append({"role": "user", "content": user_query})
-    return await llm_client.complete(messages)
+        if not result.tool_calls:
+            return result.content or "", all_chunks, total_prompt, total_completion
+
+        messages.append({
+            "role": "assistant",
+            "content": result.content,
+            "tool_calls": result.tool_calls,
+        })
+
+        for tc in result.tool_calls:
+            args = json.loads(tc["function"]["arguments"])
+            query = args.get("query", "")
+            logger.info("tool_call rag_search query=%r", query, extra={"message_id": message_id})
+
+            try:
+                chunks = await asyncio.wait_for(
+                    rag_client.search(query, top_k=10, valid_at=valid_at),
+                    timeout=60.0,
+                )
+            except Exception:
+                logger.warning("tool_call rag_search failed", extra={"message_id": message_id}, exc_info=True)
+                chunks = []
+
+            start_idx = len(all_chunks)
+            all_chunks.extend(chunks)
+            tool_content = _format_chunks(chunks, start_idx) if chunks else "Релевантные фрагменты не найдены."
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "content": tool_content,
+            })
+
+    result = await llm_client.complete(messages)
+    total_prompt += result.prompt_tokens
+    total_completion += result.completion_tokens
+    return result.content or "", all_chunks, total_prompt, total_completion
 
 
 async def run_pipeline(
@@ -272,13 +295,14 @@ async def run_pipeline(
         warnings: list[str] = []
         prompt_tokens: int = 0
         completion_tokens: int = 0
+
         await _set_status(session_factory, message_id, "enriching")
         enrichment_skipped = False
         try:
             enriched_query, _synonyms = await asyncio.wait_for(
                 registry_client.enrich_query(user_query), timeout=30.0
             )
-        except Exception as exc:
+        except Exception:
             enriched_query = user_query
             enrichment_skipped = True
             warnings.append("Обогащение терминов недоступно. Поиск выполнен без нормализации.")
@@ -289,115 +313,66 @@ async def run_pipeline(
             session_factory, session_id, message_id, settings
         )
 
-        use_rag = await _needs_rag(user_query, history, settings)
-        logger.info("router decision use_rag=%s", use_rag, extra={"message_id": message_id})
-
-        if not use_rag:
+        if settings.MOCK_LLM_ENABLED:
+            await _set_status(session_factory, message_id, "searching")
             try:
-                llm_result = await asyncio.wait_for(
-                    _answer_from_chat(user_query, history, summary, settings),
-                    timeout=settings.LLM_TIMEOUT,
+                chunks = await asyncio.wait_for(
+                    rag_client.search(enriched_query, top_k=10, valid_at=_utcnow().strftime("%Y-%m-%d")),
+                    timeout=60.0,
                 )
-                processing_time_ms = int((_utcnow() - t_start).total_seconds() * 1000)
+            except Exception:
+                logger.error("rag search failed", extra={"message_id": message_id}, exc_info=True)
                 async with session_factory() as db:
                     async with db.begin():
                         await db.execute(
                             update(ChatMessage)
                             .where(ChatMessage.message_id == message_id)
                             .values(
-                                content=llm_result.content,
-                                status="answered",
-                                processing_time_ms=processing_time_ms,
-                                prompt_tokens=llm_result.prompt_tokens or None,
-                                completion_tokens=llm_result.completion_tokens or None,
-                                model_used=settings.LLM_MODEL,
-                                enrichment_skipped=enrichment_skipped,
-                                warnings=warnings or None,
+                                content="Поиск временно недоступен. Попробуйте повторить запрос.",
+                                status="failed",
+                                processing_time_ms=0,
                             )
                         )
-                logger.info("pipeline finished via chat", extra={"message_id": message_id})
                 return
-            except Exception:
-                logger.warning("chat answer failed, falling back to RAG", extra={"message_id": message_id}, exc_info=True)
 
-        await _set_status(session_factory, message_id, "searching")
-        try:
-            chunks = await asyncio.wait_for(
-                rag_client.search(enriched_query, top_k=10, valid_at=_utcnow().strftime("%Y-%m-%d")),
-                timeout=60.0,
-            )
-        except Exception:
-            logger.error("rag search failed", extra={"message_id": message_id}, exc_info=True)
-            await _set_status(session_factory, message_id, "failed")
-            async with session_factory() as db:
-                async with db.begin():
-                    await db.execute(
-                        update(ChatMessage)
-                        .where(ChatMessage.message_id == message_id)
-                        .values(
-                            content="Поиск временно недоступен. Попробуйте повторить запрос.",
-                            status="failed",
-                            processing_time_ms=0,
+            if not chunks:
+                async with session_factory() as db:
+                    async with db.begin():
+                        await db.execute(
+                            update(ChatMessage)
+                            .where(ChatMessage.message_id == message_id)
+                            .values(
+                                content="В базе знаний не найдено подтверждённых фрагментов по данному запросу.",
+                                status="not_found",
+                                processing_time_ms=0,
+                            )
                         )
-                    )
-            return
+                return
 
-        if not chunks:
-            logger.info("no chunks found", extra={"message_id": message_id})
-            await _set_status(session_factory, message_id, "answered")
-            async with session_factory() as db:
-                async with db.begin():
-                    await db.execute(
-                        update(ChatMessage)
-                        .where(ChatMessage.message_id == message_id)
-                        .values(
-                            content="В базе знаний не найдено подтверждённых фрагментов по данному запросу.",
-                            status="not_found",
-                            processing_time_ms=0,
-                        )
-                    )
-            return
+            await asyncio.sleep(0.3)
+            llm_text = _build_llm_mock(enriched_query, chunks)
+            all_chunks = chunks
+        else:
+            messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
+            if summary:
+                messages.append({"role": "system", "content": f"Резюме предыдущего диалога:\n{summary}"})
+            messages.extend(history)
+            messages.append({"role": "user", "content": enriched_query})
 
-        llm_text: str | None = None
-        for attempt in range(3):
             try:
-                if settings.MOCK_LLM_ENABLED:
-                    await asyncio.sleep(0.3)
-                    llm_text = _build_llm_mock(enriched_query, chunks)
-                    break
-                messages = _build_messages(summary, history, chunks, enriched_query)
-                result = await asyncio.wait_for(
-                    llm_client.complete(messages, cache_key=str(session_id)),
-                    timeout=settings.LLM_TIMEOUT,
+                llm_text, all_chunks, prompt_tokens, completion_tokens = await asyncio.wait_for(
+                    _run_tool_loop(messages, settings, _utcnow().strftime("%Y-%m-%d"), message_id),
+                    timeout=180.0,
                 )
-                llm_text = result.content
-                prompt_tokens = result.prompt_tokens
-                completion_tokens = result.completion_tokens
-                break
             except Exception:
-                if attempt < 2:
-                    chunks = chunks[: max(1, len(chunks) - attempt - 1)]
-                    await asyncio.sleep(2 ** attempt * 2)
-
-        if llm_text is None:
-            logger.error("llm generation failed after retries", extra={"message_id": message_id})
-            async with session_factory() as db:
-                async with db.begin():
-                    await db.execute(
-                        update(ChatMessage)
-                        .where(ChatMessage.message_id == message_id)
-                        .values(
-                            content="Не удалось сгенерировать ответ. Попробуйте переформулировать запрос.",
-                            status="failed",
-                            processing_time_ms=0,
-                        )
-                    )
-            return
+                logger.error("tool loop failed", extra={"message_id": message_id}, exc_info=True)
+                await _set_status(session_factory, message_id, "failed")
+                return
 
         await _set_status(session_factory, message_id, "enriching_citations")
         try:
             final_text, used_indices = await asyncio.wait_for(
-                asyncio.to_thread(_enrich_citations, llm_text, chunks),
+                asyncio.to_thread(_enrich_citations, llm_text, all_chunks),
                 timeout=30.0,
             )
         except Exception:
@@ -406,10 +381,10 @@ async def run_pipeline(
             final_text = llm_text
             used_indices = sorted({
                 int(m.group(1)) for m in _SOURCE_REF_RE.finditer(_normalize_source_refs(llm_text))
-                if int(m.group(1)) < len(chunks)
+                if int(m.group(1)) < len(all_chunks)
             })
 
-        used_chunks = [chunks[i] for i in used_indices if i < len(chunks)] or chunks
+        used_chunks = [all_chunks[i] for i in used_indices if i < len(all_chunks)] or all_chunks
 
         async with session_factory() as db:
             async with db.begin():
@@ -448,7 +423,7 @@ async def run_pipeline(
                         confidence=chunk.confidence,
                     ))
 
-        logger.info("pipeline finished", extra={"message_id": message_id, "chunks": len(chunks)})
+        logger.info("pipeline finished", extra={"message_id": message_id, "chunks": len(all_chunks)})
 
     except Exception:
         logger.error("pipeline error", extra={"message_id": message_id}, exc_info=True)

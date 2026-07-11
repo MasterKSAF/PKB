@@ -20,31 +20,6 @@ def _chunk(**kw):
     return rag_client.Chunk(**base)
 
 
-def test_build_messages_order_and_cache_friendly():
-    history = [
-        {"role": "user", "content": "первый вопрос"},
-        {"role": "assistant", "content": "первый ответ"},
-    ]
-    chunks = [_chunk()]
-    messages = pipeline._build_messages(None, history, chunks, "новый вопрос")
-
-    assert messages[0]["role"] == "system"
-    assert messages[1] == history[0]
-    assert messages[2] == history[1]
-    assert messages[-1]["role"] == "user"
-    assert "новый вопрос" in messages[-1]["content"]
-    assert "ГОСТ 1" in messages[-1]["content"]
-
-
-def test_build_messages_inserts_summary_before_history():
-    history = [{"role": "user", "content": "вопрос"}]
-    messages = pipeline._build_messages("краткое резюме", history, [_chunk()], "новый")
-
-    assert messages[0]["role"] == "system"
-    assert messages[1]["role"] == "system"
-    assert "краткое резюме" in messages[1]["content"]
-    assert messages[2] == history[0]
-
 
 def test_clean_content_strips_citation_markers():
     raw = "Толщина 12 мм %[document_id:1]% %[section_id:2]%."
