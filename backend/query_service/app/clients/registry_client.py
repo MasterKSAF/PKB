@@ -65,3 +65,25 @@ async def enrich_query(query: str) -> tuple[str, list[str]]:
             synonyms.append(result)
 
     return " ".join(normalized_words), list(dict.fromkeys(synonyms))
+
+
+async def get_document_page_text(document_id: int, page: int) -> str:
+    settings = get_settings()
+
+    if settings.MOCK_REGISTRY_ENABLED:
+        return f"[мок] Текст страницы {page} документа {document_id}"
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            f"{settings.REGISTRY_SERVICE_URL}/api/v1/registry/documents/{document_id}/pages/{page}/text",
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    blocks = data.get("data", {}).get("blocks", [])
+    parts = []
+    for b in blocks:
+        text = b.get("text", "").strip()
+        if text:
+            parts.append(text)
+    return "\n".join(parts) if parts else f"Страница {page} не содержит текстового слоя."

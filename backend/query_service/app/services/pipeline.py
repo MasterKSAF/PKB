@@ -54,6 +54,28 @@ _RAG_TOOL = {
     },
 }
 
+_GET_PAGE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "get_document_page",
+        "description": (
+            "Получить текст конкретной страницы документа ПКБ. "
+            "Используй когда знаешь document_id и номер страницы из результатов поиска "
+            "и хочешь прочитать соседние страницы или уточнить контекст."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "document_id": {"type": "integer", "description": "ID документа"},
+                "page": {"type": "integer", "description": "Номер страницы (1-based)"},
+            },
+            "required": ["document_id", "page"],
+        },
+    },
+}
+
+_TOOLS = [_RAG_TOOL, _GET_PAGE_TOOL]
+
 _MAX_TOOL_ITERS = 5
 
 _CONTEXT_TOKEN_BUDGET = 6000
@@ -239,7 +261,7 @@ async def _run_tool_loop(
     total_completion = 0
 
     for _ in range(_MAX_TOOL_ITERS):
-        result = await llm_client.complete(messages, tools=[_RAG_TOOL])
+        result = await llm_client.complete(messages, tools=_TOOLS)
         total_prompt += result.prompt_tokens
         total_completion += result.completion_tokens
 
@@ -253,22 +275,40 @@ async def _run_tool_loop(
         })
 
         for tc in result.tool_calls:
+            fn = tc["function"]["name"]
             args = json.loads(tc["function"]["arguments"])
-            query = args.get("query", "")
-            logger.info("tool_call rag_search query=%r", query, extra={"message_id": message_id})
 
-            try:
-                chunks = await asyncio.wait_for(
-                    rag_client.search(query, top_k=10, valid_at=valid_at),
-                    timeout=60.0,
-                )
-            except Exception:
-                logger.warning("tool_call rag_search failed", extra={"message_id": message_id}, exc_info=True)
-                chunks = []
+            if fn == "rag_search":
+                query = args.get("query", "")
+                logger.info("tool_call rag_search query=%r", query, extra={"message_id": message_id})
+                try:
+                    chunks = await asyncio.wait_for(
+                        rag_client.search(query, top_k=10, valid_at=valid_at),
+                        timeout=60.0,
+                    )
+                except Exception:
+                    logger.warning("tool_call rag_search failed", extra={"message_id": message_id}, exc_info=True)
+                    chunks = []
+                start_idx = len(all_chunks)
+                all_chunks.extend(chunks)
+                tool_content = _format_chunks(chunks, start_idx) if chunks else "Релевантные фрагменты не найдены."
 
-            start_idx = len(all_chunks)
-            all_chunks.extend(chunks)
-            tool_content = _format_chunks(chunks, start_idx) if chunks else "Релевантные фрагменты не найдены."
+            elif fn == "get_document_page":
+                doc_id = int(args.get("document_id", 0))
+                page = int(args.get("page", 1))
+                logger.info("tool_call get_document_page doc_id=%d page=%d", doc_id, page, extra={"message_id": message_id})
+                try:
+                    tool_content = await asyncio.wait_for(
+                        registry_client.get_document_page_text(doc_id, page),
+                        timeout=15.0,
+                    )
+                except Exception:
+                    logger.warning("tool_call get_document_page failed", extra={"message_id": message_id}, exc_info=True)
+                    tool_content = f"Не удалось получить страницу {page} документа {doc_id}."
+
+            else:
+                tool_content = f"Неизвестный инструмент: {fn}"
+
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
