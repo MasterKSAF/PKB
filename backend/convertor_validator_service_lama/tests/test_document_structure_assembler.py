@@ -131,3 +131,29 @@ def test_section_content_blocks_and_source_spans_are_preserved() -> None:
 
     assert structure["diagnostics"]["sections_with_tables"] == 1
     assert structure["diagnostics"]["sections_with_lists"] == 1
+
+def test_assembler_preserves_repeated_table_of_contents_namespaces() -> None:
+    items = [
+        _heading("# \u0421\u041e\u0414\u0415\u0420\u0416\u0410\u041d\u0418\u0415", 1, 0),
+        _text("main toc line", 1, 1),
+        _heading("# \u0412\u0412\u0415\u0414\u0415\u041d\u0418\u0415", 2, 2),
+        _text("intro text", 2, 3),
+        _heading("# \u0421\u041e\u0414\u0415\u0420\u0416\u0410\u041d\u0418\u0415", 5, 4),
+        _text("appendix toc line", 5, 5),
+        _heading("# \u0427\u0410\u0421\u0422\u042c I \u00ab\u041a\u041b\u0410\u0421\u0421\u0418\u0424\u0418\u041a\u0410\u0426\u0418\u042f\u00bb", 7, 6),
+        _heading("# 1. \u041e\u0431\u0449\u0438\u0435 \u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u044f", 8, 7),
+        _text("classification text", 8, 8),
+    ]
+
+    structure = assemble_document_structure_from_parse_items(items, page_count=12)
+
+    assert [namespace["namespace_id"] for namespace in structure["namespaces"]] == [
+        "front_matter",
+        "toc",
+        "introduction",
+        "toc_2",
+        "classification",
+    ]
+
+    assert structure["namespaces"][1]["page_start"] == 1
+    assert structure["namespaces"][3]["page_start"] == 5

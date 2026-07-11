@@ -166,11 +166,25 @@ def build_namespaces(
 
     deduplicated: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
+    seen_base_counts: dict[str, int] = {}
 
     for namespace in namespaces:
-        namespace_id = str(namespace["namespace_id"])
+        base_namespace_id = str(namespace["namespace_id"])
+        seen_base_counts[base_namespace_id] = (
+            seen_base_counts.get(base_namespace_id, 0) + 1
+        )
+
+        namespace_id = base_namespace_id
         if namespace_id in seen_ids:
-            continue
+            suffix = seen_base_counts[base_namespace_id]
+            namespace_id = f"{base_namespace_id}_{suffix}"
+
+            while namespace_id in seen_ids:
+                suffix += 1
+                namespace_id = f"{base_namespace_id}_{suffix}"
+
+            namespace = {**namespace, "namespace_id": namespace_id}
+
         deduplicated.append(namespace)
         seen_ids.add(namespace_id)
 
@@ -496,7 +510,7 @@ def _content_type_for_item(item: dict[str, Any]) -> str:
 def _section_kind(heading: dict[str, Any]) -> str:
     namespace_id = heading.get("namespace_id")
 
-    if namespace_id == "toc":
+    if namespace_id == "toc" or str(namespace_id).startswith("toc_"):
         return "toc"
     if namespace_id == "front_matter":
         return "front_matter"

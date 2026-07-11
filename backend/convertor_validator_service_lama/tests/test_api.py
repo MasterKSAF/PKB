@@ -77,7 +77,7 @@ def test_extract_passes_dry_run_returns_all_extract_payloads() -> None:
     data = response.json()
     assert data["mode"] == "extract_passes_dry_run"
     assert data["parse_job_id"] == "parse-job-123"
-    assert len(data["extract_payloads"]) == 9
+    assert len(data["extract_payloads"]) == 13
     assert data["extract_payloads"][0] == {
         "parse_job_id": "parse-job-123",
         "pass_name": "document_boundaries",
@@ -96,12 +96,16 @@ def test_extract_passes_plan_uses_parse_job_id() -> None:
     assert data["source"] == "parse_job_id"
     assert names == [
         "document_boundaries",
+        "nested_documents",
         "title_metadata",
         "table_of_contents",
+        "table_of_contents_blocks",
         "sections",
         "tables",
         "images",
         "formulas",
+        "notes",
+        "references",
         "cross_references",
         "validation_critic",
     ]
@@ -122,7 +126,7 @@ def test_rich_document_package_dry_run_returns_package_preview() -> None:
     assert data["source_pdf_path"] == "D:/tmp/source.pdf"
     assert data["parse_job_id"] == "dry-run-parse-job-id"
     assert data["parse_payload"]["source_pdf_path"] == "D:/tmp/source.pdf"
-    assert len(data["extract_payloads"]) == 9
+    assert len(data["extract_payloads"]) == 13
     assert data["extract_payloads"][0]["pass_name"] == "document_boundaries"
     assert data["extract_payloads"][-1]["pass_name"] == "validation_critic"
     assert data["final_correction_policy"] == "python_validator_assembler_applies_final_corrections"

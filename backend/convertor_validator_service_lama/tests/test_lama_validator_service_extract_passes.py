@@ -93,5 +93,33 @@ def test_run_all_extract_passes_with_polling_runs_all_planned_passes(monkeypatch
     }
     assert sections_request.instructions == "Extract document sections."
 
+    nested_documents_request = next(
+        request for request in client.submit_requests if request.pass_name == "nested_documents"
+    )
+    assert nested_documents_request.extraction_schema["properties"]["nested_documents"]["type"] == "array"
+    assert nested_documents_request.extraction_schema["required"] == ["nested_documents"]
+    assert "Do not flatten" in (nested_documents_request.instructions or "")
+
+    toc_blocks_request = next(
+        request for request in client.submit_requests if request.pass_name == "table_of_contents_blocks"
+    )
+    assert toc_blocks_request.extraction_schema["properties"]["table_of_contents_blocks"]["type"] == "array"
+    assert toc_blocks_request.extraction_schema["required"] == ["table_of_contents_blocks"]
+    assert "Do not merge" in (toc_blocks_request.instructions or "")
+
+    notes_request = next(
+        request for request in client.submit_requests if request.pass_name == "notes"
+    )
+    assert notes_request.extraction_schema["properties"]["notes"]["type"] == "array"
+    assert notes_request.extraction_schema["required"] == ["notes"]
+    assert "Extract notes" in (notes_request.instructions or "")
+
+    references_request = next(
+        request for request in client.submit_requests if request.pass_name == "references"
+    )
+    assert references_request.extraction_schema["properties"]["references"]["type"] == "array"
+    assert references_request.extraction_schema["required"] == ["references"]
+    assert "GOST 20862-81 - GOST 20867-81" in (references_request.instructions or "")
+
     assert results["sections"].result == {"pass_name": "sections"}
     assert client.closed is False

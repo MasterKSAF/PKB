@@ -25,6 +25,16 @@ class RichDocumentTableOfContentsItem(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
+class RichDocumentTableOfContentsBlock(BaseModel):
+    toc_id: str = Field(min_length=1)
+    title: str | None = None
+    namespace_id: str | None = None
+    page_start: int | None = Field(default=None, ge=0)
+    page_end: int | None = Field(default=None, ge=0)
+    items: list[RichDocumentTableOfContentsItem] = Field(default_factory=list)
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
 class RichDocumentNestedDocument(BaseModel):
     nested_document_id: str | None = None
     document_code: str | None = None
@@ -103,6 +113,31 @@ class RichDocumentSection(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
+class RichDocumentNote(BaseModel):
+    note_id: str | None = None
+    namespace_id: str | None = None
+    section_id: str | None = None
+    text: str | None = None
+    page: int | None = Field(default=None, ge=0)
+    bbox: list[float] | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
+
+class RichDocumentReference(BaseModel):
+    reference_id: str | None = None
+    namespace_id: str | None = None
+    section_id: str | None = None
+    reference_text: str | None = None
+    target_document_code: str | None = None
+    target_document_codes: list[str] = Field(default_factory=list)
+    target_clause: str | None = None
+    reference_type: str | None = None
+    page: int | None = Field(default=None, ge=0)
+    bbox: list[float] | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
 class RichDocumentCrossReference(BaseModel):
     reference_id: str | None = None
     source_id: str | None = None
@@ -117,6 +152,9 @@ class RichDocumentCrossReference(BaseModel):
 class RichDocumentStructure(BaseModel):
     namespaces: list[RichDocumentNamespace] = Field(default_factory=list)
     document_boundaries: list[RichDocumentBoundary] = Field(default_factory=list)
+    table_of_contents_blocks: list[RichDocumentTableOfContentsBlock] = Field(
+        default_factory=list
+    )
     table_of_contents: list[RichDocumentTableOfContentsItem] = Field(default_factory=list)
     nested_documents: list[RichDocumentNestedDocument] = Field(default_factory=list)
 
@@ -124,6 +162,8 @@ class RichDocumentStructure(BaseModel):
     tables: list[RichDocumentTable] = Field(default_factory=list)
     images: list[RichDocumentImage] = Field(default_factory=list)
     formulas: list[RichDocumentFormula] = Field(default_factory=list)
+    notes: list[RichDocumentNote] = Field(default_factory=list)
+    references: list[RichDocumentReference] = Field(default_factory=list)
     cross_references: list[RichDocumentCrossReference] = Field(default_factory=list)
 
     quality_report: dict[str, Any] | None = None
