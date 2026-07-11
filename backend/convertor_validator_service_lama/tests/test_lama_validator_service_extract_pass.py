@@ -11,8 +11,7 @@ from convertor_validator_service_lama.models.extract_job import (
     ExtractPassRequest,
 )
 from convertor_validator_service_lama.services.lama_validator_service import (
-    _default_extraction_schema,
-    _default_instructions,
+    build_extract_pass_defaults,
     build_extract_pass_plan_response,
     run_extract_pass_with_polling,
 )
@@ -25,12 +24,13 @@ def test_extract_pass_plan_items_have_default_schema_and_instructions() -> None:
     missing_instructions: list[str] = []
 
     for item in plan.passes:
-        schema = _default_extraction_schema(item.name)
-        instructions = _default_instructions(item.name)
+        defaults = build_extract_pass_defaults(item.name)
+        schema = defaults["extraction_schema"]
+        instructions = defaults["instructions"]
 
-        if not schema:
+        if not isinstance(schema, dict) or not schema:
             missing_schema.append(item.name)
-        if not instructions or not instructions.strip():
+        if not isinstance(instructions, str) or not instructions.strip():
             missing_instructions.append(item.name)
 
     assert missing_schema == []

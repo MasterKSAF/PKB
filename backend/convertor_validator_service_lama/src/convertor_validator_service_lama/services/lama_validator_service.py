@@ -723,6 +723,16 @@ def _default_instructions(pass_name: LlamaExtractPassName) -> str | None:
     return None
 
 
+def build_extract_pass_defaults(
+    pass_name: LlamaExtractPassName,
+) -> dict[str, object]:
+    return {
+        "pass_name": pass_name,
+        "extraction_schema": _default_extraction_schema(pass_name),
+        "instructions": _default_instructions(pass_name),
+    }
+
+
 def _resolve_extraction_schema(
     pass_name: LlamaExtractPassName,
     extraction_schema: dict[str, object] | None,
