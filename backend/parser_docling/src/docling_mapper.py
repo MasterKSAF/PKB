@@ -112,8 +112,8 @@ def enrich_docling_document(doc, pdf_path: str):
                 if page_doc_text and t_norm in page_doc_text:
                     continue
 
-                # Минимальные фильтры: только номера строк и пустые
-                if _re.match(r'^\.?\d+\s*$', ttext.strip()):
+                # Фильтр номеров страниц: только цифры и разделители (без букв, без точки — чтобы не задеть коды классификации)
+                if _re.match(r'^[\d\s\-—\/]+$', ttext.strip()):
                     continue
 
                 is_caption = 'рис' in ttext.lower() and len(ttext) <= 80

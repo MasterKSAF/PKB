@@ -129,6 +129,11 @@ class JsonStandardizer(BaseStandardizer):
         # Формируем блоки
         block = []
         for idx, el in enumerate(elements, start=1):
+            # Пропускаем номера страниц — блоки, где контент состоит только из цифр/разделителей
+            el_content_raw = (el.get("content") or "").strip()
+            el_type_raw = el.get("type", "paragraph")
+            if el_type_raw != "heading" and re.match(r'^[\d\s\-\—\/\,]+$', el_content_raw):
+                continue
             bbox = el.get("bounding box")
             if not isinstance(bbox, list) or len(bbox) != 4:
                 bbox = [0, 0, 0, 0]

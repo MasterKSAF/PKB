@@ -1,5 +1,5 @@
-import re
 import json
+import re
 import sys
 from html.parser import HTMLParser
 from typing import List, Dict, Any, Optional, Tuple
@@ -324,6 +324,12 @@ def html_to_document_json(page_htmls: List[Tuple[int, str]],
             if b.get('type') == 'table':
                 has_tables = True
         all_blocks.extend(blocks)
+
+    # Финальный фильтр: контент только из цифр/разделителей (без букв, без точки — коды классификации не трогать)
+    all_blocks = [
+        b for b in all_blocks
+        if not re.match(r'^[\d\s\-—\/]+$', (b.get('content') or '').strip())
+    ]
 
     type_counts = {}
     for b in all_blocks:

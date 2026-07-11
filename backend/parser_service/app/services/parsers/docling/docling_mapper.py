@@ -16,7 +16,7 @@ import tempfile
 import os
 
 from app.config import settings
-from standardizer import JsonStandardizer
+from app.services.standardizer import JsonStandardizer
 from normalizer import Normalizer, ParseResult
 from quality_metrics import assess_quality_from_json
 from text_cleaner import soft_clean_line, is_garbage_line, process_extracted_text
@@ -319,8 +319,8 @@ def enrich_docling_document(doc, pdf_path: str):
                 if page_doc_text and t_norm in page_doc_text:
                     continue
 
-                # Минимальные фильтры: только номера строк и пустые
-                if _re.match(r'^\.?\d+\s*$', ttext.strip()):
+                # Фильтр номеров страниц: только цифры и разделители (без букв, без точки — чтобы не задеть коды классификации)
+                if _re.match(r'^[\d\s\-—\/]+$', ttext.strip()):
                     continue
 
                 # Фильтрация мусора для сырого текста PyMuPDF
