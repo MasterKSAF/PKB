@@ -7,7 +7,7 @@ def build_rag_builder_buildrequest_payload(
     payload: dict[str, Any],
     *,
     document_id: int,
-    pkb_code: str,
+    pkb_code: str = "-1",
     schema: str = "schema_registry_for_rag_v2",
 ) -> dict[str, Any]:
     """Return payload normalized to SPD RAG Builder BuildRequest shape."""
@@ -25,7 +25,7 @@ def build_rag_builder_buildrequest_envelope(
     payload: dict[str, Any],
     *,
     document_id: int,
-    pkb_code: str,
+    pkb_code: str = "-1",
     schema: str = "schema_registry_for_rag_v2",
 ) -> dict[str, Any]:
     """Return payload with SPD RAG Builder metadata/document envelope fields."""

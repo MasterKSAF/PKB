@@ -227,3 +227,33 @@ def test_buildrequest_payload_helper_closes_all_gaps() -> None:
             "context": "Scope text cites GOST-REF",
         }
     ]
+
+
+
+def test_buildrequest_payload_defaults_missing_pkb_code_to_minus_one() -> None:
+    payload = {
+        "metadata": {
+            "schema_name": "rag_builder_compatible_payload",
+        },
+        "document": {
+            "document_code": "GOST-TEST",
+            "title": "Test document",
+        },
+        "sections": [
+            {
+                "section_id": 1,
+                "title": "1. Scope",
+                "text": "Scope text",
+                "level": 1,
+                "path": "1",
+            }
+        ],
+    }
+
+    buildrequest_payload = build_rag_builder_buildrequest_payload(
+        payload,
+        document_id=420000,
+    )
+
+    assert buildrequest_payload["document"]["pkb_code"] == "-1"
+    assert build_rag_builder_buildrequest_gap_report(buildrequest_payload) == []
