@@ -69,6 +69,12 @@ from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentPackageAssemblyRequest,
     RichDocumentPackageAssemblyResult,
 )
+from convertor_validator_service_lama.services.rag_builder_buildrequest_adapter import (
+    build_rag_builder_buildrequest_payload,
+)
+from convertor_validator_service_lama.services.rag_builder_contract_audit import (
+    build_rag_builder_buildrequest_gap_report,
+)
 from convertor_validator_service_lama.services.rag_builder_downcast_service import (
     downcast_rich_package_to_rag_builder,
 )
@@ -271,6 +277,26 @@ def rich_document_package(
 @app.post("/rag-builder-payload", response_model=RagBuilderDowncastResult)
 def rag_builder_payload(request: RichDocumentPackage) -> RagBuilderDowncastResult:
     return downcast_rich_package_to_rag_builder(request)
+
+
+@app.post("/rag-builder-buildrequest")
+def rag_builder_buildrequest(
+    request: RichDocumentPackage,
+    document_id: int,
+    pkb_code: str = "-1",
+) -> dict[str, object]:
+    downcast_result = downcast_rich_package_to_rag_builder(request)
+    buildrequest_payload = build_rag_builder_buildrequest_payload(
+        downcast_result.payload.model_dump(mode="json"),
+        document_id=document_id,
+        pkb_code=pkb_code,
+    )
+
+    return {
+        "payload": buildrequest_payload,
+        "warnings": downcast_result.warnings,
+        "gap_report": build_rag_builder_buildrequest_gap_report(buildrequest_payload),
+    }
 
 
 @app.post("/rich-document-package/dry-run", response_model=RichDocumentPackageDryRunResponse)
