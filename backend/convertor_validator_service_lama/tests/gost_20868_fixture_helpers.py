@@ -27,6 +27,7 @@ def gost_20868_chunk_container_extract_results(
     tables = []
     notes = []
     references = []
+    formulas = []
 
     for section in sections:
         section_id = str(section["section_id"])
@@ -75,6 +76,19 @@ def gost_20868_chunk_container_extract_results(
                     "caption": section.get("title"),
                     "page": section.get("page"),
                     "cells": cells,
+                    "raw": section,
+                }
+            )
+            continue
+
+        if section_type == "formula":
+            formulas.append(
+                {
+                    "formula_id": clause,
+                    "expression": content.get("text"),
+                    "latex": content.get("latex"),
+                    "page": section.get("page"),
+                    "parameters": content.get("parameters") or [],
                     "raw": section,
                 }
             )
@@ -130,6 +144,7 @@ def gost_20868_chunk_container_extract_results(
         "tables": _extract_result({"tables": tables}),
         "notes": _extract_result({"notes": notes}),
         "references": _extract_result({"references": references}),
+        "formulas": _extract_result({"formulas": formulas}),
     }
 
 

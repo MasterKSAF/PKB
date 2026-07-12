@@ -11,6 +11,7 @@ from convertor_validator_service_lama.models.rich_document_package import (
 )
 from gost_20868_fixture_helpers import (
     gost_20868_chunk_container_extract_results,
+    load_gost_20868_formula_chunk_container,
     load_gost_20868_v2_chunk_container,
 )
 
@@ -776,3 +777,33 @@ def test_assembler_preserves_gost_20868_v2_chunk_container_layers() -> None:
         for reference in structure.references
     }
     assert actual_target_document_codes == expected_target_document_codes
+
+
+def test_assembler_preserves_gost_20868_formula_chunk_container_layer() -> None:
+    data = load_gost_20868_formula_chunk_container()
+    formula_section = next(
+        section
+        for section in data["sections"]
+        if section["type"] == "formula"
+    )
+    formula_content = formula_section["content"]
+
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="gost_20868_81.pdf",
+        document_code=data["document"]["doc_code"],
+        parse_result=_parse_result(),
+        extract_results=gost_20868_chunk_container_extract_results(data),
+    )
+
+    result = assemble_rich_document_package(request)
+    structure = result.package.document_structure
+
+    assert len(structure.formulas) == 1
+    formula = structure.formulas[0]
+
+    assert formula.formula_id == formula_section["clause"]
+    assert formula.expression == formula_content["text"]
+    assert formula.latex == formula_content["latex"]
+    assert formula.page == formula_section["page"]
+    assert formula.parameters == formula_content["parameters"]
+    assert formula.raw["raw"] == formula_section
