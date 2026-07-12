@@ -76,11 +76,49 @@ class IssueSeverity(str, Enum):
 
 
 class ParseItemSpan(StrictExtractionModel):
+    # Backward-compatible alias for file_page_number.
+    # Citation code should prefer file_page_number/file_page_index.
     page: int | None = Field(default=None, ge=1)
+    file_page_number: int | None = Field(default=None, ge=1)
+    file_page_index: int | None = Field(default=None, ge=0)
+    printed_page_label: str | None = Field(default=None, max_length=120)
     item_index: int | None = Field(default=None, ge=0)
     bbox: list[float] | None = Field(default=None, min_length=4, max_length=4)
     normalized_bbox: list[float] | None = Field(default=None, min_length=4, max_length=4)
     text_preview: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def normalize_file_page_aliases(self) -> "ParseItemSpan":
+        if (
+            self.page is not None
+            and self.file_page_number is not None
+            and self.page != self.file_page_number
+        ):
+            raise ValueError("page must match file_page_number")
+
+        if self.file_page_number is None and self.page is not None:
+            self.file_page_number = self.page
+
+        if self.page is None and self.file_page_number is not None:
+            self.page = self.file_page_number
+
+        expected_index = (
+            self.file_page_number - 1
+            if self.file_page_number is not None
+            else None
+        )
+
+        if (
+            expected_index is not None
+            and self.file_page_index is not None
+            and self.file_page_index != expected_index
+        ):
+            raise ValueError("file_page_index must be file_page_number - 1")
+
+        if self.file_page_index is None and expected_index is not None:
+            self.file_page_index = expected_index
+
+        return self
 
     @field_validator("bbox", "normalized_bbox", mode="before")
     @classmethod
