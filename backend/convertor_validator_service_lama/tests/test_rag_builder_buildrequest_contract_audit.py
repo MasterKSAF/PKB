@@ -1,4 +1,5 @@
 from convertor_validator_service_lama.services.rag_builder_contract_audit import (
+    build_rag_builder_buildrequest_envelope,
     build_rag_builder_buildrequest_gap_report,
 )
 
@@ -60,3 +61,48 @@ def test_buildrequest_gap_report_accepts_minimal_spd_builder_shape() -> None:
     }
 
     assert build_rag_builder_buildrequest_gap_report(payload) == []
+
+
+
+def test_buildrequest_envelope_closes_metadata_document_gaps() -> None:
+    payload = {
+        "metadata": {
+            "schema_name": "rag_builder_compatible_payload",
+        },
+        "document": {
+            "document_code": "GOST-TEST",
+            "title": "Test document",
+            "page_count": 2,
+        },
+        "sections": [
+            {
+                "section_id": "s1",
+                "title": "1. Scope",
+                "text": "Scope text",
+                "level": 1,
+                "path": "1",
+                "references": [],
+            }
+        ],
+    }
+
+    buildrequest_payload = build_rag_builder_buildrequest_envelope(
+        payload,
+        document_id=420000,
+        pkb_code="04",
+    )
+
+    assert buildrequest_payload["metadata"] == {
+        "schema": "schema_registry_for_rag_v2",
+        "document_id": 420000,
+    }
+    assert buildrequest_payload["document"]["id"] == 420000
+    assert buildrequest_payload["document"]["pkb_code"] == "04"
+    assert buildrequest_payload["document"]["doc_code"] == "GOST-TEST"
+    assert buildrequest_payload["document"]["title"] == "Test document"
+    assert buildrequest_payload["document"]["page_count"] == 2
+
+    assert build_rag_builder_buildrequest_gap_report(buildrequest_payload) == [
+        "sections[0].type",
+        "sections[0].content",
+    ]
