@@ -237,3 +237,18 @@ class RagBuilderBuildDryRunResponse(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     warnings: list[dict[str, Any]] = Field(default_factory=list)
     gap_report: list[str] = Field(default_factory=list)
+
+
+
+class RagBuilderBuildAcceptedResponse(BaseModel):
+    status: str
+    document_id: int
+    indexing_txn_id: str
+    task_id: int | None = None
+
+
+class RagBuilderClientError(BaseModel):
+    status_code: int
+    code: str
+    message: str
+    details: dict[str, Any] = Field(default_factory=dict)
