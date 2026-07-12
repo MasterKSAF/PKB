@@ -41,6 +41,7 @@ def downcast_rich_package_to_rag_builder(
     )
     sections = _build_sections_payload(
         artifact=artifacts_by_name.get("sections"),
+        structure_sections=_rich_document_structure_sections(package),
         references_by_section=references_by_section,
         warnings=warnings,
     )
@@ -195,6 +196,7 @@ def _build_document_payload(
 
 def _build_sections_payload(
     artifact: RichDocumentPackageArtifact | None,
+    structure_sections: list[Any] | None,
     references_by_section: dict[str, list[RagBuilderReferencePayload]],
     warnings: list[RagBuilderDowncastWarning],
 ) -> list[RagBuilderSectionPayload]:
@@ -204,18 +206,25 @@ def _build_sections_payload(
     )
 
     if not rows:
+        rows = _section_rows_from_rich_structure(structure_sections)
+
+    if not rows:
         warnings.append(
             RagBuilderDowncastWarning(
                 code="missing_sections",
-                message="No sections artifact was found or it contained no section rows.",
+                message=(
+                    "No sections artifact or rich document structure sections "
+                    "were found."
+                ),
                 source_artifact="sections",
             )
         )
         return []
 
     sections: list[RagBuilderSectionPayload] = []
-    for index, row in enumerate(rows, start=1):
-        if not isinstance(row, dict):
+    for index, source_row in enumerate(rows, start=1):
+        row = _row_as_dict(source_row)
+        if not row:
             continue
 
         section_id = _first_str(
@@ -230,7 +239,7 @@ def _build_sections_payload(
             RagBuilderSectionPayload(
                 section_id=section_id,
                 title=_first_str(row.get("title"), row.get("heading")),
-                text=_first_str(row.get("text"), row.get("content"), row.get("body")),
+                text=_section_text_from_row(row),
                 level=_first_int(row.get("level"), row.get("depth")),
                 page_start=_first_int(row.get("page_start"), row.get("page")),
                 page_end=_first_int(row.get("page_end"), row.get("page")),
@@ -241,6 +250,80 @@ def _build_sections_payload(
         )
 
     return sections
+
+
+def _rich_document_structure_sections(package: RichDocumentPackage) -> list[Any]:
+    structure = getattr(package, "document_structure", None)
+    sections = getattr(structure, "sections", None)
+
+    if isinstance(sections, list):
+        return sections
+
+    return []
+
+
+def _section_rows_from_rich_structure(value: list[Any] | None) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for item in value or []:
+        row = _row_as_dict(item)
+        if row:
+            rows.append(row)
+
+    return rows
+
+
+def _row_as_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return model_dump(mode="json")
+
+    return {}
+
+
+def _section_text_from_row(row: dict[str, Any]) -> str | None:
+    content = row.get("content")
+    content_text: str | None = None
+
+    if isinstance(content, dict):
+        content_text = _first_str(
+            content.get("text"),
+            content.get("markdown"),
+            content.get("content_text"),
+            _source_span_text_preview(content.get("source_spans")),
+        )
+    elif isinstance(content, str):
+        content_text = content
+
+    return _first_str(
+        row.get("text"),
+        content_text,
+        row.get("body"),
+        row.get("content_text"),
+    )
+
+
+def _source_span_text_preview(value: Any) -> str | None:
+    if not isinstance(value, list):
+        return None
+
+    previews = [
+        preview
+        for preview in (
+            _first_str(row.get("text_preview"))
+            for row in value
+            if isinstance(row, dict)
+        )
+        if preview is not None
+    ]
+
+    if not previews:
+        return None
+
+    return "\n".join(previews)
 
 
 def _build_references_by_section(

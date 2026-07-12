@@ -1,6 +1,8 @@
 from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentPackage,
     RichDocumentPackageArtifact,
+    RichDocumentSection,
+    RichDocumentStructure,
 )
 from convertor_validator_service_lama.services.rag_builder_downcast_service import (
     downcast_rich_package_to_rag_builder,
@@ -315,4 +317,55 @@ def test_downcast_rich_package_maps_gost_20868_fixture_layers() -> None:
         ] == expected_target_doc_codes
 
     assert payload.cross_references == []
+    assert result.warnings == []
+
+
+def test_downcast_rich_package_uses_document_structure_sections_when_artifact_missing() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/1",
+                    clause="1",
+                    title="1. Scope",
+                    level=1,
+                    path="main_document/1",
+                    page_start=1,
+                    page_end=1,
+                    content={
+                        "source_spans": [
+                            {
+                                "text_preview": "Scope text from document structure."
+                            }
+                        ]
+                    },
+                )
+            ]
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    assert result.payload.sections[0].section_id == "main_document/1"
+    assert result.payload.sections[0].title == "1. Scope"
+    assert result.payload.sections[0].text == "Scope text from document structure."
+    assert result.payload.sections[0].level == 1
+    assert result.payload.sections[0].page_start == 1
+    assert result.payload.sections[0].page_end == 1
+    assert result.payload.sections[0].path == "main_document/1"
     assert result.warnings == []
