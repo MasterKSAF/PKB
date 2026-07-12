@@ -5,6 +5,10 @@ from convertor_validator_service_lama.models.rich_document_package import (
 from convertor_validator_service_lama.services.rag_builder_downcast_service import (
     downcast_rich_package_to_rag_builder,
 )
+from gost_20868_fixture_helpers import (
+    gost_20868_chunk_container_extract_results,
+    load_gost_20868_formula_chunk_container,
+)
 
 
 def _artifact(
@@ -224,3 +228,65 @@ def test_downcast_rich_package_generates_stable_fallback_ids() -> None:
 
     assert result.payload.sections[0].section_id == "section-1"
     assert result.payload.tables[0].table_id == "table-1"
+
+
+def test_downcast_rich_package_maps_gost_20868_fixture_layers() -> None:
+    data = load_gost_20868_formula_chunk_container()
+    extract_results = gost_20868_chunk_container_extract_results(data)
+
+    artifacts = [
+        _artifact(
+            "metadata",
+            {
+                "title": data["document"]["title"],
+                "page_count": data["document"]["page_count"],
+            },
+            source="parse_result",
+            produced_by="parse_result",
+        )
+    ]
+
+    for artifact_key, extract_result in extract_results.items():
+        artifacts.append(
+            _artifact(
+                artifact_key,
+                extract_result.result,
+                produced_by=artifact_key,
+            )
+        )
+
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-gost-20868",
+        source_pdf_path="gost_20868_81.pdf",
+        document_code=data["document"]["doc_code"],
+        artifacts=artifacts,
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+    payload = result.payload
+
+    assert payload.document.document_code == data["document"]["doc_code"]
+    assert payload.document.title == data["document"]["title"]
+    assert payload.document.page_count == data["document"]["page_count"]
+
+    section_clauses = {
+        section.raw["clause"]
+        for section in payload.sections
+    }
+    assert {"title", "1", "6", "6.1", "9"}.issubset(section_clauses)
+
+    assert [image.image_id for image in payload.images] == [
+        "figure-1",
+        "figure-2",
+    ]
+
+    assert len(payload.tables) == 1
+    assert payload.tables[0].table_id == "table-1"
+
+    assert len(payload.formulas) == 1
+    assert payload.formulas[0].formula_id == "formula-test"
+    assert payload.formulas[0].expression == "D = L / 2"
+
+    assert payload.cross_references == []
+    assert result.warnings == []
