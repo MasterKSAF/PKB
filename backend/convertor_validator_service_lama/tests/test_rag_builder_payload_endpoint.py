@@ -250,3 +250,54 @@ def test_rag_builder_buildrequest_endpoint_requires_document_id() -> None:
     )
 
     assert response.status_code == 422
+
+
+
+def test_rag_builder_buildrequest_endpoint_does_not_trust_parse_result_metadata_title() -> None:
+    response = client.post(
+        "/rag-builder-buildrequest?document_id=420000",
+        json={
+            "parse_job_id": "parse-job-1",
+            "document_code": "GOST-TEST",
+            "parse_result": {
+                "job_id": "parse-job-1",
+                "status": "COMPLETED",
+                "metadata": {
+                    "title": "Parser metadata title is not trusted",
+                    "page_count": 2,
+                },
+                "raw_response": {},
+            },
+            "artifacts": {
+                "sections": {
+                    "artifact_key": "sections",
+                    "produced_by": "sections",
+                    "source": "extract_pass",
+                    "content": {
+                        "sections": [
+                            {
+                                "section_id": "s1",
+                                "title": "1. Scope",
+                                "text": "Scope text",
+                                "level": 1,
+                                "page_start": 1,
+                                "path": "1",
+                            }
+                        ]
+                    },
+                    "raw_response": {},
+                }
+            },
+            "final_correction_policy": "python_validator_assembler_applies_final_corrections",
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["payload"]["document"]["title"] == ""
+    assert body["payload"]["document"]["page_count"] is None
+    assert body["gap_report"] == []
+
+    warning_codes = {warning["code"] for warning in body["warnings"]}
+    assert warning_codes == {"missing_document_title"}
