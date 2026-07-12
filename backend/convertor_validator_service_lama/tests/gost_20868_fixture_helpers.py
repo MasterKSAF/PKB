@@ -130,7 +130,7 @@ def gost_20868_chunk_container_extract_results(
                 {
                     "reference_id": f"{section_id}-ref-{index}",
                     "section_id": section_id,
-                    "reference_text": target_document_code,
+                    "reference_text": content.get("text") or target_document_code,
                     "target_document_code": target_document_code,
                     "reference_type": reference.get("type"),
                     "page": section.get("page"),

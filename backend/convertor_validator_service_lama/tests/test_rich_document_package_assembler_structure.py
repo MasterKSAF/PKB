@@ -807,3 +807,49 @@ def test_assembler_preserves_gost_20868_formula_chunk_container_layer() -> None:
     assert formula.page == formula_section["page"]
     assert formula.parameters == formula_content["parameters"]
     assert formula.raw["raw"] == formula_section
+
+
+def test_assembler_expands_gost_20868_reference_range_from_fixture_text() -> None:
+    data = load_gost_20868_v2_chunk_container()
+    range_section = next(
+        section
+        for section in data["sections"]
+        if section["clause"] == "2"
+    )
+    source_refs = range_section["references"]
+
+    first_code = source_refs[0]["target_doc_code"]
+    last_code = source_refs[-1]["target_doc_code"]
+
+    prefix, first_number_year = first_code.split()
+    _, last_number_year = last_code.split()
+
+    first_number, year = first_number_year.split("-")
+    last_number, last_year = last_number_year.split("-")
+
+    assert year == last_year
+
+    expected_target_document_codes = [
+        f"{prefix} {number}-{year}"
+        for number in range(int(first_number), int(last_number) + 1)
+    ]
+
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="gost_20868_81.pdf",
+        document_code=data["document"]["doc_code"],
+        parse_result=_parse_result(),
+        extract_results=gost_20868_chunk_container_extract_results(data),
+    )
+
+    result = assemble_rich_document_package(request)
+    structure = result.package.document_structure
+
+    reference = next(
+        reference
+        for reference in structure.references
+        if reference.section_id == str(range_section["section_id"])
+        and reference.target_document_code == first_code
+    )
+
+    assert reference.reference_text == range_section["content"]["text"]
+    assert reference.target_document_codes == expected_target_document_codes
