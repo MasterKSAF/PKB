@@ -1,7 +1,10 @@
-from convertor_validator_service_lama.services.rag_builder_contract_audit import (
+from convertor_validator_service_lama.services.rag_builder_buildrequest_adapter import (
     build_rag_builder_buildrequest_envelope,
-    build_rag_builder_buildrequest_gap_report,
+    build_rag_builder_buildrequest_payload,
     build_rag_builder_buildrequest_section_shape,
+)
+from convertor_validator_service_lama.services.rag_builder_contract_audit import (
+    build_rag_builder_buildrequest_gap_report,
 )
 
 
@@ -164,3 +167,63 @@ def test_buildrequest_section_shape_closes_section_gaps() -> None:
     assert section["references"] == []
 
     assert build_rag_builder_buildrequest_gap_report(buildrequest_payload) == []
+
+
+
+def test_buildrequest_payload_helper_closes_all_gaps() -> None:
+    payload = {
+        "metadata": {
+            "schema_name": "rag_builder_compatible_payload",
+        },
+        "document": {
+            "document_code": "GOST-TEST",
+            "title": "Test document",
+            "page_count": 2,
+        },
+        "sections": [
+            {
+                "section_id": "s1",
+                "title": "1. Scope",
+                "text": "Scope text",
+                "level": 1,
+                "path": "1",
+                "page_start": 1,
+                "references": [
+                    {
+                        "target_doc_code": "GOST-REF",
+                        "type": "normative_reference",
+                        "context": "Scope text cites GOST-REF",
+                    }
+                ],
+                "raw": {
+                    "section_id": 7,
+                    "clause": "1",
+                    "page": 1,
+                    "type": "text",
+                },
+            }
+        ],
+    }
+
+    buildrequest_payload = build_rag_builder_buildrequest_payload(
+        payload,
+        document_id=420000,
+        pkb_code="04",
+    )
+
+    assert build_rag_builder_buildrequest_gap_report(buildrequest_payload) == []
+    assert buildrequest_payload["metadata"]["document_id"] == 420000
+    assert buildrequest_payload["document"]["doc_code"] == "GOST-TEST"
+
+    section = buildrequest_payload["sections"][0]
+    assert section["section_id"] == 7
+    assert section["clause"] == "1"
+    assert section["type"] == "text"
+    assert section["content"] == {"text": "Scope text"}
+    assert section["references"] == [
+        {
+            "target_doc_code": "GOST-REF",
+            "type": "normative_reference",
+            "context": "Scope text cites GOST-REF",
+        }
+    ]
