@@ -55,6 +55,22 @@ def test_rag_builder_payload_endpoint_returns_downcast_payload() -> None:
                     },
                     "raw_response": {},
                 },
+                "references": {
+                    "artifact_key": "references",
+                    "produced_by": "references",
+                    "source": "extract_pass",
+                    "content": {
+                        "references": [
+                            {
+                                "section_id": "s1",
+                                "target_doc_code": "GOST-REF",
+                                "type": "normative_reference",
+                                "reference_text": "Scope text cites GOST-REF",
+                            }
+                        ]
+                    },
+                    "raw_response": {},
+                },
             },
             "final_correction_policy": "python_validator_assembler_applies_final_corrections",
         },
@@ -69,6 +85,13 @@ def test_rag_builder_payload_endpoint_returns_downcast_payload() -> None:
     assert body["payload"]["document"]["page_count"] == 2
     assert body["payload"]["sections"][0]["section_id"] == "s1"
     assert body["payload"]["sections"][0]["title"] == "1. Scope"
+
+    references = body["payload"]["sections"][0]["references"]
+    assert len(references) == 1
+    assert references[0]["target_doc_code"] == "GOST-REF"
+    assert references[0]["type"] == "normative_reference"
+    assert references[0]["context"] == "Scope text cites GOST-REF"
+
     assert body["warnings"] == []
 
 
