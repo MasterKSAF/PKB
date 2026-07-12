@@ -1,6 +1,7 @@
 from convertor_validator_service_lama.services.rag_builder_contract_audit import (
     build_rag_builder_buildrequest_envelope,
     build_rag_builder_buildrequest_gap_report,
+    build_rag_builder_buildrequest_section_shape,
 )
 
 
@@ -106,3 +107,60 @@ def test_buildrequest_envelope_closes_metadata_document_gaps() -> None:
         "sections[0].type",
         "sections[0].content",
     ]
+
+
+
+def test_buildrequest_section_shape_closes_section_gaps() -> None:
+    payload = {
+        "metadata": {
+            "schema_name": "rag_builder_compatible_payload",
+        },
+        "document": {
+            "document_code": "GOST-TEST",
+            "title": "Test document",
+            "page_count": 2,
+        },
+        "sections": [
+            {
+                "section_id": "s1",
+                "title": "1. Scope",
+                "text": "Scope text",
+                "level": 1,
+                "path": "1",
+                "page_start": 1,
+                "references": [],
+                "raw": {
+                    "section_id": 7,
+                    "parent_id": None,
+                    "clause": "1",
+                    "page": 1,
+                    "type": "text",
+                    "bbox": [0.1, 0.2, 0.8, 0.3],
+                },
+            }
+        ],
+    }
+
+    buildrequest_payload = build_rag_builder_buildrequest_envelope(
+        payload,
+        document_id=420000,
+        pkb_code="04",
+    )
+    buildrequest_payload = build_rag_builder_buildrequest_section_shape(
+        buildrequest_payload
+    )
+
+    section = buildrequest_payload["sections"][0]
+    assert section["section_id"] == 7
+    assert section["parent_id"] is None
+    assert section["clause"] == "1"
+    assert section["title"] == "1. Scope"
+    assert section["level"] == 1
+    assert section["path"] == "1"
+    assert section["page"] == 1
+    assert section["bbox"] == [0.1, 0.2, 0.8, 0.3]
+    assert section["type"] == "text"
+    assert section["content"] == {"text": "Scope text"}
+    assert section["references"] == []
+
+    assert build_rag_builder_buildrequest_gap_report(buildrequest_payload) == []
