@@ -288,5 +288,31 @@ def test_downcast_rich_package_maps_gost_20868_fixture_layers() -> None:
     assert payload.formulas[0].formula_id == "formula-test"
     assert payload.formulas[0].expression == "D = L / 2"
 
+    sections_by_clause = {
+        section.raw["clause"]: section
+        for section in payload.sections
+    }
+    expected_references_by_clause = {
+        section["clause"]: [
+            reference["target_doc_code"]
+            for reference in section.get("references", [])
+        ]
+        for section in data["sections"]
+        if section.get("references")
+    }
+
+    assert set(expected_references_by_clause) == {"2", "3", "4", "6.1"}
+    assert sum(
+        len(target_doc_codes)
+        for target_doc_codes in expected_references_by_clause.values()
+    ) == 6
+    assert expected_references_by_clause["6.1"] == ["table_1"]
+
+    for clause, expected_target_doc_codes in expected_references_by_clause.items():
+        assert [
+            reference.target_doc_code
+            for reference in sections_by_clause[clause].references
+        ] == expected_target_doc_codes
+
     assert payload.cross_references == []
     assert result.warnings == []

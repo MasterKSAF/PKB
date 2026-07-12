@@ -9,6 +9,7 @@ from convertor_validator_service_lama.models.rag_builder_downcast import (
     RagBuilderFormulaPayload,
     RagBuilderImagePayload,
     RagBuilderPayloadMetadata,
+    RagBuilderReferencePayload,
     RagBuilderSectionPayload,
     RagBuilderTablePayload,
 )
@@ -35,8 +36,12 @@ def downcast_rich_package_to_rag_builder(
         warnings=warnings,
     )
 
+    references_by_section = _build_references_by_section(
+        artifacts_by_name.get("references")
+    )
     sections = _build_sections_payload(
         artifact=artifacts_by_name.get("sections"),
+        references_by_section=references_by_section,
         warnings=warnings,
     )
     tables = _build_tables_payload(artifacts_by_name.get("tables"))
@@ -190,6 +195,7 @@ def _build_document_payload(
 
 def _build_sections_payload(
     artifact: RichDocumentPackageArtifact | None,
+    references_by_section: dict[str, list[RagBuilderReferencePayload]],
     warnings: list[RagBuilderDowncastWarning],
 ) -> list[RagBuilderSectionPayload]:
     rows = _artifact_content_as_list(
@@ -229,11 +235,83 @@ def _build_sections_payload(
                 page_start=_first_int(row.get("page_start"), row.get("page")),
                 page_end=_first_int(row.get("page_end"), row.get("page")),
                 path=_first_str(row.get("path"), row.get("section_path")),
+                references=references_by_section.get(section_id, []),
                 raw=row,
             )
         )
 
     return sections
+
+
+def _build_references_by_section(
+    artifact: RichDocumentPackageArtifact | None,
+) -> dict[str, list[RagBuilderReferencePayload]]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("references", "normative_references", "items", "data"),
+    )
+
+    references_by_section: dict[str, list[RagBuilderReferencePayload]] = {}
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        section_id = _first_str(row.get("section_id"), row.get("source_section_id"))
+        if section_id is None:
+            continue
+
+        reference_type = _first_str(
+            row.get("reference_type"),
+            row.get("type"),
+            row.get("kind"),
+        )
+        if reference_type is None:
+            continue
+
+        context = _first_str(
+            row.get("reference_text"),
+            row.get("text"),
+            row.get("context"),
+        )
+
+        target_codes = _target_doc_codes_from_reference_row(row)
+        for target_doc_code in target_codes:
+            references_by_section.setdefault(section_id, []).append(
+                RagBuilderReferencePayload(
+                    target_document_id=_first_int(row.get("target_document_id")),
+                    target_doc_code=target_doc_code,
+                    type=reference_type,
+                    context=context,
+                    note=_first_str(row.get("note")),
+                    raw=row,
+                )
+            )
+
+    return references_by_section
+
+
+def _target_doc_codes_from_reference_row(row: dict[str, Any]) -> list[str]:
+    raw_codes = row.get("target_document_codes")
+    if isinstance(raw_codes, list):
+        codes = [
+            code
+            for code in (_first_str(value) for value in raw_codes)
+            if code is not None
+        ]
+        if codes:
+            return codes
+
+    target_doc_code = _first_str(
+        row.get("target_document_code"),
+        row.get("target_doc_code"),
+        row.get("document_code"),
+        row.get("doc_code"),
+    )
+    if target_doc_code is None:
+        return []
+
+    return [target_doc_code]
 
 
 def _build_tables_payload(

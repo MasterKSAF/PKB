@@ -24,6 +24,15 @@ class RagBuilderDocumentPayload(BaseModel):
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
+class RagBuilderReferencePayload(BaseModel):
+    target_document_id: int | None = Field(default=None, ge=0)
+    target_doc_code: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+    context: str | None = None
+    note: str | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+
+
 class RagBuilderSectionPayload(BaseModel):
     section_id: str = Field(min_length=1)
     title: str | None = None
@@ -32,6 +41,7 @@ class RagBuilderSectionPayload(BaseModel):
     page_start: int | None = Field(default=None, ge=0)
     page_end: int | None = Field(default=None, ge=0)
     path: str | None = None
+    references: list[RagBuilderReferencePayload] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
