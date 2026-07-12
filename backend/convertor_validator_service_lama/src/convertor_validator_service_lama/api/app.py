@@ -32,6 +32,7 @@ from convertor_validator_service_lama.models.contracts import (
     ParseJobDryRunRequest,
     ParseJobDryRunResponse,
     ParseJobRequest,
+    RagBuilderBuildDryRunResponse,
     RichDocumentPackageDryRunRequest,
     RichDocumentPackageDryRunResponse,
     RichDocumentPackagePlanResponse,
@@ -77,6 +78,9 @@ from convertor_validator_service_lama.services.rag_builder_contract_audit import
 )
 from convertor_validator_service_lama.services.rag_builder_downcast_service import (
     downcast_rich_package_to_rag_builder,
+)
+from convertor_validator_service_lama.services.rag_builder_build_dry_run import (
+    build_rag_builder_build_dry_run_response,
 )
 from convertor_validator_service_lama.services.rich_document_package_assembler import (
     assemble_rich_document_package,
@@ -297,6 +301,24 @@ def rag_builder_buildrequest(
         "warnings": downcast_result.warnings,
         "gap_report": build_rag_builder_buildrequest_gap_report(buildrequest_payload),
     }
+
+
+@app.post(
+    "/rag-builder-build/dry-run",
+    response_model=RagBuilderBuildDryRunResponse,
+)
+def rag_builder_build_dry_run(
+    request: RichDocumentPackage,
+    document_id: int,
+    pkb_code: str = "-1",
+    rag_builder_base_url: str | None = None,
+) -> RagBuilderBuildDryRunResponse:
+    return build_rag_builder_build_dry_run_response(
+        request,
+        document_id=document_id,
+        pkb_code=pkb_code,
+        rag_builder_base_url=rag_builder_base_url,
+    )
 
 
 @app.post("/rich-document-package/dry-run", response_model=RichDocumentPackageDryRunResponse)

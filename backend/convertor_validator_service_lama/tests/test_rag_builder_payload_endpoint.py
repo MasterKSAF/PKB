@@ -301,3 +301,88 @@ def test_rag_builder_buildrequest_endpoint_does_not_trust_parse_result_metadata_
 
     warning_codes = {warning["code"] for warning in body["warnings"]}
     assert warning_codes == {"missing_document_title"}
+
+
+
+def test_rag_builder_build_dry_run_endpoint_returns_future_call_contract() -> None:
+    response = client.post(
+        "/rag-builder-build/dry-run",
+        params={
+            "document_id": 420000,
+            "rag_builder_base_url": "http://rag-builder.local:8000",
+        },
+        json={
+            "parse_job_id": "parse-job-1",
+            "source_pdf_path": "source.pdf",
+            "document_code": "GOST-TEST",
+            "parse_result": {
+                "job_id": "parse-job-1",
+                "status": "COMPLETED",
+                "raw_response": {},
+            },
+            "artifacts": {
+                "metadata": {
+                    "artifact_key": "metadata",
+                    "produced_by": "registry",
+                    "source": "parse_result",
+                    "content": {
+                        "title": "Test document",
+                        "page_count": 2,
+                    },
+                    "raw_response": {},
+                },
+                "sections": {
+                    "artifact_key": "sections",
+                    "produced_by": "sections",
+                    "source": "extract_pass",
+                    "content": {
+                        "sections": [
+                            {
+                                "section_id": "s1",
+                                "title": "1. Scope",
+                                "text": "Scope text",
+                                "level": 1,
+                                "page_start": 1,
+                                "path": "1",
+                            }
+                        ]
+                    },
+                    "raw_response": {},
+                },
+            },
+            "final_correction_policy": "python_validator_assembler_applies_final_corrections",
+        },
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["method"] == "POST"
+    assert body["endpoint"] == "/api/v1/rag/build"
+    assert body["target_url"] == "http://rag-builder.local:8000/api/v1/rag/build"
+    assert body["network_call_performed"] is False
+    assert body["warnings"] == []
+    assert body["gap_report"] == []
+
+    assert body["payload"]["metadata"]["document_id"] == 420000
+    assert body["payload"]["document"]["pkb_code"] == "-1"
+    assert body["payload"]["document"]["doc_code"] == "GOST-TEST"
+    assert body["payload"]["document"]["title"] == "Test document"
+    assert body["payload"]["sections"][0]["content"] == {"text": "Scope text"}
+
+
+def test_rag_builder_build_dry_run_endpoint_requires_document_id() -> None:
+    response = client.post(
+        "/rag-builder-build/dry-run",
+        json={
+            "parse_job_id": "parse-job-1",
+            "document_code": "GOST-TEST",
+            "parse_result": {
+                "job_id": "parse-job-1",
+                "status": "COMPLETED",
+                "raw_response": {},
+            },
+        },
+    )
+
+    assert response.status_code == 422
