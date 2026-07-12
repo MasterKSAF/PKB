@@ -44,6 +44,9 @@ from convertor_validator_service_lama.services.document_structure_workflow_runti
     LlamaExtractDocumentStructureWorkflowRuntimeConfig,
     run_llama_extract_document_structure_workflow,
 )
+from convertor_validator_service_lama.services.document_audit_bundle import (
+    build_document_conversion_audit_bundle,
+)
 from convertor_validator_service_lama.services.llama_extract_structured_json_backend import (
     LlamaExtractStructuredJsonResultError,
     MissingLlamaExtractParseJobIdError,
@@ -301,6 +304,19 @@ def rag_builder_buildrequest(
         "warnings": downcast_result.warnings,
         "gap_report": build_rag_builder_buildrequest_gap_report(buildrequest_payload),
     }
+
+
+@app.post("/document-audit-bundle")
+def document_audit_bundle(
+    request: RichDocumentPackage,
+    document_id: int,
+    pkb_code: str = "-1",
+) -> dict[str, object]:
+    return build_document_conversion_audit_bundle(
+        request,
+        document_id=document_id,
+        pkb_code=pkb_code,
+    )
 
 
 @app.post(
