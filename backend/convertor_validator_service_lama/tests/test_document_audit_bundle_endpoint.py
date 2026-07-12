@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from convertor_validator_service_lama.api.app import app
@@ -156,6 +159,67 @@ def test_document_audit_bundle_endpoint_returns_conversion_bundle() -> None:
 def test_document_audit_bundle_endpoint_requires_document_id() -> None:
     response = client.post(
         "/document-audit-bundle",
+        json=_rich_package_payload(),
+    )
+
+    assert response.status_code == 422
+
+def test_document_audit_bundle_write_endpoint_writes_bundle(
+    tmp_path: Path,
+) -> None:
+    response = client.post(
+        "/document-audit-bundle/write",
+        params={
+            "document_id": 420000,
+            "output_root": str(tmp_path),
+            "document_slug": "Custom Slug",
+        },
+        json=_rich_package_payload(),
+    )
+
+    assert response.status_code == 200
+
+    manifest = response.json()
+    assert manifest["document_slug"] == "custom-slug"
+    assert manifest["bundle_schema"] == "document_conversion_audit_bundle_v1"
+
+    bundle_dir = tmp_path / "custom-slug"
+
+    assert (bundle_dir / "bundle.json").is_file()
+    assert (bundle_dir / "input" / "input.json").is_file()
+    assert (
+        bundle_dir
+        / "service_1_rich"
+        / "rich_document_package.json"
+    ).is_file()
+    assert (
+        bundle_dir
+        / "service_2_rag_builder"
+        / "rag_builder_buildrequest.json"
+    ).is_file()
+    assert (bundle_dir / "llm_audit" / "audit_prompt.md").is_file()
+    assert (bundle_dir / "manifest.json").is_file()
+
+    buildrequest = json.loads(
+        (
+            bundle_dir
+            / "service_2_rag_builder"
+            / "rag_builder_buildrequest.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert buildrequest["metadata"]["document_id"] == 420000
+    assert buildrequest["document"]["pkb_code"] == "-1"
+    assert buildrequest["document"]["doc_code"] == "GOST-TEST"
+
+
+def test_document_audit_bundle_write_endpoint_requires_document_id(
+    tmp_path: Path,
+) -> None:
+    response = client.post(
+        "/document-audit-bundle/write",
+        params={
+            "output_root": str(tmp_path),
+        },
         json=_rich_package_payload(),
     )
 

@@ -47,6 +47,9 @@ from convertor_validator_service_lama.services.document_structure_workflow_runti
 from convertor_validator_service_lama.services.document_audit_bundle import (
     build_document_conversion_audit_bundle,
 )
+from convertor_validator_service_lama.services.document_audit_bundle_writer import (
+    write_document_conversion_audit_bundle,
+)
 from convertor_validator_service_lama.services.llama_extract_structured_json_backend import (
     LlamaExtractStructuredJsonResultError,
     MissingLlamaExtractParseJobIdError,
@@ -316,6 +319,26 @@ def document_audit_bundle(
         request,
         document_id=document_id,
         pkb_code=pkb_code,
+    )
+
+
+@app.post("/document-audit-bundle/write")
+def document_audit_bundle_write(
+    request: RichDocumentPackage,
+    document_id: int,
+    pkb_code: str = "-1",
+    output_root: str = "audit_output",
+    document_slug: str | None = None,
+) -> dict[str, object]:
+    bundle = build_document_conversion_audit_bundle(
+        request,
+        document_id=document_id,
+        pkb_code=pkb_code,
+    )
+    return write_document_conversion_audit_bundle(
+        bundle,
+        output_root=output_root,
+        document_slug=document_slug,
     )
 
 
