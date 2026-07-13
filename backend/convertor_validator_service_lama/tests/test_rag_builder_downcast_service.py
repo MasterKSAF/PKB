@@ -369,3 +369,81 @@ def test_downcast_rich_package_uses_document_structure_sections_when_artifact_mi
     assert result.payload.sections[0].page_end == 1
     assert result.payload.sections[0].path == "main_document/1"
     assert result.warnings == []
+
+
+def test_downcast_attaches_references_by_clause_when_section_id_differs() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+            _artifact(
+                "references",
+                {
+                    "references": [
+                        {
+                            "section_id": "2",
+                            "reference_text": "GOST 20862-81 - GOST 20867-81",
+                            "target_document_codes": [
+                                "GOST 20862-81",
+                                "GOST 20863-81",
+                                "GOST 20864-81",
+                                "GOST 20865-81",
+                                "GOST 20866-81",
+                                "GOST 20867-81",
+                            ],
+                            "reference_type": "standard_range",
+                        }
+                    ]
+                },
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/2",
+                    clause="2",
+                    title="2. Normative references",
+                    path="main_document/2",
+                    page_start=1,
+                    page_end=1,
+                    content={
+                        "source_spans": [
+                            {
+                                "text_preview": "2. GOST 20862-81 - GOST 20867-81",
+                            }
+                        ]
+                    },
+                )
+            ]
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    section = result.payload.sections[0]
+
+    assert section.section_id == "main_document/2"
+    assert [
+        reference.target_doc_code
+        for reference in section.references
+    ] == [
+        "GOST 20862-81",
+        "GOST 20863-81",
+        "GOST 20864-81",
+        "GOST 20865-81",
+        "GOST 20866-81",
+        "GOST 20867-81",
+    ]
+    assert section.references[0].context == "GOST 20862-81 - GOST 20867-81"
+    assert result.warnings == []

@@ -244,13 +244,111 @@ def _build_sections_payload(
                 page_start=_first_int(row.get("page_start"), row.get("page")),
                 page_end=_first_int(row.get("page_end"), row.get("page")),
                 path=_first_str(row.get("path"), row.get("section_path")),
-                references=references_by_section.get(section_id, []),
+                references=_references_for_section(
+                    row,
+                    section_id=section_id,
+                    references_by_section=references_by_section,
+                ),
                 raw=row,
             )
         )
 
     return sections
 
+
+
+
+
+
+def _references_for_section(
+    row: dict[str, Any],
+    *,
+    section_id: str,
+    references_by_section: dict[str, list[RagBuilderReferencePayload]],
+) -> list[RagBuilderReferencePayload]:
+    exact_references = _references_from_keys(
+        _section_reference_exact_lookup_keys(row, section_id=section_id),
+        references_by_section=references_by_section,
+    )
+
+    if exact_references:
+        return exact_references
+
+    return _references_from_keys(
+        _section_reference_fallback_lookup_keys(row, section_id=section_id),
+        references_by_section=references_by_section,
+    )
+
+
+def _references_from_keys(
+    keys: list[str],
+    *,
+    references_by_section: dict[str, list[RagBuilderReferencePayload]],
+) -> list[RagBuilderReferencePayload]:
+    result: list[RagBuilderReferencePayload] = []
+    seen: set[tuple[str | None, str | None, str | None]] = set()
+
+    for key in keys:
+        for reference in references_by_section.get(key, []):
+            identity = (
+                reference.target_doc_code,
+                reference.type,
+                reference.context,
+            )
+            if identity in seen:
+                continue
+
+            result.append(reference)
+            seen.add(identity)
+
+    return result
+
+
+def _section_reference_exact_lookup_keys(
+    row: dict[str, Any],
+    *,
+    section_id: str,
+) -> list[str]:
+    raw = row.get("raw")
+    if not isinstance(raw, dict):
+        raw = {}
+
+    return _unique_strings(
+        [
+            section_id,
+            row.get("section_id"),
+            row.get("id"),
+            row.get("uid"),
+            raw.get("section_id"),
+            raw.get("id"),
+            raw.get("uid"),
+        ]
+    )
+
+
+def _section_reference_fallback_lookup_keys(
+    row: dict[str, Any],
+    *,
+    section_id: str,
+) -> list[str]:
+    raw = row.get("raw")
+    if not isinstance(raw, dict):
+        raw = {}
+
+    return _unique_strings(
+        [
+            row.get("clause"),
+            row.get("number"),
+            row.get("path"),
+            row.get("section_path"),
+            raw.get("clause"),
+            raw.get("number"),
+            raw.get("namespaced_path"),
+            raw.get("path"),
+            raw.get("section_path"),
+            section_id,
+        ]
+    )
 
 def _rich_document_structure_sections(package: RichDocumentPackage) -> list[Any]:
     structure = getattr(package, "document_structure", None)
@@ -526,6 +624,25 @@ def _build_cross_references_payload(
 
     return references
 
+
+
+
+def _unique_strings(values: list[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+
+    for value in values:
+        if not isinstance(value, str):
+            continue
+
+        cleaned = value.strip()
+        if not cleaned or cleaned in seen:
+            continue
+
+        result.append(cleaned)
+        seen.add(cleaned)
+
+    return result
 
 def _first_str(*values: Any, fallback: str | None = None) -> str | None:
     for value in values:
