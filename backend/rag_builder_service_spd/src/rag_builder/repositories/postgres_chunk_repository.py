@@ -780,12 +780,12 @@ class PostgresChunkRepository(ChunkRepository):
                             item.chunk.clause,
                             item.chunk.path,
                             item.chunk.page,
-                            item.chunk.bbox,
+                            json.dumps(item.chunk.bbox),
                             item.chunk.chunk_index,
                             item.chunk.chunk_type,
                             item.chunk.content,
                             item.chunk.content,
-                            item.chunk.metadata,
+                            json.dumps(item.chunk.metadata),
                             item.embedding,
                         ),
                     )
@@ -842,15 +842,17 @@ class PostgresChunkRepository(ChunkRepository):
                             section.path,
                             self._to_ltree_path(section.path),
                             section.page,
-                            section.bbox,
+                            json.dumps(section.bbox),
                             section.type,
-                            {
-                                "references": [
-                                    ref.model_dump()
-                                    for ref in section.references
-                                ],
-                                "raw_content": section.content,
-                            },
+                            json.dumps(
+                                {
+                                    "references": [
+                                        ref.model_dump()
+                                        for ref in section.references
+                                    ],
+                                    "raw_content": section.content,
+                                }
+                            ),
                         ),
                     )
 
