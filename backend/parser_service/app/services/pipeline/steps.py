@@ -25,6 +25,7 @@ from app.config import settings
 
 # Импорт модуля проверки качества PDF
 from app.services.shared.pdf_text_quality_module import analyze_pdf_file
+from app.services.pipeline.quality_assessment import assess_document_quality
 
 logger = logging.getLogger(__name__)
 
@@ -365,6 +366,40 @@ class TransformStep(PipelineStep):
         return ctx
 
 
+class AssessQualityStep(PipelineStep):
+    """Анализирует финальный JSON и проставляет вердикт качества (good/partial/needs_ocr)."""
+
+    async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
+        if ctx.final_json is None:
+            logger.debug("AssessQualityStep: no final_json, skipping")
+            return ctx
+
+        quality = assess_document_quality(
+            ctx.final_json,
+            quality_code=ctx.quality_code,
+            total_pages=ctx.total_pages,
+        )
+        logger.info(
+            "Quality verdict for task %d: %s (confidence=%.2f, needs_ocr=%s, coverage=%.2f)",
+            ctx.task_id,
+            quality["verdict"],
+            quality["confidence"],
+            quality["needs_ocr"],
+            quality["page_coverage_ratio"],
+        )
+        # Сохраняем в контекст для StoreResultStep
+        ctx.quality_assessment = quality
+
+        # Обновляем section качества в финальном JSON
+        if isinstance(ctx.final_json, dict):
+            if "quality" in ctx.final_json:
+                ctx.final_json["quality"].update(quality)
+            else:
+                ctx.final_json["quality"] = quality
+
+        return ctx
+
+
 class SaveJsonToFileStep(PipelineStep):
     async def execute(self, ctx: ProcessingContext) -> ProcessingContext:
         if not settings.save_json_to_dir:
@@ -412,11 +447,11 @@ class StoreResultStep(PipelineStep):
         )
 
         # ---- Объединяем уведомления о качестве и проблемных страницах ----
-        notifications = result_payload["quality"].get("notifications", [])
+        existing_notifications = result_payload.get("quality", {}).get("notifications", [])
         problematic_pages_str = None
         new_notifications = []
 
-        for note in notifications:
+        for note in existing_notifications:
             if note.get("category") == "quality":
                 continue
             if "message" in note and note["message"].startswith("problematic_pages:"):
@@ -426,17 +461,23 @@ class StoreResultStep(PipelineStep):
                 continue
             new_notifications.append(note)
 
-        # Добавляем уведомление с категорией quality (всегда)
-        if ctx.quality_code:
-            category = f"quality: {ctx.quality_code}"
-            if problematic_pages_str is not None:
-                message = f"problematic_pages: [{problematic_pages_str}]"
-            else:
-                message = ""
+        # Добавляем уведомление от AssessQualityStep (verdict), если есть
+        if ctx.quality_assessment:
+            verdict = ctx.quality_assessment.get("verdict", "unknown")
+            needs_ocr = ctx.quality_assessment.get("needs_ocr", False)
+            coverage = ctx.quality_assessment.get("page_coverage_ratio", 0)
+            qc = ctx.quality_code or "UNKNOWN"
+            msg_parts = [f"verdict={verdict}, coverage={coverage}, text_layer={qc}"]
+            if problematic_pages_str:
+                msg_parts.append(f"problematic_pages=[{problematic_pages_str}]")
             new_notifications.append({
-                "category": category,
-                "message": message
+                "category": f"quality: {qc}",
+                "message": "; ".join(msg_parts),
             })
+        elif ctx.quality_code:
+            category = f"quality: {ctx.quality_code}"
+            msg = f"problematic_pages: [{problematic_pages_str}]" if problematic_pages_str else ""
+            new_notifications.append({"category": category, "message": msg})
 
         result_payload["quality"]["notifications"] = new_notifications
 

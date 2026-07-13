@@ -31,8 +31,10 @@ class _PageHtmlParser(HTMLParser):
         self._in_list_item = False
 
         self._in_figure = False
+        self._figure_class = ''
         self._figcaption = ''
         self._in_figcaption = False
+        self._formula_text: List[str] = []
 
     def _flush_text(self):
         text = ''.join(self._text_buf).strip()
@@ -93,8 +95,10 @@ class _PageHtmlParser(HTMLParser):
         elif tag == 'figure':
             self._flush_text()
             self._in_figure = True
+            self._figure_class = attrs_dict.get('class', '')
             self._figcaption = ''
             self._in_figcaption = False
+            self._formula_text = []
 
         elif tag == 'img':
             if self._in_figure:
@@ -157,8 +161,12 @@ class _PageHtmlParser(HTMLParser):
         elif tag == 'figure':
             if self._in_figure:
                 self._in_figure = False
-                caption = self._figcaption or ''
-                self.blocks.append({'type': 'image', 'text': caption})
+                if self._figure_class == 'formula':
+                    formula_content = ''.join(self._formula_text).strip() or self._figcaption
+                    self.blocks.append({'type': 'formula', 'text': formula_content})
+                else:
+                    caption = self._figcaption or ''
+                    self.blocks.append({'type': 'image', 'text': caption})
 
         elif tag == 'figcaption':
             self._in_figcaption = False
@@ -186,6 +194,8 @@ class _PageHtmlParser(HTMLParser):
             self._figcaption += data
         elif self._in_list_item and self._list_items is not None:
             self._list_items[-1] += data
+        elif self._in_figure and self._figure_class == 'formula':
+            self._formula_text.append(data)
         elif self._current_tag in ('p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'):
             self._text_buf.append(data)
 
@@ -299,6 +309,14 @@ def html_to_json_blocks(page_html: str, page_number: int = 1) -> List[Dict[str, 
                 'bounding box': [0, 0, 0, 0],
             })
 
+        elif bt == 'formula':
+            result.append({
+                'type': 'formula',
+                'page number': page_number,
+                'content': block.get('text', ''),
+                'bounding box': [0, 0, 0, 0],
+            })
+
     return result
 
 
@@ -324,6 +342,18 @@ def html_to_document_json(page_htmls: List[Tuple[int, str]],
             if b.get('type') == 'table':
                 has_tables = True
         all_blocks.extend(blocks)
+
+    # Regex fallback: перетипировать параграфы с LaTeX-нотацией или матем. Unicode в формулу
+    _FORMULA_RE = re.compile(
+        r'\$\$|\$|\\\(|\\\[|'
+        r'[\U0001D400-\U0001D7FF]'  # Mathematical Alphanumeric Symbols
+    )
+    for b in all_blocks:
+        if b.get('type') not in ('paragraph', 'formula'):
+            continue
+        content = b.get('content', '')
+        if _FORMULA_RE.search(content):
+            b['type'] = 'formula'
 
     # Финальный фильтр: контент только из цифр/разделителей (без букв, без точки — коды классификации не трогать)
     all_blocks = [

@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     docling_batch_size: int = Field(5, alias="DOCLING_BATCH_SIZE")
     docling_do_ocr: bool = Field(False, alias="DOCLING_DO_OCR")
     docling_table_structure: bool = Field(True, alias="DOCLING_TABLE_STRUCTURE")
-    docling_formula_enrichment: bool = Field(True, alias="DOCLING_FORMULA_ENRICHMENT")
+    docling_formula_enrichment: bool = Field(False, alias="DOCLING_FORMULA_ENRICHMENT")
     docling_serve_url: str = Field(
         "http://localhost:5001", alias="DOCLING_SERVE_URL"
     )

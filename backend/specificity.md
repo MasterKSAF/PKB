@@ -43,8 +43,4 @@
 - Временно: запустить celery -A app.celery_app worker -Q pipeline в отдельном контейнере
 - Постоянно: интеграционный тест, который проверяет что после approve задача переходит в active/full_stage
 
-## parser_docling
 
-- **Docling StandardPdfPipeline** падает с "Input document is not valid" для PDF с нестандартной структурой (например, 2-020101-174-1.pdf).
-  Fallback через DoclingPdfParser + docling-core работает.
-- **pypdfium2 engine** — быстрый, но даёт один блок на страницу без разбивки на строки.

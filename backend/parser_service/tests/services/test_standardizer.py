@@ -140,6 +140,7 @@ def test_standardizer_transform_formula():
     assert block["type"] == "formula"
     assert block["latex"] == "E=mc^2"
     assert block["meaning"] == ""
+    assert result["metadata"]["has_formulas"] is True
 
 
 def test_standardizer_transform_font():
@@ -182,6 +183,8 @@ def test_standardizer_transform_container():
     assert result["content"]["document"]["block"][0]["content"] == "Hi"
     assert result["content"]["metadata"]["total_pages"] == 1
     assert "has_tables" in result["content"]["metadata"]
+    assert "has_formulas" in result["content"]["metadata"]
+    assert result["content"]["metadata"]["has_formulas"] is False
 
 
 def test_standardizer_pages_calculation():

@@ -14,6 +14,7 @@ from app.services.pipeline.steps import (
     UpdateProgressStep,
     UploadImagesStep,
     TransformStep,
+    AssessQualityStep,
     SaveJsonToFileStep,
     StoreResultStep,
     TruncatePdfStep,
@@ -53,6 +54,7 @@ class Pipeline:
                 UpdateProgressStep(task_store),
                 UploadImagesStep(minio_client),
                 TransformStep(normalizer),
+                AssessQualityStep(),
                 SaveJsonToFileStep(),
                 StoreResultStep(task_store, max_result_size_bytes),
             ]
@@ -65,6 +67,7 @@ class Pipeline:
                 TruncatePdfStep(),
                 ParseStep(),
                 TransformStep(normalizer),
+                AssessQualityStep(),
                 StoreResultStep(task_store, max_result_size_bytes),
             ]
         logger.debug("Created pipeline with %d steps, mode=%s", len(steps), mode)

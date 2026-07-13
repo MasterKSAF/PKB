@@ -90,7 +90,7 @@ def _save_images_from_pdf(
     pdf_path: str,
     images_dir: str,
     image_uploader: Optional[ImageUploader] = None,
-) -> List[Tuple[int, str, str]]:
+) -> List[Tuple[int, str, str, List[float]]]:
     """
     Извлекает ВСЕ встроенные изображения из PDF через PyMuPDF.
 
@@ -98,7 +98,7 @@ def _save_images_from_pdf(
     Если нет — сохраняет в images_dir как page_{page_no}_{seq}.png (текущее поведение).
 
     Returns:
-        List of (page_no, image_key_or_path, extension).
+        List of (page_no, image_key_or_path, extension, [x0,y0,x1,y1]).
     """
     import fitz as _fitz
     from PIL import Image as _PILImage
@@ -107,7 +107,7 @@ def _save_images_from_pdf(
     if image_uploader is None:
         os.makedirs(images_dir, exist_ok=True)
 
-    result: List[Tuple[int, str, str]] = []
+    result: List[Tuple[int, str, str, List[float]]] = []
     counter_per_page: Dict[int, int] = {}
 
     pdf = _fitz.open(pdf_path)
@@ -115,9 +115,11 @@ def _save_images_from_pdf(
     for pno in range(pdf.page_count):
         page = pdf[pno]
         image_list = page.get_images(full=True)
+        img_info_list = page.get_image_info()
 
-        for img_info in image_list:
+        for img_info, img_info_detail in zip(image_list, img_info_list):
             xref = img_info[0]
+            bbox = list(img_info_detail.get('bbox', [0, 0, 0, 0]))
             try:
                 base_image = pdf.extract_image(xref)
             except Exception:
@@ -137,12 +139,12 @@ def _save_images_from_pdf(
 
                 if image_uploader:
                     key = image_uploader(pno_1, img_bytes, ".png")
-                    result.append((pno_1, key, ".png"))
+                    result.append((pno_1, key, ".png", bbox))
                 else:
                     fname = f"page_{pno_1}_{seq}.png"
                     fpath = os.path.join(images_dir, fname)
                     pil_img.save(fpath, format='PNG')
-                    result.append((pno_1, fpath, ".png"))
+                    result.append((pno_1, fpath, ".png", bbox))
             except Exception as e:
                 logger.warning("Failed to save PDF image page=%d xref=%d: %s", pno + 1, xref, e)
 
@@ -157,7 +159,7 @@ def _save_images_from_pdf(
 def _inject_missing_image_blocks(
     json_result: dict,
     images_dir: str,
-    pdf_images: List[Tuple[int, str, str]],
+    pdf_images: List[Tuple[int, str, str, List[float]]],
 ) -> None:
     """
     Добавляет блоки изображений в JSON для файлов, извлечённых из PDF,
@@ -178,7 +180,7 @@ def _inject_missing_image_blocks(
             existing_ids.add(v)
 
     added = 0
-    for pno, key_or_path, _ext in pdf_images:
+    for pno, key_or_path, _ext, bbox in pdf_images:
         if key_or_path in existing_ids:
             continue
         new_block = {
@@ -186,7 +188,7 @@ def _inject_missing_image_blocks(
             'page number': pno,
             'content': '',
             'image_key': key_or_path,
-            'bounding box': [0, 0, 0, 0],
+            'bounding box': bbox or [0, 0, 0, 0],
         }
         # Если это локальный файл (нет uploader'а) — сохраняем _temp_path
         is_local = key_or_path.startswith(images_dir) if images_dir else False
@@ -231,14 +233,68 @@ def _update_image_keys(json_result: dict, images_dir: str) -> None:
               file=sys.stderr, flush=True)
 
 
+def _extract_and_inject_formula_images(
+    json_result: dict,
+    pdf_path: str,
+    images_dir: str,
+    bbox_map: dict,
+) -> int:
+    """
+    Извлекает formula-изображения из PDF по bbox_map ключам ('__formula_img__', pno, seq).
+    Сохраняет в images_dir, добавляет type: "formula" блоки в json_result.
+    """
+    import fitz
+    import os as _os
+
+    keys = [k for k in bbox_map if isinstance(k, tuple) and len(k) == 3 and k[0] == '__formula_img__']
+    if not keys:
+        return 0
+
+    _os.makedirs(images_dir, exist_ok=True)
+    pdf = fitz.open(pdf_path)
+    blocks = json_result.get('content', {}).get('document', {}).get('block', [])
+    added = 0
+
+    for key in sorted(keys, key=lambda x: (x[1], x[2])):
+        _prefix, pno, seq = key
+        ix0, iy0, ix1, iy1 = bbox_map[key]
+        page = pdf[pno - 1]
+        clip = fitz.Rect(ix0, iy0, ix1, iy1)
+        pix = page.get_pixmap(clip=clip)
+        fname = f"formula_p{pno}_{seq}.png"
+        fpath = _os.path.join(images_dir, fname)
+        pix.save(fpath)
+
+        block = {
+            'type': 'formula',
+            'page number': pno,
+            'content': '',
+            'image_key': 'images/' + fname,
+            'bounding box': [round(ix0, 1), round(iy0, 1),
+                             round(ix1, 1), round(iy1, 1)],
+            '_temp_path': fpath,
+        }
+        blocks.append(block)
+        added += 1
+
+    pdf.close()
+
+    if added:
+        print(f"  Extracted {added} formula images from PDF",
+              file=sys.stderr, flush=True)
+    return added
+
 
 
 def enrich_docling_document(doc, pdf_path: str):
     """
-    Обогащает DoclingDocument пропущенными элементами (колонтитулы, подписи Рис.).
-    Использует PyMuPDF для поиска строк, отсутствующих в Docling, и добавляет их
-    через doc.add_text() с корректным ProvenanceItem.
-    Поиск отсутствующих строк — по координатам (bbox), а не по тексту.
+    Обогащает DoclingDocument пропущенными элементами.
+    Использует PyMuPDF для поиска строк, отсутствующих в Docling.
+
+    Дополнительно детектирует формулы:
+      - image-блоки PyMuPDF (маленькие, между текстом) → DocItemLabel.FORMULA
+      - текст с math-шрифтами (Symbol, Math, MT Extra) → DocItemLabel.FORMULA
+      - Для image-формул возвращает bbox в bbox_map с ключом ('__formula_img__', pno, seq)
 
     Returns:
         (doc, bbox_map) где bbox_map = {(page_no, norm_text): [l, t, r, b], ...}
@@ -250,6 +306,11 @@ def enrich_docling_document(doc, pdf_path: str):
 
     pdf = fitz.open(pdf_path)
     added_count = 0
+    formula_img_seq = defaultdict(int)
+
+    # Фрагменты имён шрифтов, указывающие на математический набор
+    _MATH_FONT_INDICATORS = ('math', 'symbol', 'mt extra', 'mathematical',
+                              'pi', 'greek', 'monotype')
 
     # Карта bbox: (page_no, norm_text) -> [l, t, r, b]
     bbox_map = {}
@@ -304,66 +365,110 @@ def enrich_docling_document(doc, pdf_path: str):
         page_doc_text = doc_fulltext_by_page.get(pno, '')
 
         for b in blocks:
-            if b['type'] != 0:  # text only
+            # ---------- ОБРАБОТКА ИЗОБРАЖЕНИЙ ----------
+            if b['type'] == 1:  # image block
+                ix0, iy0, ix1, iy1 = b['bbox']
+                img_w = ix1 - ix0
+                img_h = iy1 - iy0
+                # Формула-кандидат: не слишком большая, не в хедере/футере
+                if 10 < img_w < 400 and 10 < img_h < 200:
+                    is_header = iy1 < page_h * 0.15
+                    is_footer = iy0 > page_h * 0.85
+                    if not is_header and not is_footer:
+                        formula_img_seq[pno] += 1
+                        seq = formula_img_seq[pno]
+                        key = ('__formula_img__', pno, seq)
+                        bbox_map[key] = [round(ix0, 1), round(iy0, 1),
+                                         round(ix1, 1), round(iy1, 1)]
                 continue
+
+            # ---------- ОБРАБОТКА ТЕКСТА ----------
+            if b['type'] != 0:
+                continue
+
+            line_texts = []
+            line_fonts = set()
             for line in b['lines']:
-                ttext = ''.join(span['text'] for span in line['spans']).strip()
-                if not ttext or len(ttext) < 3:
+                line_text = ''.join(span['text'] for span in line['spans']).strip()
+                if not line_text or len(line_text) < 3:
                     continue
+                line_texts.append(line_text)
+                for span in line['spans']:
+                    font_lower = (span.get('font', '') or '').lower()
+                    line_fonts.add(font_lower)
 
-                bx0, by0, bx1, by1 = line['bbox']
+            if not line_texts:
+                continue
+            ttext = ' '.join(line_texts)
+            t_norm = _re.sub(r'[\s\u00a0]+', ' ', ttext).lower().strip()
 
-                t_norm = _re.sub(r'[\s\u00a0]+', ' ', ttext).lower().strip()
+            # Проверка: текст уже есть в Docling
+            if page_doc_text and t_norm in page_doc_text:
+                continue
 
-                # Проверка: текст уже есть в Docling (как подстрока полного текста страницы)
-                if page_doc_text and t_norm in page_doc_text:
+            # Фильтр номеров страниц
+            if _re.match(r'^[\d\s\-—\/]+$', ttext.strip()):
+                continue
+
+            # Определяем метку
+            from docling_core.types.doc import DocItemLabel as _L
+
+            bx0, by0, bx1, by1 = b['bbox']
+
+            is_caption = 'рис' in ttext.lower() and len(ttext) <= 80
+            is_header = by1 < page_h * 0.15
+            is_footer = by0 > page_h * 0.85
+
+            # Детекция math-шрифтов (всей строки)
+            is_math_font = any(
+                any(ind in f for ind in _MATH_FONT_INDICATORS)
+                for f in line_fonts
+            )
+
+            if is_math_font:
+                label = _L.FORMULA
+            elif is_caption:
+                label = _L.CAPTION
+            elif is_header:
+                label = _L.PAGE_HEADER
+            elif is_footer:
+                label = _L.PAGE_FOOTER
+            else:
+                label = _L.PARAGRAPH
+
+            # Фильтрация мусора для сырого текста PyMuPDF (только для не-formula)
+            if label != _L.FORMULA:
+                ttext_cleaned = soft_clean_line(ttext)
+                if is_garbage_line(ttext_cleaned):
                     continue
+                ttext_final = ttext_cleaned
+            else:
+                ttext_final = ttext
 
-                # Фильтр номеров страниц: только цифры и разделители (без букв, без точки — чтобы не задеть коды классификации)
-                if _re.match(r'^[\d\s\-—\/]+$', ttext.strip()):
-                    continue
+            prov = ProvenanceItem(
+                page_no=pno,
+                bbox=BoundingBox(
+                    l=round(bx0, 1), t=round(by0, 1),
+                    r=round(bx1, 1), b=round(by1, 1),
+                    coord_origin=CoordOrigin.TOPLEFT,
+                ),
+                charspan=(0, len(ttext_final)),
+            )
 
-                # Фильтрация мусора для сырого текста PyMuPDF
-                ttext_cleaned_enrich = soft_clean_line(ttext)
-                if is_garbage_line(ttext_cleaned_enrich):
-                    continue
+            doc.add_text(label=label, text=ttext_final, prov=prov)
+            added_count += 1
 
-                is_caption = 'рис' in ttext.lower() and len(ttext) <= 80
-                is_header = by1 < page_h * 0.15
-                is_footer = by0 > page_h * 0.85
-
-                if is_caption:
-                    label = DocItemLabel.CAPTION
-                elif is_header:
-                    label = DocItemLabel.PAGE_HEADER
-                elif is_footer:
-                    label = DocItemLabel.PAGE_FOOTER
-                else:
-                    label = DocItemLabel.PARAGRAPH
-
-                prov = ProvenanceItem(
-                    page_no=pno,
-                    bbox=BoundingBox(
-                        l=round(bx0, 1), t=round(by0, 1),
-                        r=round(bx1, 1), b=round(by1, 1),
-                        coord_origin=CoordOrigin.TOPLEFT,
-                    ),
-                    charspan=(0, len(ttext)),
-                )
-
-                doc.add_text(label=label, text=ttext_cleaned_enrich, prov=prov)
-                added_count += 1
-
-                # Сохраняем bbox для enrich-элемента
-                bbox_key = (t_norm, pno)
-                if bbox_key not in bbox_map:
-                    bbox_map[bbox_key] = [round(bx0, 1), round(by0, 1),
-                                          round(bx1, 1), round(by1, 1)]
+            # Сохраняем bbox для enrich-элемента
+            bbox_key = (t_norm, pno)
+            if bbox_key not in bbox_map:
+                bbox_map[bbox_key] = [round(bx0, 1), round(by0, 1),
+                                      round(bx1, 1), round(by1, 1)]
 
     pdf.close()
 
     if added_count:
-        print(f"  Enrich (DoclingDocument): added {added_count} missing items",
+        print(f"  Enrich (DoclingDocument): added {added_count} items"
+              f" (formula_imgs={sum(formula_img_seq.values())})",
               file=sys.stderr, flush=True)
     return doc, bbox_map
 
@@ -456,9 +561,9 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
     # ---- Проставляем image_key из сохранённых картинок ----
     if images_dir:
         _update_image_keys(json_result, images_dir)
-        # Если в JSON нет image-блоков (docling-serve не вернул картинки),
-        # добавляем блоки для всех изображений, извлечённых из PDF.
         _inject_missing_image_blocks(json_result, images_dir, pdf_images)
+        # Извлекаем formula-изображения из PDF по bbox из enrich
+        _extract_and_inject_formula_images(json_result, pdf_path, images_dir, bbox_map)
 
     # Проставляем bbox из карты, собранной во время enrich
     def _match_bbox(pno: int, text: str) -> Optional[list]:

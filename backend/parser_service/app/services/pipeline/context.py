@@ -47,4 +47,5 @@ class ProcessingContext:
     temp_dir: Optional[str] = None
     shutdown_event: Optional[object] = None
     api_version: int = 2
-    quality_code: Optional[str] = None  # <-- поле для кода качества
+    quality_code: Optional[str] = None  # код качества текстового слоя (QualityCheckStep)
+    quality_assessment: Optional[Dict[str, Any]] = None  # результат AssessQualityStep

@@ -43,7 +43,7 @@ PKB_neuroassistant_develop/
 │   ├── registry_service/        #   Реестр документов
 │   ├── converter_validator_service/  #   Конвертер-валидатор
 │   ├── parser_service/          #   Парсер PDF
-│   ├── parser_docling/          #   Парсер Docling
+│   ├── parser_docling/          #   (удалён — парсинг через parser_service)
 │   ├── rag_search_service/      #   RAG Search
 │   ├── rag_builder_service/     #   RAG Builder
 │   ├── rag_search_service_spd/  #   RAG Search (СПД)

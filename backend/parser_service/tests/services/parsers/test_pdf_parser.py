@@ -184,10 +184,11 @@ def test_save_images_from_pdf(tmp_path):
     result = _save_images_from_pdf(pdf_path, images_dir)
 
     assert len(result) >= 1
-    pno, fpath, ext = result[0]
+    pno, fpath, ext, bbox = result[0]
     assert pno == 1  # 1-based page number
     assert fpath.endswith(".png")
     assert ext == ".png"
+    assert len(bbox) == 4
     assert os.path.exists(fpath)
 
 
@@ -224,10 +225,11 @@ def test_save_images_from_pdf_with_uploader(tmp_path):
 
     assert len(result) >= 1
     assert len(calls) >= 1
-    pno, key, ext = result[0]
+    pno, key, ext, bbox = result[0]
     assert pno == 1
     assert key.startswith("minio://images/")
     assert ext == ".png"
+    assert len(bbox) == 4
     # Файлы на диске созданы не должны быть
     assert not os.path.exists(str(tmp_path / "images" / "page_1_1.png"))
 
@@ -247,9 +249,9 @@ def test_inject_missing_image_blocks(tmp_path):
     Path(p3).write_text("fake_png_3")
 
     pdf_images = [
-        (1, p1, ".png"),
-        (1, p2, ".png"),
-        (2, p3, ".png"),
+        (1, p1, ".png", [0, 0, 0, 0]),
+        (1, p2, ".png", [0, 0, 0, 0]),
+        (2, p3, ".png", [0, 0, 0, 0]),
     ]
 
     json_result = {
@@ -291,7 +293,7 @@ def test_inject_missing_image_blocks_no_duplicates(tmp_path):
     p = str(Path(images_dir, "page_1_1.png"))
     Path(p).write_text("fake")
 
-    pdf_images = [(1, p, ".png")]
+    pdf_images = [(1, p, ".png", [0, 0, 0, 0])]
 
     # Блок уже с _temp_path → дубликат не добавляется
     json_result = {
@@ -312,7 +314,7 @@ def test_inject_missing_image_blocks_no_duplicates(tmp_path):
             }
         }
     }
-    _inject_missing_image_blocks(json_result2, "", [(1, "minio://key.png", ".png")])
+    _inject_missing_image_blocks(json_result2, "", [(1, "minio://key.png", ".png", [0, 0, 0, 0])])
     assert len(json_result2["content"]["document"]["block"]) == 1
 
 
@@ -321,8 +323,8 @@ def test_inject_missing_image_blocks_with_uploader():
     from app.services.parsers.docling.docling_mapper import _inject_missing_image_blocks
 
     pdf_images = [
-        (1, "minio://abc123.png", ".png"),
-        (2, "minio://def456.png", ".png"),
+        (1, "minio://abc123.png", ".png", [0, 0, 0, 0]),
+        (2, "minio://def456.png", ".png", [0, 0, 0, 0]),
     ]
 
     json_result = {

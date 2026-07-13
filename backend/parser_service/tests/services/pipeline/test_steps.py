@@ -15,6 +15,7 @@ from app.services.pipeline.steps import (
     ParseStep,
     UploadImagesStep,
     TransformStep,
+    AssessQualityStep,
     SaveJsonToFileStep,
     StoreResultStep,
 )
@@ -254,3 +255,39 @@ async def test_save_json_to_file_step_enabled():
             mock_makedirs.assert_called_once_with("./output", exist_ok=True)
             mock_open.assert_called_once()
             mock_dump.assert_called_once()
+
+
+# ===================== AssessQualityStep =====================
+@pytest.mark.asyncio
+async def test_assess_quality_step_good():
+    ctx = ProcessingContext(task_id=1, draft_id=1, file_key="test.pdf",
+                            final_json={
+                                "document": {
+                                    "pages": [{"page": 1}, {"page": 2}],
+                                    "block": [
+                                        {"type": "paragraph", "page": 1, "content": "Hello"},
+                                        {"type": "heading", "page": 2, "content": "Title"},
+                                    ],
+                                },
+                            },
+                            quality_code="GOOD",
+                            total_pages=2)
+    step = AssessQualityStep()
+    new_ctx = await step.execute(ctx)
+    assert new_ctx.quality_assessment is not None
+    assert new_ctx.quality_assessment["verdict"] == "good"
+    assert new_ctx.quality_assessment["needs_ocr"] is False
+    assert new_ctx.final_json["quality"]["verdict"] == "good"
+
+
+@pytest.mark.asyncio
+async def test_assess_quality_step_needs_ocr():
+    ctx = ProcessingContext(task_id=1, draft_id=1, file_key="test.pdf",
+                            final_json={"document": {"pages": [{"page": 1}], "block": []}},
+                            quality_code="BAD",
+                            total_pages=1)
+    step = AssessQualityStep()
+    new_ctx = await step.execute(ctx)
+    assert new_ctx.quality_assessment is not None
+    assert new_ctx.quality_assessment["verdict"] == "needs_ocr"
+    assert new_ctx.quality_assessment["needs_ocr"] is True

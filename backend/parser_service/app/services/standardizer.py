@@ -69,9 +69,12 @@ class JsonStandardizer(BaseStandardizer):
                     .get("source", {})
                     .get("page_count", 1)
                 )
+                _blocks = standardized_content.get("document", {}).get("block", [])
                 container["metadata"]["has_tables"] = any(
-                    b.get("type") == "table"
-                    for b in standardized_content.get("document", {}).get("block", [])
+                    b.get("type") == "table" for b in _blocks
+                )
+                container["metadata"]["has_formulas"] = any(
+                    b.get("type") == "formula" for b in _blocks
                 )
                 logger.debug("Standardization completed for file %s", file_name)
                 return container
@@ -345,6 +348,7 @@ class JsonStandardizer(BaseStandardizer):
             "metadata": {
                 "total_pages": total_pages,
                 "has_tables": any(b.get("type") == "table" for b in block),
+                "has_formulas": any(b.get("type") == "formula" for b in block),
             },
         }
         return target

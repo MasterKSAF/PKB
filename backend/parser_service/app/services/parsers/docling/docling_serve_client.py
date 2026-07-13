@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
+import fitz
 
 from app.config import settings
 from docling_core.types.doc import DoclingDocument
@@ -67,12 +68,19 @@ def request_docling_document(
         ("do_ocr", str(settings.docling_do_ocr).lower()),
         ("do_table_structure", str(settings.docling_table_structure).lower()),
         ("table_mode", "accurate"),
-        ("do_formula_enrichment", "false"),
+        ("do_formula_enrichment", str(settings.docling_formula_enrichment).lower()),
         ("include_images", "true"),
     ]
-    if max_pages is not None:
-        params.append(("page_range", "1"))
-        params.append(("page_range", str(max_pages)))
+    # Always send page_range — docling-serve defaults to <50 pages if omitted
+    try:
+        pdf_doc = fitz.open(pdf_path)
+        total_pages = pdf_doc.page_count
+        pdf_doc.close()
+    except Exception:
+        total_pages = 9999
+    page_end = total_pages if max_pages is None else min(max_pages, total_pages)
+    params.append(("page_range", "1"))
+    params.append(("page_range", str(page_end)))
 
     t_build = time.time()
     body, boundary = _build_multipart_body(params, pdf_path)

@@ -37,7 +37,7 @@ async def test_pipeline_create_full():
     expected = [
         "DownloadStep", "ValidateStep", "QualityCheckStep", "PagesTotalStep",
         "ParseStep", "UpdateProgressStep", "UploadImagesStep", "TransformStep",
-        "SaveJsonToFileStep", "StoreResultStep"
+        "AssessQualityStep", "SaveJsonToFileStep", "StoreResultStep"
     ]
     assert step_names == expected
 
@@ -55,7 +55,8 @@ async def test_pipeline_create_preview():
     step_names = [s.__class__.__name__ for s in pipeline.steps]
     expected = [
         "DownloadStep", "ValidateStep", "QualityCheckStep", "PagesTotalStep",
-        "TruncatePdfStep", "ParseStep", "TransformStep", "StoreResultStep"
+        "TruncatePdfStep", "ParseStep", "TransformStep", "AssessQualityStep",
+        "StoreResultStep"
     ]
     assert step_names == expected
 
