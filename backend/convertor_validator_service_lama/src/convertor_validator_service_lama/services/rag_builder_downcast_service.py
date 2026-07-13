@@ -19,6 +19,7 @@ from convertor_validator_service_lama.models.rich_document_package import (
 )
 from convertor_validator_service_lama.services.reference_normalizer import (
     document_codes_equal,
+    expand_gost_document_codes_from_values,
 )
 
 
@@ -485,13 +486,21 @@ def _build_references_by_section(
 def _target_doc_codes_from_reference_row(row: dict[str, Any]) -> list[str]:
     raw_codes = row.get("target_document_codes")
     if isinstance(raw_codes, list):
-        codes = [
-            code
-            for code in (_first_str(value) for value in raw_codes)
-            if code is not None
-        ]
+        codes: list[str] = []
+        for value in raw_codes:
+            code = _first_str(value)
+            if code is None:
+                continue
+
+            codes.extend(
+                expand_gost_document_codes_from_values(
+                    row.get("reference_text"),
+                    code,
+                )
+            )
+
         if codes:
-            return codes
+            return _unique_strings(codes)
 
     target_doc_code = _first_str(
         row.get("target_document_code"),
@@ -501,6 +510,13 @@ def _target_doc_codes_from_reference_row(row: dict[str, Any]) -> list[str]:
     )
     if target_doc_code is None:
         return []
+
+    expanded_codes = expand_gost_document_codes_from_values(
+        row.get("reference_text"),
+        target_doc_code,
+    )
+    if expanded_codes:
+        return _unique_strings(expanded_codes)
 
     return [target_doc_code]
 

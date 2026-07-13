@@ -7,11 +7,65 @@ from convertor_validator_service_lama.models.rich_document_package import (
 from convertor_validator_service_lama.services.rag_builder_downcast_service import (
     downcast_rich_package_to_rag_builder,
 )
+from convertor_validator_service_lama.services.reference_normalizer import (
+    expand_gost_document_codes_from_values,
+)
 from gost_20868_fixture_helpers import (
     gost_20868_chunk_container_extract_results,
     load_gost_20868_formula_chunk_container,
 )
 
+
+
+
+
+
+def _expected_rag_reference_target_codes(section: dict[str, object]) -> list[str]:
+    direct_codes: list[str] = []
+
+    for reference in section.get("references", []):
+        if not isinstance(reference, dict):
+            continue
+
+        target_doc_code = reference.get("target_doc_code")
+        if isinstance(target_doc_code, str):
+            direct_codes.append(target_doc_code)
+
+    range_codes = _expanded_codes_from_reference_endpoints(direct_codes)
+    if range_codes is not None:
+        return range_codes
+
+    result: list[str] = []
+    for target_doc_code in direct_codes:
+        expanded_codes = expand_gost_document_codes_from_values(
+            None,
+            target_doc_code,
+        )
+
+        if expanded_codes:
+            result.extend(expanded_codes)
+        else:
+            result.append(target_doc_code)
+
+    return result
+
+
+def _expanded_codes_from_reference_endpoints(
+    direct_codes: list[str],
+) -> list[str] | None:
+    if len(direct_codes) != 2:
+        return None
+
+    range_text = f"{direct_codes[0]} - {direct_codes[1]}"
+    expanded_codes = expand_gost_document_codes_from_values(
+        range_text,
+        range_text,
+    )
+
+    if len(expanded_codes) > len(direct_codes):
+        return expanded_codes
+
+    return None
 
 def _artifact(
     artifact_key: str,
@@ -295,10 +349,7 @@ def test_downcast_rich_package_maps_gost_20868_fixture_layers() -> None:
         for section in payload.sections
     }
     expected_references_by_clause = {
-        section["clause"]: [
-            reference["target_doc_code"]
-            for reference in section.get("references", [])
-        ]
+        section["clause"]: _expected_rag_reference_target_codes(section)
         for section in data["sections"]
         if section.get("references")
     }
@@ -307,7 +358,7 @@ def test_downcast_rich_package_maps_gost_20868_fixture_layers() -> None:
     assert sum(
         len(target_doc_codes)
         for target_doc_codes in expected_references_by_clause.values()
-    ) == 6
+    ) == 10
     assert expected_references_by_clause["6.1"] == ["table_1"]
 
     for clause, expected_target_doc_codes in expected_references_by_clause.items():
@@ -508,3 +559,73 @@ def test_downcast_filters_self_reference_from_section_references() -> None:
         reference.target_doc_code
         for reference in section.references
     ] == ["\u0413\u041e\u0421\u0422 20862-81"]
+
+
+def test_downcast_expands_reference_ranges_for_rag_section_references() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST 20868-81",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+            _artifact(
+                "references",
+                {
+                    "references": [
+                        {
+                            "section_id": "2",
+                            "reference_text": "\u0413\u041e\u0421\u0422 20862-81 \u2014 \u0413\u041e\u0421\u0422 20867-81",
+                            "target_document_code": "\u0413\u041e\u0421\u0422 20862-81 \u2014 \u0413\u041e\u0421\u0422 20867-81",
+                            "reference_type": "standard_range",
+                        }
+                    ]
+                },
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/2",
+                    clause="2",
+                    title="2. Normative references",
+                    path="main_document/2",
+                    page_start=1,
+                    page_end=1,
+                    content={"text": "Clause 2"},
+                )
+            ]
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    section = result.payload.sections[0]
+
+    assert [
+        reference.target_doc_code
+        for reference in section.references
+    ] == [
+        "\u0413\u041e\u0421\u0422 20862-81",
+        "\u0413\u041e\u0421\u0422 20863-81",
+        "\u0413\u041e\u0421\u0422 20864-81",
+        "\u0413\u041e\u0421\u0422 20865-81",
+        "\u0413\u041e\u0421\u0422 20866-81",
+        "\u0413\u041e\u0421\u0422 20867-81",
+    ]
+    assert [
+        reference.type
+        for reference in section.references
+    ] == ["standard_range"] * 6
+    assert [
+        reference.context
+        for reference in section.references
+    ] == ["\u0413\u041e\u0421\u0422 20862-81 \u2014 \u0413\u041e\u0421\u0422 20867-81"] * 6
