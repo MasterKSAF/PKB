@@ -981,3 +981,101 @@ def test_assembler_filters_self_reference_from_document_structure() -> None:
         "external-reference"
     ]
     assert references[0].target_document_code == "\u0413\u041e\u0421\u0422 20862-81"
+
+
+def test_assembler_populates_container_layers_from_parse_items() -> None:
+    parse_result = ParseJobResult.model_construct(
+        job_id="parse-job-1",
+        status="COMPLETED",
+        markdown="# Test document",
+        items=[
+            {
+                "type": "table",
+                "md": "| A | B |",
+                "html": "<table><tr><td>A</td><td>B</td></tr></table>",
+                "csv": "A,B",
+                "rows": [{"A": "1", "B": "2"}],
+                "page_number": 2,
+                "bbox": [
+                    {
+                        "x": 10,
+                        "y": 20,
+                        "w": 30,
+                        "h": 40,
+                        "label": "text",
+                    }
+                ],
+            },
+            {
+                "type": "text",
+                "md": "Engineering drawing",
+                "value": "Engineering drawing",
+                "page_number": 1,
+                "bbox": [
+                    {
+                        "x": 11,
+                        "y": 21,
+                        "w": 31,
+                        "h": 41,
+                        "label": "image",
+                    }
+                ],
+            },
+            {
+                "type": "text",
+                "md": "Tolerance is $\\pm \\frac{IT14}{2}$ and $\\pm \\frac{t_2}{2}$.",
+                "value": "Tolerance is $\\pm \\frac{IT14}{2}$ and $\\pm \\frac{t_2}{2}$.",
+                "page_number": 1,
+                "bbox": [
+                    {
+                        "x": 12,
+                        "y": 22,
+                        "w": 32,
+                        "h": 42,
+                        "label": "text",
+                    }
+                ],
+            },
+        ],
+        metadata={"title": "Test document"},
+        job_metadata={},
+        raw_response={"job_id": "parse-job-1"},
+    )
+
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        parse_result=parse_result,
+        extract_results={},
+    )
+
+    result = assemble_rich_document_package(request)
+    structure = result.package.document_structure
+
+    assert len(structure.tables) == 1
+    assert structure.tables[0].table_id == "parse-table-1"
+    assert structure.tables[0].page == 2
+    assert structure.tables[0].file_page_number == 2
+    assert structure.tables[0].file_page_index == 1
+    assert structure.tables[0].bbox == [10.0, 20.0, 30.0, 40.0]
+    assert structure.tables[0].rows == [{"A": "1", "B": "2"}]
+
+    assert len(structure.images) == 1
+    assert structure.images[0].image_id == "parse-image-2"
+    assert structure.images[0].alt_text == "Engineering drawing"
+    assert structure.images[0].page == 1
+    assert structure.images[0].file_page_number == 1
+    assert structure.images[0].file_page_index == 0
+    assert structure.images[0].bbox == [11.0, 21.0, 31.0, 41.0]
+
+    assert len(structure.formulas) == 2
+    assert [
+        formula.latex
+        for formula in structure.formulas
+    ] == [
+        "\\pm \\frac{IT14}{2}",
+        "\\pm \\frac{t_2}{2}",
+    ]
+    assert structure.formulas[0].formula_id == "parse-formula-3-1"
+    assert structure.formulas[0].file_page_number == 1
+    assert structure.formulas[0].file_page_index == 0

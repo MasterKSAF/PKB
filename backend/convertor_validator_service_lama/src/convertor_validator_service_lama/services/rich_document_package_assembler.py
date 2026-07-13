@@ -3,6 +3,7 @@ from convertor_validator_service_lama.services.reference_normalizer import (
     expand_gost_document_codes,
     expand_gost_document_codes_from_values,
 )
+import re
 from typing import Any
 
 from pydantic import ValidationError
@@ -235,9 +236,18 @@ def build_document_structure_from_artifacts(
             artifacts.get("nested_documents")
         ),
         sections=sections,
-        tables=_build_tables(artifacts.get("tables")),
-        images=_build_images_from_artifact(artifacts.get("images")),
-        formulas=_build_formulas_from_artifact(artifacts.get("formulas")),
+        tables=(
+            _build_tables(artifacts.get("tables"))
+            or _build_tables_from_parse_items(parse_items or [])
+        ),
+        images=(
+            _build_images_from_artifact(artifacts.get("images"))
+            or _build_images_from_parse_items(parse_items or [])
+        ),
+        formulas=(
+            _build_formulas_from_artifact(artifacts.get("formulas"))
+            or _build_formulas_from_parse_items(parse_items or [])
+        ),
         notes=_build_notes(artifacts.get("notes")),
         references=_build_references(
             artifacts.get("references"),
@@ -492,6 +502,214 @@ def _build_parse_item_structure(
         page_count=page_count,
     )
 
+
+
+
+def _build_tables_from_parse_items(
+    parse_items: list[dict[str, Any]],
+) -> list[RichDocumentTable]:
+    tables: list[RichDocumentTable] = []
+
+    for index, item in enumerate(parse_items, start=1):
+        if not isinstance(item, dict):
+            continue
+
+        if _first_str(item.get("type"), item.get("item_type"), item.get("kind")) != "table":
+            continue
+
+        page_number = _parse_item_file_page_number(item)
+
+        tables.append(
+            RichDocumentTable(
+                table_id=f"parse-table-{index}",
+                caption=_first_str(item.get("caption"), item.get("title")),
+                page=page_number,
+                file_page_number=page_number,
+                file_page_index=_file_page_index_from_number(page_number),
+                printed_page_label=_first_str(item.get("printed_page_label")),
+                bbox=_bbox_from_parse_item(item),
+                rows=_list_of_dicts(item.get("rows")),
+                raw={
+                    "source": "llama_parse_item",
+                    "item_index": index - 1,
+                    "md": item.get("md"),
+                    "html": item.get("html"),
+                    "csv": item.get("csv"),
+                    "rows": item.get("rows"),
+                    "parse_item": item,
+                },
+            )
+        )
+
+    return tables
+
+
+def _build_images_from_parse_items(
+    parse_items: list[dict[str, Any]],
+) -> list[RichDocumentImage]:
+    images: list[RichDocumentImage] = []
+
+    for index, item in enumerate(parse_items, start=1):
+        if not isinstance(item, dict):
+            continue
+
+        if not _parse_item_has_bbox_label(item, "image"):
+            continue
+
+        page_number = _parse_item_file_page_number(item)
+
+        images.append(
+            RichDocumentImage(
+                image_id=f"parse-image-{index}",
+                caption=_first_str(item.get("caption"), item.get("title")),
+                alt_text=_first_str(item.get("value"), item.get("md")),
+                page=page_number,
+                file_page_number=page_number,
+                file_page_index=_file_page_index_from_number(page_number),
+                printed_page_label=_first_str(item.get("printed_page_label")),
+                bbox=_bbox_from_parse_item(item, preferred_label="image"),
+                raw={
+                    "source": "llama_parse_item",
+                    "item_index": index - 1,
+                    "parse_item": item,
+                },
+            )
+        )
+
+    return images
+
+
+def _build_formulas_from_parse_items(
+    parse_items: list[dict[str, Any]],
+) -> list[RichDocumentFormula]:
+    formulas: list[RichDocumentFormula] = []
+
+    for index, item in enumerate(parse_items, start=1):
+        if not isinstance(item, dict):
+            continue
+
+        text = _first_str(item.get("md"), item.get("value"))
+        if text is None:
+            continue
+
+        latex_fragments = _latex_fragments_from_text(text)
+        if not latex_fragments:
+            continue
+
+        page_number = _parse_item_file_page_number(item)
+
+        for formula_index, latex in enumerate(latex_fragments, start=1):
+            formulas.append(
+                RichDocumentFormula(
+                    formula_id=f"parse-formula-{index}-{formula_index}",
+                    expression=latex,
+                    latex=latex,
+                    page=page_number,
+                    file_page_number=page_number,
+                    file_page_index=_file_page_index_from_number(page_number),
+                    printed_page_label=_first_str(item.get("printed_page_label")),
+                    bbox=_bbox_from_parse_item(item),
+                    raw={
+                        "source": "llama_parse_item",
+                        "item_index": index - 1,
+                        "formula_index": formula_index - 1,
+                        "text": text,
+                        "parse_item": item,
+                    },
+                )
+            )
+
+    return formulas
+
+
+def _latex_fragments_from_text(value: str) -> list[str]:
+    fragments = [
+        fragment.strip()
+        for fragment in re.findall(r"\$([^$]+)\$", value)
+        if fragment.strip()
+    ]
+
+    if fragments:
+        return fragments
+
+    if "\\frac" in value or "\\pm" in value or "\\geq" in value:
+        return [value.strip()]
+
+    return []
+
+
+def _parse_item_file_page_number(item: dict[str, Any]) -> int | None:
+    return _first_int(
+        item.get("file_page_number"),
+        item.get("page_number"),
+        item.get("page"),
+    )
+
+
+def _file_page_index_from_number(file_page_number: int | None) -> int | None:
+    if file_page_number is None:
+        return None
+
+    if file_page_number < 1:
+        return None
+
+    return file_page_number - 1
+
+
+def _parse_item_has_bbox_label(item: dict[str, Any], label: str) -> bool:
+    bbox = item.get("bbox")
+    if not isinstance(bbox, list):
+        return False
+
+    for fragment in bbox:
+        if not isinstance(fragment, dict):
+            continue
+
+        if _first_str(fragment.get("label")) == label:
+            return True
+
+    return False
+
+
+def _bbox_from_parse_item(
+    item: dict[str, Any],
+    *,
+    preferred_label: str | None = None,
+) -> list[float] | None:
+    bbox = item.get("bbox")
+    if not isinstance(bbox, list):
+        return None
+
+    candidates = [
+        fragment
+        for fragment in bbox
+        if isinstance(fragment, dict)
+    ]
+
+    if preferred_label is not None:
+        preferred = [
+            fragment
+            for fragment in candidates
+            if _first_str(fragment.get("label")) == preferred_label
+        ]
+        if preferred:
+            candidates = preferred
+
+    if not candidates:
+        return None
+
+    first = candidates[0]
+    values = [
+        first.get("x"),
+        first.get("y"),
+        first.get("w"),
+        first.get("h"),
+    ]
+
+    if not all(isinstance(value, int | float) for value in values):
+        return None
+
+    return [float(value) for value in values]
 
 def _parse_page_count(
     metadata: dict[str, Any],
