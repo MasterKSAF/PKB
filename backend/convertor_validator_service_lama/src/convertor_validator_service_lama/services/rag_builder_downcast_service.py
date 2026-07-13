@@ -30,7 +30,10 @@ def downcast_rich_package_to_rag_builder(
 
     artifacts_by_name = _artifacts_by_name(package.artifacts)
 
-    metadata_content = _artifact_content_as_dict(artifacts_by_name.get("metadata"))
+    metadata_content = _document_metadata_content(
+        _artifact_content_as_dict(artifacts_by_name.get("title_metadata")),
+        _artifact_content_as_dict(artifacts_by_name.get("metadata")),
+    )
     raw_parse_content = _artifact_content_as_dict(artifacts_by_name.get("parse_raw_response"))
 
     document = _build_document_payload(
@@ -144,6 +147,36 @@ def _artifact_content_as_list(
     return []
 
 
+
+def _document_metadata_content(*contents: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+
+    for content in contents:
+        if not isinstance(content, dict):
+            continue
+
+        candidates: list[dict[str, Any]] = []
+        nested_title_metadata = content.get("title_metadata")
+        if isinstance(nested_title_metadata, dict):
+            candidates.append(nested_title_metadata)
+
+        candidates.append(content)
+
+        for candidate in candidates:
+            for key, value in candidate.items():
+                if key == "title_metadata":
+                    continue
+
+                if value in (None, "", [], {}):
+                    continue
+
+                existing = result.get(key)
+                if existing in (None, "", [], {}):
+                    result[key] = value
+
+    return result
+
+
 def _build_document_payload(
     package: RichDocumentPackage,
     metadata_content: dict[str, Any],
@@ -232,6 +265,8 @@ def _build_sections_payload(
         )
         return []
 
+    known_section_keys = _known_section_reference_lookup_keys(rows)
+
     sections: list[RagBuilderSectionPayload] = []
     for index, source_row in enumerate(rows, start=1):
         row = _row_as_dict(source_row)
@@ -259,6 +294,7 @@ def _build_sections_payload(
                     row,
                     section_id=section_id,
                     references_by_section=references_by_section,
+                    known_section_keys=known_section_keys,
                 ),
                 raw=row,
             )
@@ -276,6 +312,7 @@ def _references_for_section(
     *,
     section_id: str,
     references_by_section: dict[str, list[RagBuilderReferencePayload]],
+    known_section_keys: set[str],
 ) -> list[RagBuilderReferencePayload]:
     exact_references = _references_from_keys(
         _section_reference_exact_lookup_keys(row, section_id=section_id),
@@ -283,12 +320,22 @@ def _references_for_section(
     )
 
     if exact_references:
-        return exact_references
+        references = exact_references
+    else:
+        references = _references_from_keys(
+            _section_reference_fallback_lookup_keys(row, section_id=section_id),
+            references_by_section=references_by_section,
+        )
 
-    return _references_from_keys(
-        _section_reference_fallback_lookup_keys(row, section_id=section_id),
-        references_by_section=references_by_section,
+    references.extend(
+        _nearest_child_references_for_section_keys(
+            _section_reference_child_parent_lookup_keys(row, section_id=section_id),
+            references_by_section=references_by_section,
+            known_section_keys=known_section_keys,
+        )
     )
+
+    return _deduplicate_references(references)
 
 
 def _references_from_keys(
@@ -297,20 +344,111 @@ def _references_from_keys(
     references_by_section: dict[str, list[RagBuilderReferencePayload]],
 ) -> list[RagBuilderReferencePayload]:
     result: list[RagBuilderReferencePayload] = []
-    seen: set[tuple[str | None, str | None, str | None]] = set()
 
     for key in keys:
-        for reference in references_by_section.get(key, []):
-            identity = (
-                reference.target_doc_code,
-                reference.type,
-                reference.context,
-            )
-            if identity in seen:
-                continue
+        result.extend(references_by_section.get(key, []))
 
-            result.append(reference)
-            seen.add(identity)
+    return _deduplicate_references(result)
+
+
+def _deduplicate_references(
+    references: list[RagBuilderReferencePayload],
+) -> list[RagBuilderReferencePayload]:
+    result: list[RagBuilderReferencePayload] = []
+    seen: set[tuple[str | None, str | None, str | None, str | None]] = set()
+
+    for reference in references:
+        raw = reference.raw if isinstance(reference.raw, dict) else {}
+        identity = (
+            _first_str(raw.get("section_id"), raw.get("source_section_id")),
+            reference.target_doc_code,
+            reference.type,
+            reference.context,
+        )
+        if identity in seen:
+            continue
+
+        result.append(reference)
+        seen.add(identity)
+
+    return result
+
+
+def _nearest_child_references_for_section_keys(
+    keys: list[str],
+    *,
+    references_by_section: dict[str, list[RagBuilderReferencePayload]],
+    known_section_keys: set[str],
+) -> list[RagBuilderReferencePayload]:
+    key_set = set(keys)
+    result: list[RagBuilderReferencePayload] = []
+
+    for reference_section_key, references in references_by_section.items():
+        if reference_section_key in known_section_keys:
+            continue
+
+        parent_keys = _parent_reference_lookup_keys(reference_section_key)
+        matching_parent_keys = [
+            parent_key
+            for parent_key in parent_keys
+            if parent_key in key_set and "." in parent_key
+        ]
+        if matching_parent_keys:
+            result.extend(references)
+
+    return _deduplicate_references(result)
+
+
+def _known_section_reference_lookup_keys(rows: list[Any]) -> set[str]:
+    result: set[str] = set()
+
+    for index, source_row in enumerate(rows, start=1):
+        row = _row_as_dict(source_row)
+        if not row:
+            continue
+
+        section_id = _first_str(
+            row.get("section_id"),
+            row.get("id"),
+            row.get("uid"),
+            row.get("number"),
+            fallback=f"section-{index}",
+        )
+        if section_id is None:
+            continue
+
+        result.update(_section_reference_exact_lookup_keys(row, section_id=section_id))
+        result.update(_section_reference_fallback_lookup_keys(row, section_id=section_id))
+
+    return result
+
+
+def _parent_reference_lookup_keys(value: Any) -> list[str]:
+    key = _first_str(value)
+    if key is None:
+        return []
+
+    result: list[str] = []
+
+    if "/" in key:
+        prefix, suffix = key.rsplit("/", 1)
+        for parent_suffix in _clause_parent_lookup_keys(suffix):
+            result.append(f"{prefix}/{parent_suffix}")
+
+    result.extend(_clause_parent_lookup_keys(key))
+
+    return _unique_strings(result)
+
+
+def _clause_parent_lookup_keys(value: str) -> list[str]:
+    parts = [part.strip() for part in value.strip().split(".")]
+    if len(parts) <= 1 or any(not part for part in parts):
+        return []
+
+    result: list[str] = []
+    while len(parts) > 1:
+        parts = parts[:-1]
+        result.append(".".join(parts))
 
     return result
 
@@ -350,17 +488,30 @@ def _section_reference_fallback_lookup_keys(
         [
             row.get("clause"),
             row.get("number"),
-            row.get("path"),
-            row.get("section_path"),
             raw.get("clause"),
             raw.get("number"),
-            raw.get("namespaced_path"),
-            raw.get("path"),
-            raw.get("section_path"),
-            section_id,
         ]
     )
 
+
+def _section_reference_child_parent_lookup_keys(
+    row: dict[str, Any],
+    *,
+    section_id: str,
+) -> list[str]:
+    raw = row.get("raw")
+    if not isinstance(raw, dict):
+        raw = {}
+
+    clause = _first_str(row.get("clause"), raw.get("clause"))
+    if clause is None:
+        return []
+
+    local_clause = clause.rsplit("::", 1)[-1]
+    if "." not in local_clause:
+        return []
+
+    return [clause]
 
 
 def _rich_document_structure_container_section_rows(
