@@ -47,6 +47,7 @@ def downcast_rich_package_to_rag_builder(
     sections = _build_sections_payload(
         artifact=artifacts_by_name.get("sections"),
         structure_sections=_rich_document_structure_sections(package),
+        structure_container_rows=_rich_document_structure_container_section_rows(package),
         references_by_section=references_by_section,
         warnings=warnings,
     )
@@ -202,6 +203,7 @@ def _build_document_payload(
 def _build_sections_payload(
     artifact: RichDocumentPackageArtifact | None,
     structure_sections: list[Any] | None,
+    structure_container_rows: list[dict[str, Any]] | None,
     references_by_section: dict[str, list[RagBuilderReferencePayload]],
     warnings: list[RagBuilderDowncastWarning],
 ) -> list[RagBuilderSectionPayload]:
@@ -212,6 +214,10 @@ def _build_sections_payload(
 
     if not rows:
         rows = _section_rows_from_rich_structure(structure_sections)
+
+    container_rows = structure_container_rows or []
+    if container_rows:
+        rows = [*rows, *container_rows]
 
     if not rows:
         warnings.append(
@@ -354,6 +360,176 @@ def _section_reference_fallback_lookup_keys(
             section_id,
         ]
     )
+
+
+
+def _rich_document_structure_container_section_rows(
+    package: RichDocumentPackage,
+) -> list[dict[str, Any]]:
+    structure = getattr(package, "document_structure", None)
+    if structure is None:
+        return []
+
+    rows: list[dict[str, Any]] = []
+
+    rows.extend(
+        _table_section_rows_from_rich_structure(
+            getattr(structure, "tables", None)
+        )
+    )
+    rows.extend(
+        _image_section_rows_from_rich_structure(
+            getattr(structure, "images", None)
+        )
+    )
+    rows.extend(
+        _formula_section_rows_from_rich_structure(
+            getattr(structure, "formulas", None)
+        )
+    )
+
+    return rows
+
+
+def _table_section_rows_from_rich_structure(value: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for index, table in enumerate(value or [], start=1):
+        row = _row_as_dict(table)
+        if not row:
+            continue
+
+        table_id = _first_str(
+            row.get("table_id"),
+            row.get("id"),
+            row.get("uid"),
+            fallback=f"table-{index}",
+        )
+        page = _first_int(row.get("file_page_number"), row.get("page"))
+        raw = _row_as_dict(row.get("raw"))
+        content = {
+            "text": _first_str(
+                row.get("caption"),
+                raw.get("md"),
+                raw.get("csv"),
+                raw.get("html"),
+                fallback=table_id,
+            ),
+            "caption": _first_str(row.get("caption")),
+            "markdown": _first_str(raw.get("md")),
+            "html": _first_str(raw.get("html")),
+            "csv": _first_str(raw.get("csv")),
+            "rows": row.get("rows") or raw.get("rows") or [],
+        }
+
+        rows.append(
+            {
+                "section_id": f"container/table/{table_id}",
+                "clause": table_id,
+                "title": _first_str(row.get("caption"), fallback=table_id),
+                "level": 1,
+                "page": page,
+                "path": f"containers/tables/{table_id}",
+                "type": "table",
+                "bbox": row.get("bbox"),
+                "content": content,
+                "source_container_type": "table",
+                "source_container_id": table_id,
+                "source_container": row,
+            }
+        )
+
+    return rows
+
+
+def _image_section_rows_from_rich_structure(value: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for index, image in enumerate(value or [], start=1):
+        row = _row_as_dict(image)
+        if not row:
+            continue
+
+        image_id = _first_str(
+            row.get("image_id"),
+            row.get("figure_id"),
+            row.get("id"),
+            row.get("uid"),
+            fallback=f"image-{index}",
+        )
+        page = _first_int(row.get("file_page_number"), row.get("page"))
+        content_text = _first_str(
+            row.get("caption"),
+            row.get("alt_text"),
+            fallback=image_id,
+        )
+
+        rows.append(
+            {
+                "section_id": f"container/image/{image_id}",
+                "clause": image_id,
+                "title": content_text,
+                "level": 1,
+                "page": page,
+                "path": f"containers/images/{image_id}",
+                "type": "image",
+                "bbox": row.get("bbox"),
+                "content": {
+                    "text": content_text,
+                    "caption": _first_str(row.get("caption")),
+                    "alt_text": _first_str(row.get("alt_text")),
+                    "storage_uri": _first_str(row.get("storage_uri")),
+                },
+                "source_container_type": "image",
+                "source_container_id": image_id,
+                "source_container": row,
+            }
+        )
+
+    return rows
+
+
+def _formula_section_rows_from_rich_structure(value: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for index, formula in enumerate(value or [], start=1):
+        row = _row_as_dict(formula)
+        if not row:
+            continue
+
+        formula_id = _first_str(
+            row.get("formula_id"),
+            row.get("id"),
+            row.get("uid"),
+            fallback=f"formula-{index}",
+        )
+        page = _first_int(row.get("file_page_number"), row.get("page"))
+        latex = _first_str(row.get("latex"))
+        expression = _first_str(row.get("expression"), latex, fallback=formula_id)
+
+        rows.append(
+            {
+                "section_id": f"container/formula/{formula_id}",
+                "clause": formula_id,
+                "title": expression,
+                "level": 1,
+                "page": page,
+                "path": f"containers/formulas/{formula_id}",
+                "type": "formula",
+                "bbox": row.get("bbox"),
+                "content": {
+                    "text": expression,
+                    "latex": latex,
+                    "expression": expression,
+                    "parameters": row.get("parameters") or [],
+                },
+                "source_container_type": "formula",
+                "source_container_id": formula_id,
+                "source_container": row,
+            }
+        )
+
+    return rows
 
 def _rich_document_structure_sections(package: RichDocumentPackage) -> list[Any]:
     structure = getattr(package, "document_structure", None)

@@ -1,8 +1,14 @@
 from convertor_validator_service_lama.models.rich_document_package import (
+    RichDocumentFormula,
+    RichDocumentImage,
     RichDocumentPackage,
     RichDocumentPackageArtifact,
     RichDocumentSection,
     RichDocumentStructure,
+    RichDocumentTable,
+)
+from convertor_validator_service_lama.services.rag_builder_buildrequest_adapter import (
+    build_rag_builder_buildrequest_section_shape,
 )
 from convertor_validator_service_lama.services.rag_builder_downcast_service import (
     downcast_rich_package_to_rag_builder,
@@ -629,3 +635,109 @@ def test_downcast_expands_reference_ranges_for_rag_section_references() -> None:
         reference.context
         for reference in section.references
     ] == ["\u0413\u041e\u0421\u0422 20862-81 \u2014 \u0413\u041e\u0421\u0422 20867-81"] * 6
+
+
+def test_downcast_adds_rich_containers_as_rag_sections() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/1",
+                    clause="1",
+                    title="1. Scope",
+                    level=1,
+                    path="main_document/1",
+                    page_start=1,
+                    page_end=1,
+                    content={"text": "Scope text"},
+                )
+            ],
+            tables=[
+                RichDocumentTable(
+                    table_id="parse-table-24",
+                    caption="Table caption",
+                    page=2,
+                    file_page_number=2,
+                    file_page_index=1,
+                    bbox=[1.0, 2.0, 3.0, 4.0],
+                    rows=[{"A": "1"}],
+                    raw={
+                        "md": "| A |",
+                        "html": "<table></table>",
+                        "csv": "A",
+                    },
+                )
+            ],
+            images=[
+                RichDocumentImage(
+                    image_id="parse-image-17",
+                    alt_text="Drawing alt text",
+                    page=1,
+                    file_page_number=1,
+                    file_page_index=0,
+                    bbox=[5.0, 6.0, 7.0, 8.0],
+                )
+            ],
+            formulas=[
+                RichDocumentFormula(
+                    formula_id="parse-formula-14-1",
+                    expression="\\pm \\frac{IT14}{2}",
+                    latex="\\pm \\frac{IT14}{2}",
+                    page=1,
+                    file_page_number=1,
+                    file_page_index=0,
+                    bbox=[9.0, 10.0, 11.0, 12.0],
+                )
+            ],
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+    payload = result.payload.model_dump(mode="json")
+
+    assert len(payload["sections"]) == 4
+
+    buildrequest_payload = build_rag_builder_buildrequest_section_shape(payload)
+    sections = buildrequest_payload["sections"]
+
+    assert [
+        section["type"]
+        for section in sections
+    ] == ["text", "table", "image", "formula"]
+
+    table_section = sections[1]
+    assert table_section["clause"] == "parse-table-24"
+    assert table_section["page"] == 2
+    assert table_section["bbox"] == [1.0, 2.0, 3.0, 4.0]
+    assert table_section["content"]["markdown"] == "| A |"
+    assert table_section["content"]["html"] == "<table></table>"
+    assert table_section["content"]["csv"] == "A"
+    assert table_section["content"]["rows"] == [{"A": "1"}]
+
+    image_section = sections[2]
+    assert image_section["clause"] == "parse-image-17"
+    assert image_section["page"] == 1
+    assert image_section["bbox"] == [5.0, 6.0, 7.0, 8.0]
+    assert image_section["content"]["alt_text"] == "Drawing alt text"
+
+    formula_section = sections[3]
+    assert formula_section["clause"] == "parse-formula-14-1"
+    assert formula_section["page"] == 1
+    assert formula_section["bbox"] == [9.0, 10.0, 11.0, 12.0]
+    assert formula_section["content"]["latex"] == "\\pm \\frac{IT14}{2}"
+    assert result.warnings == []
