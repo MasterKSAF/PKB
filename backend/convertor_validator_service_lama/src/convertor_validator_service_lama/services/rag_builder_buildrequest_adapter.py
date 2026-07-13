@@ -109,7 +109,20 @@ def _build_rag_builder_section(
 
     title = _first_present_str(section.get("title"), raw.get("title"))
     text = _first_present_str(section.get("text"), raw.get("text"))
-    content = _section_content(section=section, raw=raw, text=text, title=title)
+    section_type = _normalize_section_type(
+        _first_present_str(
+            raw.get("type"),
+            section.get("type"),
+            "text",
+        )
+    )
+    content = _section_content(
+        section=section,
+        raw=raw,
+        text=text,
+        title=title,
+        section_type=section_type,
+    )
 
     return {
         "section_id": section_id,
@@ -134,13 +147,7 @@ def _build_rag_builder_section(
             section.get("page_start"),
         ),
         "bbox": _first_present_list(raw.get("bbox"), section.get("bbox")),
-        "type": _normalize_section_type(
-            _first_present_str(
-                raw.get("type"),
-                section.get("type"),
-                "text",
-            )
-        ),
+        "type": section_type,
         "content": content,
         "references": section.get("references", []),
     }
@@ -152,14 +159,25 @@ def _section_content(
     raw: dict[str, Any],
     text: str,
     title: str,
+    section_type: str,
 ) -> dict[str, Any]:
     content = section.get("content")
     if isinstance(content, dict):
-        return content
+        return _ensure_indexable_text_content(
+            content,
+            section_type=section_type,
+            text=text,
+            title=title,
+        )
 
     raw_content = raw.get("content")
     if isinstance(raw_content, dict):
-        return raw_content
+        return _ensure_indexable_text_content(
+            raw_content,
+            section_type=section_type,
+            text=text,
+            title=title,
+        )
 
     if text:
         return {"text": text}
@@ -168,6 +186,39 @@ def _section_content(
         return {"text": title}
 
     return {}
+
+
+def _ensure_indexable_text_content(
+    content: dict[str, Any],
+    *,
+    section_type: str,
+    text: str,
+    title: str,
+) -> dict[str, Any]:
+    if section_type not in {"text", "textBlock", "headerFooter"}:
+        return content
+
+    existing_text = _first_present_str(
+        content.get("text"),
+        content.get("content_text"),
+        content.get("markdown"),
+        content.get("body"),
+    )
+    if existing_text:
+        if _first_present_str(content.get("text")):
+            return content
+
+        result = dict(content)
+        result["text"] = existing_text
+        return result
+
+    fallback_text = _first_present_str(text, title)
+    if not fallback_text:
+        return content
+
+    result = dict(content)
+    result["text"] = fallback_text
+    return result
 
 
 def _normalize_section_type(value: str) -> str:

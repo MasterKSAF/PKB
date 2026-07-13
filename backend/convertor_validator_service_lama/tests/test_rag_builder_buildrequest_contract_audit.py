@@ -257,3 +257,61 @@ def test_buildrequest_payload_defaults_missing_pkb_code_to_minus_one() -> None:
 
     assert buildrequest_payload["document"]["pkb_code"] == "-1"
     assert build_rag_builder_buildrequest_gap_report(buildrequest_payload) == []
+
+
+def test_buildrequest_section_shape_adds_text_from_title_when_content_has_only_diagnostics() -> None:
+    payload = {
+        "metadata": {
+            "schema": "schema_registry_for_rag_v2",
+            "document_id": 420000,
+        },
+        "document": {
+            "id": 420000,
+            "pkb_code": "-1",
+            "doc_code": "GOST-TEST",
+            "title": "Test document",
+        },
+        "sections": [
+            {
+                "section_id": "main_document/1",
+                "title": "Clause 1 full normative text",
+                "level": 1,
+                "path": "1",
+                "page_start": 1,
+                "content": {
+                    "confidence": 0.98,
+                    "content_item_indices": [8],
+                    "source_spans": [
+                        {
+                            "page": 1,
+                            "file_page_number": 1,
+                            "file_page_index": 0,
+                            "item_index": 8,
+                            "text_preview": "1. Clause 1 full normative text",
+                        }
+                    ],
+                    "reason": "Clause diagnostic metadata",
+                    "issues": [],
+                },
+                "references": [],
+                "raw": {
+                    "section_id": 1,
+                    "clause": "1",
+                    "page": 1,
+                    "type": "text",
+                },
+            }
+        ],
+    }
+
+    buildrequest_payload = build_rag_builder_buildrequest_section_shape(payload)
+
+    section = buildrequest_payload["sections"][0]
+    assert section["section_id"] == 1
+    assert section["type"] == "text"
+    assert section["content"]["text"] == "Clause 1 full normative text"
+    assert section["content"]["confidence"] == 0.98
+    assert section["content"]["source_spans"][0]["item_index"] == 8
+    assert section["content"]["reason"] == "Clause diagnostic metadata"
+
+    assert build_rag_builder_buildrequest_gap_report(buildrequest_payload) == []
