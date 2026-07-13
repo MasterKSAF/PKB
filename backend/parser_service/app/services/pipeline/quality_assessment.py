@@ -35,19 +35,30 @@ def assess_document_quality(
           - pages_scanned: int
           - pages_with_content: int
     """
-    document = final_json.get("document", {}) if isinstance(final_json, dict) else {}
-    blocks = document.get("block", []) if isinstance(document, dict) else []
-    pages = document.get("pages", []) if isinstance(document, dict) else []
+    if not isinstance(final_json, dict):
+        final_json = {}
+
+    # ── Извлекаем document и quality с учётом формата ────────────────────
+    # Приоритет: 1) верхний уровень, 2) content.document (docling-формат)
+    doc = final_json.get("document") or final_json.get("content", {}).get("document") or {}
+
+    blocks = doc.get("block", []) if isinstance(doc, dict) else []
+    pages = doc.get("pages", []) if isinstance(doc, dict) else []
 
     _total_pages = total_pages or len(pages) or 1
 
     # ── Per-page coverage ──────────────────────────────────────────────
     pages_seen: set[int] = set()
     for b in blocks:
-        p = b.get("page", 1)
+        p = b.get("page number", b.get("page", 1))
         if isinstance(p, (int, float)):
             pages_seen.add(int(p))
+
     pages_with_content = len(pages_seen)
+    # Fallback: если blocks не дали страниц, пробуем per_page из content.quality
+    if pages_with_content == 0 and _total_pages > 0:
+        per_page_data = final_json.get("content", {}).get("quality", {}).get("per_page", [])
+        pages_with_content = sum(1 for pp in per_page_data if pp.get("status") in ("ok", "low_confidence"))
     page_coverage_ratio = pages_with_content / max(_total_pages, 1)
 
     # ── Block-level metrics ────────────────────────────────────────────

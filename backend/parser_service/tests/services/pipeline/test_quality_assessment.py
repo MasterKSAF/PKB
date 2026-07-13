@@ -104,6 +104,54 @@ def test_mostly_empty_blocks():
     assert "mostly empty blocks" in result["reasons"]
 
 
+def test_docling_container_format():
+    """Docling кладёт document внутрь content — проверяем, что assessment видит blocks."""
+    doc = {
+        "content": {
+            "document": {
+                "pages": [{"page": 1}, {"page": 2}],
+                "block": [
+                    {"type": "paragraph", "page": 1, "content": "Page one text"},
+                    {"type": "paragraph", "page": 2, "content": "Page two text"},
+                ],
+            },
+            "quality": {
+                "per_page": [
+                    {"page": 1, "status": "ok", "confidence": 0.75},
+                    {"page": 2, "status": "ok", "confidence": 0.75},
+                ],
+                "pages_processed": 2,
+            },
+        }
+    }
+    result = assess_document_quality(doc, quality_code="GOOD", total_pages=2)
+    assert result["verdict"] == "good", f"Expected good, got {result['verdict']}"
+    assert result["needs_ocr"] is False
+    assert result["page_coverage_ratio"] == 1.0
+    assert result["total_blocks"] == 2
+
+
+def test_docling_container_fallback_per_page():
+    """Если blocks не найдены, fallback на content.quality.per_page."""
+    doc = {
+        "content": {
+            "document": {"pages": [], "block": []},
+            "quality": {
+                "per_page": [
+                    {"page": 1, "status": "ok", "confidence": 0.75},
+                    {"page": 2, "status": "ok", "confidence": 0.75},
+                    {"page": 3, "status": "ok", "confidence": 0.75},
+                ],
+                "pages_processed": 3,
+            },
+        }
+    }
+    result = assess_document_quality(doc, quality_code="GOOD", total_pages=3)
+    assert result["page_coverage_ratio"] == 1.0
+    assert result["pages_with_content"] == 3
+    assert result["verdict"] == "good"
+
+
 def test_formula_flag_in_blocks():
     doc = {
         "document": {
