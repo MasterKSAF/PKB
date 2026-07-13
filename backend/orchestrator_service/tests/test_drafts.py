@@ -1131,19 +1131,19 @@ class TestTimeoutCascade:
             self.service_name = service_name or step_name
 
     def test_step_timeout_ocr_default(self):
-        """STEP_TIMEOUT_OCR = 300 (по умолчанию)."""
+        """STEP_TIMEOUT_OCR = 3600 (1 час)."""
         from app.core.config import PipelineConfig
 
         config = PipelineConfig()
-        assert config.STEP_TIMEOUT_OCR == 300
+        assert config.STEP_TIMEOUT_OCR == 3600
 
     def test_step_timeouts_defined_for_all_stages(self):
         """Все step-таймауты определены в конфиге."""
         from app.core.config import PipelineConfig
 
         config = PipelineConfig()
-        assert config.STEP_TIMEOUT_OCR == 300
-        assert config.STEP_TIMEOUT_PARSER == 300
+        assert config.STEP_TIMEOUT_OCR == 3600
+        assert config.STEP_TIMEOUT_PARSER == 3600
         assert config.STEP_TIMEOUT_CONVERTER == 120
         assert config.STEP_TIMEOUT_REGISTRY == 30
         assert config.STEP_TIMEOUT_RAG_INDEX == 300

@@ -96,8 +96,8 @@ class PipelineConfig(BaseSettings):
     )
 
     # Step-specific timeouts (seconds)
-    STEP_TIMEOUT_OCR: int = Field(default=300, description="OCR step timeout")
-    STEP_TIMEOUT_PARSER: int = Field(default=300, description="Parser step timeout")
+    STEP_TIMEOUT_OCR: int = Field(default=3600, description="OCR step timeout")
+    STEP_TIMEOUT_PARSER: int = Field(default=3600, description="Parser step timeout")
     STEP_TIMEOUT_CONVERTER: int = Field(
         default=120, description="Converter step timeout"
     )
@@ -138,7 +138,7 @@ class PipelineConfig(BaseSettings):
 
     # Max step execution time (H1): hard timeout regardless of health check
     MAX_STEP_EXECUTION_TIME: int = Field(
-        default=1800,
+        default=3600,
         description="Max seconds a step can run before hard kill (ignores health-check)",
     )
 

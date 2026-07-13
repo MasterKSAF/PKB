@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     # Таймауты пайплайна
     preview_timeout: int = Field(300, alias="PREVIEW_TIMEOUT")
-    pipeline_timeout: int = Field(1800, alias="PIPELINE_TIMEOUT")
+    pipeline_timeout: int = Field(3600, alias="PIPELINE_TIMEOUT")
     parser_timeout: int = Field(300, alias="PARSER_TIMEOUT")
 
     # Безопасность и валидация
