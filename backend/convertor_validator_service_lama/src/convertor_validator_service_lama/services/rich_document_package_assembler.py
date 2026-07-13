@@ -1,4 +1,5 @@
 from convertor_validator_service_lama.services.reference_normalizer import (
+    document_codes_equal,
     expand_gost_document_codes,
     expand_gost_document_codes_from_values,
 )
@@ -136,6 +137,7 @@ def assemble_rich_document_package(
         artifacts,
         parse_items=effective_parse_items,
         parse_page_count=_parse_page_count(parse_result.metadata, parse_result.job_metadata),
+        current_document_code=request.document_code,
     )
 
     package = RichDocumentPackage(
@@ -159,6 +161,7 @@ def build_document_structure_from_artifacts(
     *,
     parse_items: list[dict[str, Any]] | None = None,
     parse_page_count: int | None = None,
+    current_document_code: str | None = None,
 ) -> RichDocumentStructure:
     parse_item_structure = _build_parse_item_structure(
         parse_items=parse_items or [],
@@ -240,6 +243,7 @@ def build_document_structure_from_artifacts(
             artifacts.get("references"),
             sections=sections,
             page_count=parse_page_count,
+            current_document_code=current_document_code,
         ),
         cross_references=_build_cross_references(
             artifacts.get("cross_references")
@@ -1003,6 +1007,7 @@ def _build_references(
     *,
     sections: list[RichDocumentSection] | None = None,
     page_count: int | None = None,
+    current_document_code: str | None = None,
 ) -> list[RichDocumentReference]:
     rows = _artifact_content_as_list(
         artifact,
@@ -1031,6 +1036,13 @@ def _build_references(
             row.get("document_code"),
             row.get("doc_code"),
         )
+        if _reference_points_only_to_current_document(
+            reference_text,
+            target_document_code,
+            current_document_code,
+        ):
+            continue
+
         target_document_codes = expand_gost_document_codes_from_values(
             reference_text,
             target_document_code,
@@ -1092,6 +1104,29 @@ def _build_references(
 
 
 
+
+
+
+def _reference_points_only_to_current_document(
+    reference_text: str | None,
+    target_document_code: str | None,
+    current_document_code: str | None,
+) -> bool:
+    if current_document_code is None:
+        return False
+
+    target_codes = expand_gost_document_codes_from_values(
+        reference_text,
+        target_document_code,
+    )
+
+    if target_codes:
+        return all(
+            document_codes_equal(target_code, current_document_code)
+            for target_code in target_codes
+        )
+
+    return document_codes_equal(target_document_code, current_document_code)
 
 def _sections_by_reference_key(
     sections: list[RichDocumentSection],

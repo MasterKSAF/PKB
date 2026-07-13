@@ -17,6 +17,9 @@ from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentPackage,
     RichDocumentPackageArtifact,
 )
+from convertor_validator_service_lama.services.reference_normalizer import (
+    document_codes_equal,
+)
 
 
 def downcast_rich_package_to_rag_builder(
@@ -37,7 +40,8 @@ def downcast_rich_package_to_rag_builder(
     )
 
     references_by_section = _build_references_by_section(
-        artifacts_by_name.get("references")
+        artifacts_by_name.get("references"),
+        current_document_code=document.document_code,
     )
     sections = _build_sections_payload(
         artifact=artifacts_by_name.get("sections"),
@@ -426,6 +430,8 @@ def _source_span_text_preview(value: Any) -> str | None:
 
 def _build_references_by_section(
     artifact: RichDocumentPackageArtifact | None,
+    *,
+    current_document_code: str | None = None,
 ) -> dict[str, list[RagBuilderReferencePayload]]:
     rows = _artifact_content_as_list(
         artifact,
@@ -456,7 +462,11 @@ def _build_references_by_section(
             row.get("context"),
         )
 
-        target_codes = _target_doc_codes_from_reference_row(row)
+        target_codes = [
+            target_doc_code
+            for target_doc_code in _target_doc_codes_from_reference_row(row)
+            if not document_codes_equal(target_doc_code, current_document_code)
+        ]
         for target_doc_code in target_codes:
             references_by_section.setdefault(section_id, []).append(
                 RagBuilderReferencePayload(

@@ -942,3 +942,42 @@ def test_assembler_maps_reference_printed_page_to_section_file_page() -> None:
     assert reference.printed_page_label == "35"
     assert reference.file_page_number == 1
     assert reference.file_page_index == 0
+
+
+def test_assembler_filters_self_reference_from_document_structure() -> None:
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="source.pdf",
+        document_code="GOST 20868-81",
+        parse_result=_parse_result(),
+        extract_results={
+            "references": _extract_result(
+                {
+                    "references": [
+                        {
+                            "reference_id": "self-reference",
+                            "section_id": "2",
+                            "reference_text": "\u0413\u041e\u0421\u0422 20868\u201481",
+                            "target_document_code": "\u0413\u041e\u0421\u0422 20868\u201481",
+                            "reference_type": "standard",
+                        },
+                        {
+                            "reference_id": "external-reference",
+                            "section_id": "2",
+                            "reference_text": "\u0413\u041e\u0421\u0422 20862-81",
+                            "target_document_code": "\u0413\u041e\u0421\u0422 20862-81",
+                            "reference_type": "standard",
+                        },
+                    ]
+                }
+            )
+        },
+    )
+
+    result = assemble_rich_document_package(request)
+
+    references = result.package.document_structure.references
+
+    assert [reference.reference_id for reference in references] == [
+        "external-reference"
+    ]
+    assert references[0].target_document_code == "\u0413\u041e\u0421\u0422 20862-81"

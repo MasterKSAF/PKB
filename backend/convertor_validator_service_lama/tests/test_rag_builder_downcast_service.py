@@ -447,3 +447,64 @@ def test_downcast_attaches_references_by_clause_when_section_id_differs() -> Non
     ]
     assert section.references[0].context == "GOST 20862-81 - GOST 20867-81"
     assert result.warnings == []
+
+
+def test_downcast_filters_self_reference_from_section_references() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST 20868-81",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+            _artifact(
+                "references",
+                {
+                    "references": [
+                        {
+                            "section_id": "2",
+                            "reference_text": "\u0413\u041e\u0421\u0422 20868\u201481",
+                            "target_document_code": "\u0413\u041e\u0421\u0422 20868\u201481",
+                            "reference_type": "standard",
+                        },
+                        {
+                            "section_id": "2",
+                            "reference_text": "\u0413\u041e\u0421\u0422 20862-81",
+                            "target_document_code": "\u0413\u041e\u0421\u0422 20862-81",
+                            "reference_type": "standard",
+                        },
+                    ]
+                },
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/2",
+                    clause="2",
+                    title="2. Normative references",
+                    path="main_document/2",
+                    page_start=1,
+                    page_end=1,
+                    content={"text": "Clause 2"},
+                )
+            ]
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    section = result.payload.sections[0]
+
+    assert [
+        reference.target_doc_code
+        for reference in section.references
+    ] == ["\u0413\u041e\u0421\u0422 20862-81"]
