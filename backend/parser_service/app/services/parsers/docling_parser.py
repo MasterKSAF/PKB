@@ -20,7 +20,7 @@ from app.services.parsers.docling.quality_metrics import assess_quality_from_jso
 logger = logging.getLogger(__name__)
 
 # Таймаут для Docling (можно переопределить через переменную окружения)
-DOCLING_TIMEOUT = int(os.getenv("DOCLING_TIMEOUT", "1800"))  # 30 минут по умолчанию
+DOCLING_TIMEOUT = int(os.getenv("DOCLING_TIMEOUT", "3600"))  # 1 час по умолчанию
 
 
 class DoclingParser(BaseParser):

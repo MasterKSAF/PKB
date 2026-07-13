@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     docling_serve_url: str = Field(
         "http://localhost:5001", alias="DOCLING_SERVE_URL"
     )
-    docling_serve_timeout: int = Field(1800, alias="DOCLING_SERVE_TIMEOUT")
+    docling_serve_timeout: int = Field(3600, alias="DOCLING_SERVE_TIMEOUT")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
