@@ -853,3 +853,92 @@ def test_assembler_expands_gost_20868_reference_range_from_fixture_text() -> Non
 
     assert reference.reference_text == range_section["content"]["text"]
     assert reference.target_document_codes == expected_target_document_codes
+
+
+def test_assembler_maps_reference_printed_page_to_section_file_page() -> None:
+    extraction_payload = {
+        "schema_version": "document_structure_extraction_v1",
+        "document_profile": "simple_standard",
+        "page_count": 2,
+        "numbering_scopes": [
+            {
+                "namespace_id": "main_document",
+                "title": "Main document",
+                "scope_type": "main_document",
+                "page_start": 1,
+                "page_end": 2,
+                "confidence": 0.95,
+                "reason": "Fake overview.",
+            }
+        ],
+        "item_classifications": [],
+        "sections": [
+            {
+                "section_id": "main_document/4",
+                "namespace_id": "main_document",
+                "namespaced_path": "main_document/4",
+                "clause": "4",
+                "title": "Clause 4",
+                "section_kind": "numbered_clause",
+                "content_item_indices": [0],
+                "source_spans": [
+                    {
+                        "page": 1,
+                        "file_page_number": 1,
+                        "file_page_index": 0,
+                        "item_index": 0,
+                        "normalized_bbox": [0.1, 0.2, 0.3, 0.4],
+                    }
+                ],
+                "confidence": 0.9,
+                "reason": "Fake section.",
+            }
+        ],
+        "issues": [],
+        "diagnostics": {},
+    }
+
+    parse_result = ParseJobResult.model_construct(
+        job_id="parse-job-1",
+        status="COMPLETED",
+        markdown="# Test document",
+        items=[],
+        metadata={"pages": [{}, {}]},
+        job_metadata={"pdf-pages": 2},
+        raw_response={"job_id": "parse-job-1"},
+    )
+
+    request = RichDocumentPackageAssemblyRequest(
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        parse_result=parse_result,
+        extract_results={
+            "document_structure_extraction": _extract_result(
+                {
+                    "merged_extraction": extraction_payload,
+                }
+            ),
+            "references": _extract_result(
+                {
+                    "references": [
+                        {
+                            "reference_id": "reference-1",
+                            "section_id": "4",
+                            "reference_text": "GOST 10549-80",
+                            "target_document_code": "GOST 10549-80",
+                            "reference_type": "standard",
+                            "page": 35,
+                        }
+                    ]
+                }
+            ),
+        },
+    )
+
+    result = assemble_rich_document_package(request)
+    reference = result.package.document_structure.references[0]
+
+    assert reference.page == 35
+    assert reference.printed_page_label == "35"
+    assert reference.file_page_number == 1
+    assert reference.file_page_index == 0
