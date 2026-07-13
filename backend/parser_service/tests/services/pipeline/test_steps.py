@@ -278,6 +278,8 @@ async def test_assess_quality_step_good():
     assert new_ctx.quality_assessment["verdict"] == "good"
     assert new_ctx.quality_assessment["needs_ocr"] is False
     assert new_ctx.final_json["quality"]["verdict"] == "good"
+    assert new_ctx.final_json["metadata"]["quality"]["verdict"] == "good"
+    assert new_ctx.final_json["metadata"]["quality"]["needs_ocr"] is False
 
 
 @pytest.mark.asyncio
@@ -291,3 +293,4 @@ async def test_assess_quality_step_needs_ocr():
     assert new_ctx.quality_assessment is not None
     assert new_ctx.quality_assessment["verdict"] == "needs_ocr"
     assert new_ctx.quality_assessment["needs_ocr"] is True
+    assert new_ctx.final_json["metadata"]["quality"]["verdict"] == "needs_ocr"

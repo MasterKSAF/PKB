@@ -112,6 +112,11 @@ async def convert(
     hierarchy["metadata"]["title_hash_sha256"] = title_hash
 
     parser_meta = (raw_json.get("metadata") or {}).get("parser") or {}
+    # Пробрасываем качество из parser JSON в metadata документа
+    raw_quality = (raw_json.get("metadata") or {}).get("quality") or raw_json.get("quality")
+    if raw_quality and isinstance(raw_quality, dict):
+        hierarchy.setdefault("metadata", {})["quality"] = raw_quality
+
     response_metadata = {
         "schema": "validated_v3",
         "task_id": task_id,

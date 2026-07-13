@@ -652,6 +652,11 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
                 doc.validity_status = metadata['validity_status']
             if metadata.get('status'):
                 doc.status = metadata['status']
+            # Обновляем doc_metadata: сохраняем существующее, мержим новое quality
+            existing_meta = dict(doc.doc_metadata or {})
+            if 'quality' in metadata:
+                existing_meta['quality'] = metadata['quality']
+            doc.doc_metadata = existing_meta
             doc.updated_at = datetime.now(timezone.utc)
             db.flush()
 
@@ -722,8 +727,11 @@ def create_pipeline_document(db: Session, payload: Dict[str, Any]) -> Dict[str, 
             'title_hash_sha256': title_hash,
             'title_key': metadata.get('title_key'),
             'created_at': datetime.now(timezone.utc),
-            'updated_at': datetime.now(timezone.utc)
+            'updated_at': datetime.now(timezone.utc),
         }
+        # Сохраняем весь metadata (включая quality) в doc_metadata JSONB
+        if metadata:
+            doc_kwargs['metadata'] = dict(metadata)
         
         doc = create_document(db, doc_code=doc_code, title=title, commit=False, **doc_kwargs)
         

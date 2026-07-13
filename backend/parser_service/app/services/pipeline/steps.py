@@ -392,10 +392,26 @@ class AssessQualityStep(PipelineStep):
 
         # Обновляем section качества в финальном JSON
         if isinstance(ctx.final_json, dict):
+            # quality — основная секция
             if "quality" in ctx.final_json:
                 ctx.final_json["quality"].update(quality)
             else:
                 ctx.final_json["quality"] = quality
+
+            # quality в metadata — для сохранения в doc_metadata (JSONB) при create_pipeline_document
+            meta = ctx.final_json.setdefault("metadata", {})
+            meta["quality"] = {
+                "verdict": quality["verdict"],
+                "needs_ocr": quality["needs_ocr"],
+                "confidence": quality["confidence"],
+                "text_layer_quality": quality["text_layer_quality"],
+                "page_coverage_ratio": quality["page_coverage_ratio"],
+                "mean_chars_per_block": quality["mean_chars_per_block"],
+                "empty_blocks_ratio": quality["empty_blocks_ratio"],
+                "block_types": quality["block_types"],
+                "pages_scanned": quality["pages_scanned"],
+                "pages_with_content": quality["pages_with_content"],
+            }
 
         return ctx
 
