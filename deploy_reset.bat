@@ -36,13 +36,13 @@ if errorlevel 1 (
 )
 echo.
 
-:: ── 1. Остановка PKB‑сервисов (infinity/docling не трогаем — загружают модели) ─
-echo %YELLOW%[1/3] Stopping PKB services (keeping infinity, docling)...%NC%
+:: ── 1. Остановка PKB‑сервисов (infinity не трогаем — загружают модели) ─
+echo %YELLOW%[1/3] Stopping PKB services (keeping infinity)...%NC%
 docker compose stop ^
   auth registry parser converter-validator ^
   rag-builder rag-search query ^
   orchestrator celery-worker gateway frontend redis ^
-  postgres minio 2>nul
+  postgres minio docling 2>nul
 docker compose rm -fs postgres minio 2>nul
 echo.
 

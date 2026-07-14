@@ -76,6 +76,7 @@ def _msg_dict(m: ChatMessage, include_sources: bool = True) -> dict:
         "role": m.role,
         "content": m.content,
         "status": m.status,
+        "message": m.message,
         "timestamp": m.timestamp.isoformat(),
     }
     if m.role == "assistant":

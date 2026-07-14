@@ -153,6 +153,7 @@ class PendingMessageResponse(BaseModel):
     session_id: int
     role: str
     status: str
+    message: str | None = None
     content: str
     timestamp: datetime
 

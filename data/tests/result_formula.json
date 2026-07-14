@@ -1,0 +1,1281 @@
+{
+  "document": {
+    "filename": "2-020101-174-3.pdf",
+    "md_content": null,
+    "json_content": {
+      "schema_name": "DoclingDocument",
+      "version": "1.10.0",
+      "name": "2-020101-174-3",
+      "origin": {
+        "mimetype": "application/pdf",
+        "binary_hash": 16489256715097373885,
+        "filename": "2-020101-174-3.pdf",
+        "uri": null
+      },
+      "furniture": {
+        "self_ref": "#/furniture",
+        "parent": null,
+        "children": [],
+        "content_layer": "furniture",
+        "meta": null,
+        "name": "_root_",
+        "label": "unspecified"
+      },
+      "body": {
+        "self_ref": "#/body",
+        "parent": null,
+        "children": [
+          {
+            "$ref": "#/texts/0"
+          },
+          {
+            "$ref": "#/texts/1"
+          },
+          {
+            "$ref": "#/texts/2"
+          },
+          {
+            "$ref": "#/groups/0"
+          },
+          {
+            "$ref": "#/texts/6"
+          },
+          {
+            "$ref": "#/texts/7"
+          },
+          {
+            "$ref": "#/texts/8"
+          },
+          {
+            "$ref": "#/texts/9"
+          },
+          {
+            "$ref": "#/texts/10"
+          },
+          {
+            "$ref": "#/texts/11"
+          },
+          {
+            "$ref": "#/texts/12"
+          },
+          {
+            "$ref": "#/texts/13"
+          },
+          {
+            "$ref": "#/texts/14"
+          },
+          {
+            "$ref": "#/texts/15"
+          },
+          {
+            "$ref": "#/texts/16"
+          },
+          {
+            "$ref": "#/texts/17"
+          },
+          {
+            "$ref": "#/texts/18"
+          },
+          {
+            "$ref": "#/texts/19"
+          },
+          {
+            "$ref": "#/texts/20"
+          },
+          {
+            "$ref": "#/texts/21"
+          },
+          {
+            "$ref": "#/texts/22"
+          },
+          {
+            "$ref": "#/texts/23"
+          },
+          {
+            "$ref": "#/texts/24"
+          },
+          {
+            "$ref": "#/texts/25"
+          },
+          {
+            "$ref": "#/texts/26"
+          },
+          {
+            "$ref": "#/texts/27"
+          },
+          {
+            "$ref": "#/texts/28"
+          },
+          {
+            "$ref": "#/groups/1"
+          },
+          {
+            "$ref": "#/texts/30"
+          },
+          {
+            "$ref": "#/groups/2"
+          }
+        ],
+        "content_layer": "body",
+        "meta": null,
+        "name": "_root_",
+        "label": "unspecified"
+      },
+      "groups": [
+        {
+          "self_ref": "#/groups/0",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [
+            {
+              "$ref": "#/texts/3"
+            },
+            {
+              "$ref": "#/texts/4"
+            },
+            {
+              "$ref": "#/texts/5"
+            }
+          ],
+          "content_layer": "body",
+          "meta": null,
+          "name": "list",
+          "label": "list"
+        },
+        {
+          "self_ref": "#/groups/1",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [
+            {
+              "$ref": "#/texts/29"
+            }
+          ],
+          "content_layer": "body",
+          "meta": null,
+          "name": "list",
+          "label": "list"
+        },
+        {
+          "self_ref": "#/groups/2",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [
+            {
+              "$ref": "#/texts/31"
+            },
+            {
+              "$ref": "#/texts/32"
+            },
+            {
+              "$ref": "#/texts/33"
+            },
+            {
+              "$ref": "#/texts/34"
+            }
+          ],
+          "content_layer": "body",
+          "meta": null,
+          "name": "group",
+          "label": "key_value_area"
+        }
+      ],
+      "texts": [
+        {
+          "self_ref": "#/texts/0",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "furniture",
+          "meta": null,
+          "label": "page_header",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 140.06,
+                "t": 783.1170980273438,
+                "r": 471.16912,
+                "b": 773.2327725466808,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                59
+              ]
+            }
+          ],
+          "orig": "Правила классификации и постройки морских судов (часть III)",
+          "text": "Правила классификации и постройки морских судов (часть III)",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/1",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "furniture",
+          "meta": null,
+          "label": "page_header",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 298.03,
+                "t": 769.0770980273437,
+                "r": 313.33912,
+                "b": 759.1927725466808,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                2
+              ]
+            }
+          ],
+          "orig": "18",
+          "text": "18",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/2",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "section_header",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 187.25,
+                "t": 743.8570980273438,
+                "r": 424.00912,
+                "b": 733.9550109555206,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                32
+              ]
+            }
+          ],
+          "orig": "2.2 ИСХОДНЫЕ РАСЧЕТНЫЕ ПАРАМЕТРЫ",
+          "text": "2.2 ИСХОДНЫЕ РАСЧЕТНЫЕ ПАРАМЕТРЫ",
+          "formatting": null,
+          "hyperlink": null,
+          "level": 1
+        },
+        {
+          "self_ref": "#/texts/3",
+          "parent": {
+            "$ref": "#/groups/0"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "list_item",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 78.024,
+                "t": 719.1370980273438,
+                "r": 533.3190400000001,
+                "b": 620.6750109555205,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                592
+              ]
+            }
+          ],
+          "orig": "2.2.1 Исходные расчетные параметры, установленные в настоящей главе, действительны  только  для  выбора  конструктивных  элементов  обычных  рулей  и поворотных  насадок  с жестко  закрепленными  стабилизаторами  и  не  могут  быть использованы для определения выходных характеристик рулевых приводов. Методы установления этих характеристик Регистром не регламентируются, а соответствующие расчеты согласованию с ним не подлежат. Указанные характеристики приводов Регистр проверяет  только  во  время  ходовых  испытаний  судна  на  предмет  их  соответствия требованиям 2.9.2, 2.9.3 и 2.9.8.",
+          "text": "2.2.1 Исходные расчетные параметры, установленные в настоящей главе, действительны  только  для  выбора  конструктивных  элементов  обычных  рулей  и поворотных  насадок  с жестко  закрепленными  стабилизаторами  и  не  могут  быть использованы для определения выходных характеристик рулевых приводов. Методы установления этих характеристик Регистром не регламентируются, а соответствующие расчеты согласованию с ним не подлежат. Указанные характеристики приводов Регистр проверяет  только  во  время  ходовых  испытаний  судна  на  предмет  их  соответствия требованиям 2.9.2, 2.9.3 и 2.9.8.",
+          "formatting": null,
+          "hyperlink": null,
+          "enumerated": false,
+          "marker": ""
+        },
+        {
+          "self_ref": "#/texts/4",
+          "parent": {
+            "$ref": "#/groups/0"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "list_item",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 99.264,
+                "t": 617.9770980273438,
+                "r": 433.2607999999999,
+                "b": 608.0750109555206,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                54
+              ]
+            }
+          ],
+          "orig": "2.2.2 Расчетные нагрузки и крутящие моменты для рулей.",
+          "text": "2.2.2 Расчетные нагрузки и крутящие моменты для рулей.",
+          "formatting": null,
+          "hyperlink": null,
+          "enumerated": false,
+          "marker": ""
+        },
+        {
+          "self_ref": "#/texts/5",
+          "parent": {
+            "$ref": "#/groups/0"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "list_item",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 78.024,
+                "t": 605.6890980273438,
+                "r": 533.2256799999999,
+                "b": 582.3950109555205,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                124
+              ]
+            }
+          ],
+          "orig": "2.2.2.1 Условная  расчетная  нагрузка 𝐹 , кН,  действующая  на  перо  руля  на переднем ходу, должна определяться по формуле",
+          "text": "2.2.2.1 Условная  расчетная  нагрузка 𝐹 , кН,  действующая  на  перо  руля  на переднем ходу, должна определяться по формуле",
+          "formatting": null,
+          "hyperlink": null,
+          "enumerated": false,
+          "marker": ""
+        },
+        {
+          "self_ref": "#/texts/6",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "formula",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 99.384,
+                "t": 567.2590980273437,
+                "r": 533.32912,
+                "b": 554.6073892725299,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                27
+              ]
+            }
+          ],
+          "orig": "𝐹 = 𝐹 1 + 𝐹 2 , (2.2.2.1-1)",
+          "text": "F = F _ { 1 } \\, + \\, F _ { 2 } ,",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/7",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 99.384,
+                "t": 544.2219780273438,
+                "r": 299.192,
+                "b": 536.1496244361836,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                44
+              ]
+            }
+          ],
+          "orig": "где F 1 и F 2, кН, определяются по формулам:",
+          "text": "где F 1 и F 2, кН, определяются по формулам:",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/8",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "formula",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 99.384,
+                "t": 524.8314180273437,
+                "r": 532.762,
+                "b": 513.3132647025684,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                62
+              ]
+            }
+          ],
+          "orig": "𝐹1 = 5,59 ∙ 10 -3 𝑘1𝑘2 (6,5 + λ)(𝑏 1 -𝐶𝐵) 2 𝐴𝑣 2 ; (2.2.2.1-2)",
+          "text": "F _ { 1 } = 5 , 5 9 \\cdot 1 0 ^ { - 3 } k _ { 1 2 } k _ { 2 } ( 6 , 5 + \\lambda ) ( b _ { 1 } - C _ { B } ) ^ { 2 } A v ^ { 2 } ;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/9",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "formula",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 99.384,
+                "t": 503.83141802734383,
+                "r": 532.762,
+                "b": 486.51253433029626,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                45
+              ]
+            }
+          ],
+          "orig": "𝐹2 = 0,177𝑘1 (6,5 + λ) 𝑇 𝐷в 2 𝐴в, (2.2.2.1-3)",
+          "text": "F _ { 2 } = 0 , 1 7 7 k _ { 1 } ( 6 , 5 + \\lambda ) \\frac { T } { d _ { s } ^ { 2 } } A _ { b } , & & ( 2 . 2 . 2 . 1 - 3 )",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/10",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 99.384,
+                "t": 475.6719780273438,
+                "r": 254.912,
+                "b": 465.43326470256847,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                28
+              ]
+            }
+          ],
+          "orig": "где 𝑘1 -коэффициент, равный:",
+          "text": "где 𝑘1 -коэффициент, равный:",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/11",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 156.02,
+                "t": 464.7819780273438,
+                "r": 532.3670000000003,
+                "b": 446.38962443618357,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                94
+              ]
+            }
+          ],
+          "orig": "1,0 -  для прямоугольных и трапецеидальных рулей, кроме рулей, устанавливаемых за рудерпостом;",
+          "text": "1,0 -  для прямоугольных и трапецеидальных рулей, кроме рулей, устанавливаемых за рудерпостом;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/12",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 156.02,
+                "t": 443.6619780273438,
+                "r": 494.72200000000004,
+                "b": 435.58962443618356,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                81
+              ]
+            }
+          ],
+          "orig": "0,95 -для полуподвесных рулей (см. рули типов I, II, VII и VIII на рис. 2.2.4.1);",
+          "text": "0,95 -для полуподвесных рулей (см. рули типов I, II, VII и VIII на рис. 2.2.4.1);",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/13",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 156.02,
+                "t": 432.7419780273438,
+                "r": 532.762,
+                "b": 424.66962443618354,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                92
+              ]
+            }
+          ],
+          "orig": "0,89 -для рулей, устанавливаемых за рудерпостом (см. рули типов IV, X и IX на рис. 2.2.4.1);",
+          "text": "0,89 -для рулей, устанавливаемых за рудерпостом (см. рули типов IV, X и IX на рис. 2.2.4.1);",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/14",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.62,
+                "t": 422.6319780273438,
+                "r": 254.912,
+                "b": 412.39326470256844,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                24
+              ]
+            }
+          ],
+          "orig": "𝑘2 -коэффициент, равный:",
+          "text": "𝑘2 -коэффициент, равный:",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/15",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 156.02,
+                "t": 411.7419780273438,
+                "r": 455.962,
+                "b": 403.66962443618354,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                63
+              ]
+            }
+          ],
+          "orig": "1,0 -  для рулей, работающих непосредственно за гребным винтом;",
+          "text": "1,0 -  для рулей, работающих непосредственно за гребным винтом;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/16",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 156.02,
+                "t": 401.40197802734383,
+                "r": 468.562,
+                "b": 393.32962443618356,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                68
+              ]
+            }
+          ],
+          "orig": "1,25  -  для рулей, не работающих непосредственно за гребным винтом;",
+          "text": "1,25  -  для рулей, не работающих непосредственно за гребным винтом;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/17",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.62,
+                "t": 390.9319780273438,
+                "r": 317.932,
+                "b": 381.9345428540447,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                36
+              ]
+            }
+          ],
+          "orig": "λ -величина, определяемая по формуле",
+          "text": "λ -величина, определяемая по формуле",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/18",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "formula",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.02,
+                "t": 371.2114180273438,
+                "r": 532.762,
+                "b": 359.69326470256846,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                25
+              ]
+            }
+          ],
+          "orig": "λ = ℎp 2 /𝐴к, (2.2.2.1-4)",
+          "text": "\\lambda = h _ { p } ^ { 2 } / A _ { \\kappa } ,",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/19",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.02,
+                "t": 347.8519780273438,
+                "r": 532.7409999999999,
+                "b": 303.17326470256853,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                328
+              ]
+            }
+          ],
+          "orig": "где ℎp -средняя высота части пера руля, расположенной в корму от оси его вращения, м; 𝐴к -сумма  площади  пера  руля  и  боковой  площади  кронштейна  руля  или  рудерпоста (если  последние  имеются),  расположенной  в  пределах  высоты ℎp , м 2 .  Если кронштейна руля и рудерпоста нет, в качестве 𝐴к в расчетах принимается A ;",
+          "text": "где ℎp -средняя высота части пера руля, расположенной в корму от оси его вращения, м; 𝐴к -сумма  площади  пера  руля  и  боковой  площади  кронштейна  руля  или  рудерпоста (если  последние  имеются),  расположенной  в  пределах  высоты ℎp , м 2 .  Если кронштейна руля и рудерпоста нет, в качестве 𝐴к в расчетах принимается A ;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/20",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.62,
+                "t": 302.49197802734375,
+                "r": 257.552,
+                "b": 293.49454285404477,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                27
+              ]
+            }
+          ],
+          "orig": "𝐴 -площадь пера руля, м 2 ;",
+          "text": "𝐴 -площадь пера руля, м 2 ;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/21",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.62,
+                "t": 291.9319780273438,
+                "r": 532.762,
+                "b": 281.6932647025685,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                92
+              ]
+            }
+          ],
+          "orig": "𝐴в -часть площади руля, находящаяся в непереложенном положении в струе гребного винта, м 2 ;",
+          "text": "𝐴в -часть площади руля, находящаяся в непереложенном положении в струе гребного винта, м 2 ;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/22",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.62,
+                "t": 281.01197802734373,
+                "r": 235.472,
+                "b": 270.77326470256844,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                21
+              ]
+            }
+          ],
+          "orig": "𝑏1 -величина, равная:",
+          "text": "𝑏1 -величина, равная:",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/23",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 150.62,
+                "t": 269.9914180273438,
+                "r": 457.522,
+                "b": 261.4885389113217,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                62
+              ]
+            }
+          ],
+          "orig": "2,2 -для рулей, расположенных в диаметральной плоскости судна;",
+          "text": "2,2 -для рулей, расположенных в диаметральной плоскости судна;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/24",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 150.62,
+                "t": 259.0714180273437,
+                "r": 281.672,
+                "b": 250.56853891132164,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                25
+              ]
+            }
+          ],
+          "orig": "2,32 -для бортовых рулей;",
+          "text": "2,32 -для бортовых рулей;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/25",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.62,
+                "t": 248.25197802734374,
+                "r": 504.082,
+                "b": 238.01326470256845,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                77
+              ]
+            }
+          ],
+          "orig": "𝐶𝐵 -коэффициент общей полноты судна при осадке по летнюю грузовую ватерлинию;",
+          "text": "𝐶𝐵 -коэффициент общей полноты судна при осадке по летнюю грузовую ватерлинию;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/26",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.62,
+                "t": 237.33197802734378,
+                "r": 532.762,
+                "b": 228.33454285404468,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                89
+              ]
+            }
+          ],
+          "orig": "𝑣 -наибольшая скорость переднего хода судна при осадке по летнюю грузовую ватерлинию, уз;",
+          "text": "𝑣 -наибольшая скорость переднего хода судна при осадке по летнюю грузовую ватерлинию, уз;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/27",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.62,
+                "t": 226.41197802734382,
+                "r": 377.812,
+                "b": 217.4145428540446,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                57
+              ]
+            }
+          ],
+          "orig": "𝑇 -упор гребного винта при скорости 𝑣 , кН (см. 2.2.2.6);",
+          "text": "𝑇 -упор гребного винта при скорости 𝑣 , кН (см. 2.2.2.6);",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/28",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 120.62,
+                "t": 215.8219780273438,
+                "r": 273.512,
+                "b": 205.58326470256839,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                30
+              ]
+            }
+          ],
+          "orig": "𝐷в -диаметр гребного винта, м.",
+          "text": "𝐷в -диаметр гребного винта, м.",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/29",
+          "parent": {
+            "$ref": "#/groups/1"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "list_item",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 78.024,
+                "t": 192.32909802734378,
+                "r": 533.2945599999999,
+                "b": 166.71738927252989,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                131
+              ]
+            }
+          ],
+          "orig": "2.2.2.2 Условная расчетная нагрузка 𝐹 , указанная в 2.2.2.1, не должна приниматься меньше нагрузки 𝐹3 , кН, определенной по формуле",
+          "text": "2.2.2.2 Условная расчетная нагрузка 𝐹 , указанная в 2.2.2.1, не должна приниматься меньше нагрузки 𝐹3 , кН, определенной по формуле",
+          "formatting": null,
+          "hyperlink": null,
+          "enumerated": false,
+          "marker": ""
+        },
+        {
+          "self_ref": "#/texts/30",
+          "parent": {
+            "$ref": "#/body"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "formula",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 99.384,
+                "t": 153.8090980273438,
+                "r": 533.32912,
+                "b": 142.77224421476353,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                20
+              ]
+            }
+          ],
+          "orig": "𝐹3 = 𝑘3𝐴 , (2.2.2.2)",
+          "text": "F _ { 3 } = k _ { 3 } A ,",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/31",
+          "parent": {
+            "$ref": "#/groups/2"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 99.264,
+                "t": 128.22197802734377,
+                "r": 254.912,
+                "b": 117.98326470256848,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                29
+              ]
+            }
+          ],
+          "orig": "где 𝑘3 - коэффициент, равный:",
+          "text": "где 𝑘3 - коэффициент, равный:",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/32",
+          "parent": {
+            "$ref": "#/groups/2"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 156.02,
+                "t": 117.32141802734373,
+                "r": 383.692,
+                "b": 108.81853891132164,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                49
+              ]
+            }
+          ],
+          "orig": "171 - для ледоколов ледового класса Icebreaker9 ;",
+          "text": "171 - для ледоколов ледового класса Icebreaker9 ;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/33",
+          "parent": {
+            "$ref": "#/groups/2"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 156.02,
+                "t": 106.40541802734379,
+                "r": 383.692,
+                "b": 97.9025389113217,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                49
+              ]
+            }
+          ],
+          "orig": "150 - для ледоколов ледового класса Icebreaker8 ;",
+          "text": "150 - для ледоколов ледового класса Icebreaker8 ;",
+          "formatting": null,
+          "hyperlink": null
+        },
+        {
+          "self_ref": "#/texts/34",
+          "parent": {
+            "$ref": "#/groups/2"
+          },
+          "children": [],
+          "content_layer": "body",
+          "meta": null,
+          "label": "text",
+          "prov": [
+            {
+              "page_no": 18,
+              "bbox": {
+                "l": 156.02,
+                "t": 95.48541802734383,
+                "r": 383.692,
+                "b": 86.98253891132174,
+                "coord_origin": "BOTTOMLEFT"
+              },
+              "charspan": [
+                0,
+                49
+              ]
+            }
+          ],
+          "orig": "130 - для ледоколов ледового класса Icebreaker7 ;",
+          "text": "130 - для ледоколов ледового класса Icebreaker7 ;",
+          "formatting": null,
+          "hyperlink": null
+        }
+      ],
+      "pictures": [],
+      "tables": [],
+      "key_value_items": [],
+      "form_items": [],
+      "pages": {
+        "18": {
+          "size": {
+            "width": 594.9600219726562,
+            "height": 842.0399780273438
+          },
+          "image": null,
+          "page_no": 18
+        }
+      }
+    },
+    "html_content": null,
+    "text_content": null,
+    "doctags_content": null,
+    "doclang_content": null
+  },
+  "status": "success",
+  "errors": [],
+  "processing_time": 217.10434769600033,
+  "timings": {},
+  "confidence": {
+    "parse_score": 1.0,
+    "layout_score": 0.7874937737360597,
+    "table_score": null,
+    "ocr_score": null,
+    "mean_score": 0.8937468868680298,
+    "low_score": 0.7981190850492567,
+    "mean_grade": "good",
+    "low_grade": "fair"
+  }
+}

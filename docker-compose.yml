@@ -377,7 +377,7 @@ services:
     environment:
       <<: [*env-minio]
       LOG_LEVEL: DEBUG
-      DOCLING_SERVE_URL: http://docling-service-cpu:5001
+      DOCLING_SERVE_URL: http://docling-serve-cpu:5001
       MAX_CONCURRENT_FULL_PIPELINES: "3"
     depends_on:
       minio:

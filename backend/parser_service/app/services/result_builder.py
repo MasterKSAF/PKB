@@ -56,6 +56,11 @@ def build_result(
         content = final_json["content"]
         document = content.get("document", {})
         quality = content.get("quality", {})
+        # Мержим корневой quality (AssessQualityStep мог записать туда verdict,
+        # needs_ocr и т.д., т.к. не нашёл "quality" на корне docling-формата)
+        root_q = final_json.get("quality")
+        if isinstance(root_q, dict) and root_q:
+            quality = {**quality, **root_q}
         errors = content.get("errors", [])
         status = content.get("status", "completed")
     else:

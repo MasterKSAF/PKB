@@ -330,9 +330,9 @@ class TestRunRegistryStep:
 
         notify_completed = AsyncMock()
 
-        # document_data уже содержит metadata (doc_code) — как реальный конвертер
+        # document_data уже содержит metadata (doc_code, title) — как реальный конвертер
         document_data = {
-            "metadata": {"doc_code": "ГОСТ 1234-56"},
+            "metadata": {"doc_code": "ГОСТ 1234-56", "title": "Test Document"},
             "content": [
                 {"clause": "1", "type": "text", "path": "1", "page": 1,
                  "content": {"text": "Section 1"}},
@@ -494,6 +494,7 @@ class TestRunRegistryStep:
         notify_completed = AsyncMock()
 
         document_data = {
+            "metadata": {"doc_code": "ГОСТ 1234-56", "title": "Test Document"},
             "content": [
                 {"clause": "1", "type": "text", "path": "1", "page": 1,
                  "content": {"text": "Section 1"}},
@@ -575,7 +576,7 @@ class TestRunRegistryStep:
 
             result = run_registry_step.run(
                 task_id=3, draft_id=DRAFT_ID, document_id=42, version_id=421,
-                document_data={"content": [{"clause": "1"}]},
+                document_data={"metadata": {"doc_code": "ГОСТ 1234-56", "title": "Test"}, "content": [{"clause": "1"}]},
             )
 
         # create_document вызван с payload содержащим draft_id

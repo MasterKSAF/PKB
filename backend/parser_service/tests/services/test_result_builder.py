@@ -49,3 +49,38 @@ def test_result_builder_missing_fields():
     assert result["quality"] == {}
     assert result["errors"] == []
     assert result["status"] == "completed"
+
+
+def test_result_builder_docling_format_merges_root_quality():
+    """
+    Docling-формат: quality лежит в content.quality.
+    AssessQualityStep пишет свой вердикт в корневой quality.
+    build_result должен смержить оба уровня в result["quality"].
+    """
+    final_json = {
+        "content": {
+            "document": {"source": {"file_name": "test.pdf"}},
+            "quality": {"per_page": [{"page": 1, "confidence": 0.75}], "pages_processed": 33},
+        },
+        "quality": {
+            "verdict": "good",
+            "needs_ocr": False,
+            "page_coverage_ratio": 0.97,
+            "text_layer_quality": "GOOD",
+            "pages_scanned": 33,
+            "pages_with_content": 33,
+            "confidence": 0.99,
+        },
+    }
+    result = build_result(task_id=1, draft_id=1, final_json=final_json, mode="full")
+    quality = result["quality"]
+    # Поля из content.quality
+    assert quality["pages_processed"] == 33
+    assert len(quality["per_page"]) == 1
+    # Поля из корневого quality (AssessQualityStep) — смержены
+    assert quality["verdict"] == "good"
+    assert quality["needs_ocr"] is False
+    assert quality["page_coverage_ratio"] == 0.97
+    assert quality["text_layer_quality"] == "GOOD"
+    # При мерже root перезаписывает content (confidence из root)
+    assert quality["confidence"] == 0.99

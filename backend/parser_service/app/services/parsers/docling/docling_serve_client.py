@@ -67,7 +67,8 @@ def request_docling_document(
         ("to_formats", "json"),
         ("do_ocr", str(settings.docling_do_ocr).lower()),
         ("do_table_structure", str(settings.docling_table_structure).lower()),
-        ("table_mode", "accurate"),
+        ("table_mode", "fast"),
+        ("table_cell_matching", "false"),
         ("do_formula_enrichment", str(settings.docling_formula_enrichment).lower()),
         ("include_images", "true"),
     ]

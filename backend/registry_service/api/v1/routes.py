@@ -422,11 +422,9 @@ def get_document_parameters_endpoint(
 @routes.get('/registry/documents/{document_id}/pages')
 def get_document_pages_endpoint(
     document_id: str,
-    page: int = 1,
-    page_size: int = 50,
     db: Session = Depends(get_db),
 ):
-    """GET /registry/documents/{document_id}/pages - Список страниц документа"""
+    """GET /registry/documents/{document_id}/pages - Список всех страниц документа"""
     log_event('INFO', f'/registry/documents/{document_id}/pages', None, None)
     try:
         document = document_crud.get_document_by_id(db, document_id)
@@ -447,21 +445,17 @@ def get_document_pages_endpoint(
                 "confidence": 0,
                 "has_text_layer": True
             })
-            
-        start = (page - 1) * page_size
-        end = start + page_size
-        paged_items = pages_list[start:end]
         
         return {
             'data': {
                 'document_id': document.id,
                 'pages_total': pages_total,
-                'pages': paged_items
+                'pages': pages_list
             },
             'meta': {
                 'total': pages_total,
-                'page': page,
-                'page_size': page_size
+                'page': 1,
+                'page_size': pages_total
             }
         }
     except HTTPException:

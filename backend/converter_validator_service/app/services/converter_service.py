@@ -40,8 +40,8 @@ def _merge_document_metadata(
         if value is not None:
             meta.setdefault(field, value)
 
-    meta.setdefault("doc_code", "")
-    meta.setdefault("title", "")
+    meta.setdefault("doc_code", None)
+    meta.setdefault("title", None)
     meta["normalized_title"] = " ".join(
         (meta.get("title") or "").lower().split()
     )
@@ -89,6 +89,11 @@ async def convert(
         raise ConversionFailedError(
             f"Hierarchy build failed: {exc}"
         ) from exc
+
+    if not hierarchy.get("content"):
+        raise ConversionFailedError(
+            "Hierarchy has no content — raw_json contains no document blocks"
+        )
 
     hierarchy = _merge_document_metadata(hierarchy, preview_meta, raw_json)
     llm_usage = None

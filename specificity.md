@@ -22,6 +22,32 @@
 
 После фикса pipeline проходит 7/7 полных циклов (data/pdf_tests).
 
+### G9. 🔧 Quality: AssessQualityStep-поля терялись при docling-формате
+
+**Статус:** ИСПРАВЛЕНО (14.07)
+
+**Симптом:** В `registry.documents.metadata->quality` отсутствовали поля `verdict`, `needs_ocr`, `text_layer_quality`, `page_coverage_ratio`, `pages_scanned`, `pages_with_content`. При этом `notifications` содержал верный message от AssessQualityStep.
+
+**Корневая причина:** Docling-формат (`content.document` + `content.quality`) — `AssessQualityStep.execute()` не находил `"quality"` на корне `final_json` (т.к. он внутри `content`), создавал `final_json["quality"] = {verdict, ...}` на корне. Затем `build_result()` в ветке docling-формата брал `quality = content.get("quality", {})` — только parser-поля, игнорируя корневой quality.
+
+**Фикс:** `result_builder.py:59-63` — в docling-ветке добавлен `{**quality, **root_q}` мерж корневого quality в content-качество.
+
+**Где:** `backend/parser_service/app/services/result_builder.py:59-63`
+
+### G10. Docling-serve: параметры — плоские form-поля, НЕ options JSON
+
+**Статус** ИСПРАВЛЕНО (14.07)
+
+**Симптом:** Параметры пайплайна не применялись — сервер обрабатывал 50+ с/страницу вместо ожидаемых ~2 с.
+
+**Корневая причина:** `docling_serve_client.py` уже корректно отправлял плоские form-поля. Внешние источники (github issues, web search) дезинформировали, что нужен JSON внутри поля `options` — это НЕВЕРНО для версии контейнера `quay.io/docling-project/docling-serve-cpu:latest`.
+
+**Факт:** Согласно OpenAPI-схеме (swagger), `/v1/convert/file` принимает параметры как отдельные form-поля (`table_mode`, `table_cell_matching`, `do_ocr`, etc.). Попытка упаковать их в `options` JSON-строку приводит к игнорированию — сервер использует defaults (accurate + cell matching = медленно).
+
+**Проверено:** `table_mode=fast&table_cell_matching=false&do_ocr=false` через flat form → 4с/стр (3 стр за 12с). Тест: `data/tests/test_docling_opts.py`.
+
+**Где:** `backend/parser_service/app/services/parsers/docling/docling_serve_client.py`
+
 ### B3. RAG-индексация не стартует даже при доступных данных
 
 **Симптом:** Данные в RAG Search уже есть (поиск находит doc_id=59),

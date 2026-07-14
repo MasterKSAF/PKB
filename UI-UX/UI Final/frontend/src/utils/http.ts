@@ -77,6 +77,7 @@ export type GatewayHealth = {
   service?: string;
   version?: string;
   timestamp?: string;
+  llm_timeout?: number;
   raw?: unknown;
 };
 
@@ -217,6 +218,26 @@ type GatewayDocumentParameters = {
   extraction_confidence?: number;
   unconfirmed_fields?: string[];
   updated_at?: string;
+};
+
+export type GatewayDocumentQuality = {
+  verdict: string;
+  confidence: number;
+  needs_ocr: boolean;
+  text_layer_quality: string;
+  page_coverage_ratio: number;
+  total_blocks: number;
+  total_chars: number;
+  empty_blocks: number;
+  mean_chars_per_block: number;
+  empty_blocks_ratio: number;
+  block_types: Record<string, number>;
+  pages_scanned: number;
+  pages_with_content: number;
+  pages_failed: number;
+  per_page: Array<{ page: number; status: string; blocks: number }>;
+  notifications: Array<{ category: string; message: string }>;
+  reasons: string[];
 };
 
 type GatewayDocumentPages = {
@@ -701,6 +722,21 @@ function mapGatewayChatResponse(payload: any, query: string): ChatMessage {
   };
 }
 
+// Кешированное значение LLM_TIMEOUT с бэкенда
+let _llmTimeout: number | null = null;
+
+async function _ensureChatTimeout(): Promise<number> {
+  if (_llmTimeout === null) {
+    try {
+      const health = await systemApi.health();
+      _llmTimeout = health.llm_timeout ?? 120;
+    } catch {
+      _llmTimeout = 120;
+    }
+  }
+  return _llmTimeout;
+}
+
 function isFinalChatStatus(status?: string) {
   const normalized = String(status ?? '').toLowerCase();
   return ['answered', 'completed', 'failed', 'not_found', 'out_of_scope', 'needs_clarification', 'source_conflict'].includes(
@@ -708,25 +744,29 @@ function isFinalChatStatus(status?: string) {
   );
 }
 
-async function waitForGatewayChatMessage(sessionId: string, messageId: string, longpoll = 15, maxAttempts = 4) {
-  let lastResponse: any = null;
+async function waitForGatewayChatMessage(sessionId: string, messageId: string, llmTimeout: number) {
+  // longpoll шаг 15с; axios timeout переопределяем, чтобы не обрывал раньше бэкенда
+  const POLL_STEP = 15;
+  const deadline = Date.now() + llmTimeout * 1000;
 
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+  while (Date.now() < deadline) {
+    const step = Math.min(POLL_STEP, Math.ceil((deadline - Date.now()) / 1000));
     const response = await gatewayRequest<any>(() =>
       apiClient.get(`/chat/sessions/${sessionId}/messages/${messageId}`, {
-        params: { longpoll },
+        params: { longpoll: step },
+        timeout: 0,
       }),
     );
 
-    lastResponse = response.data;
     const messagePayload = unwrapGatewayMessagePayload(response.data);
-
     if (isFinalChatStatus(messagePayload?.status)) {
       return response.data;
     }
   }
 
-  const lastPayload = unwrapGatewayMessagePayload(lastResponse);
+  const lastPayload = unwrapGatewayMessagePayload(
+    (await apiClient.get(`/chat/sessions/${sessionId}/messages/${messageId}`)).data,
+  );
   const lastStatus = lastPayload?.status ?? 'unknown';
   throw new Error(`Gateway chat longpoll did not reach final status. session_id=${sessionId}, message_id=${messageId}, status=${lastStatus}`);
 }
@@ -1770,7 +1810,8 @@ export const chatApi = {
 
       let finalResponse;
       try {
-        finalResponse = await waitForGatewayChatMessage(activeSessionId, String(messageId), 15, 4);
+        const llmTimeout = await _ensureChatTimeout();
+        finalResponse = await waitForGatewayChatMessage(activeSessionId, String(messageId), llmTimeout);
       } catch (error) {
         useUIStore.getState().setApiStatus('offline');
         throw error;

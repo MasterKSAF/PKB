@@ -235,6 +235,15 @@ def run_ocr_full_step(
 
         # Реальный API возвращает без обёртки data (см. docs/api/ocr_service_api.md)
         ocr_data = result.get("data", result)
+
+        # Validate: reject async/sync responses without actual content
+        if ocr_data.get("status") == "accepted" or not ocr_data.get("pages_processed", 0):
+            raise ValueError(
+                f"OCR returned no content: status={ocr_data.get('status')!r} "
+                f"pages_processed={ocr_data.get('pages_processed', 0)} "
+                f"for task {task_id}"
+            )
+
         input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         output_data = {
             "pages_processed": ocr_data.get("pages_processed", 0),
@@ -432,10 +441,18 @@ def run_converter_full_step(
         input_data = {"file_key": file_key, "mode": "full", "draft_id": draft_id}
         converter_data = result.get("data", result) if isinstance(result, dict) else {}
         validation = converter_data.get("validation") or {}
+        document_data = converter_data.get("document", {})
+        document_content = document_data.get("content", []) if isinstance(document_data, dict) else []
+
+        if not document_content:
+            raise ValueError(
+                f"Converter returned empty content for task {task_id} draft {draft_id}"
+            )
+
         output_data = {
             "validated": validation.get("structure_valid", True),
             "metadata": converter_data.get("metadata", {}),
-            "document": converter_data.get("document", {}),
+            "document": document_data,
             "validation": validation,
             "document_id": converter_data.get("document_id"),
             "version_id": converter_data.get("version_id"),
@@ -498,18 +515,12 @@ def run_registry_step(
                     # POST /documents validates against validated_v3 schema and rejects
                     # unknown fields in document.metadata with HTTP 400.
 
-                    # Fallback: если конвертер не извлёк doc_code,
-                    # генерируем из title (как делает approve_draft)
                     doc_meta = document_data.get("metadata", {})
-                    if not doc_meta.get("doc_code"):
-                        title = doc_meta.get("title", "") or ""
-                        fallback_code = title.strip().upper().replace(" ", "-").replace("/", "-")[:50]
-                        if not fallback_code:
-                            fallback_code = f"DOC-{draft_id}"
-                        doc_meta["doc_code"] = fallback_code
-                        logger.info(
-                            f"Converter returned empty doc_code, generated fallback: {fallback_code}",
-                            extra={"task_id": task_id, "draft_id": draft_id},
+                    if not doc_meta.get("doc_code") or not doc_meta.get("title"):
+                        raise ValueError(
+                            f"Converter returned incomplete metadata "
+                            f"(doc_code={doc_meta.get('doc_code')!r}, title={doc_meta.get('title')!r}) "
+                            f"for task {task_id} draft {draft_id}"
                         )
                     # Sanitize: strip section_id from content items.
                     # Registry assigns its own section_id; sending it causes HTTP 400.

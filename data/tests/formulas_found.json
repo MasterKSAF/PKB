@@ -1,0 +1,152 @@
+[
+  {
+    "self_ref": "#/texts/6",
+    "parent": {
+      "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "meta": null,
+    "label": "formula",
+    "prov": [
+      {
+        "page_no": 18,
+        "bbox": {
+          "l": 99.384,
+          "t": 567.2590980273437,
+          "r": 533.32912,
+          "b": 554.6073892725299,
+          "coord_origin": "BOTTOMLEFT"
+        },
+        "charspan": [
+          0,
+          27
+        ]
+      }
+    ],
+    "orig": "𝐹 = 𝐹 1 + 𝐹 2 , (2.2.2.1-1)",
+    "text": "F = F _ { 1 } \\, + \\, F _ { 2 } ,",
+    "formatting": null,
+    "hyperlink": null
+  },
+  {
+    "self_ref": "#/texts/8",
+    "parent": {
+      "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "meta": null,
+    "label": "formula",
+    "prov": [
+      {
+        "page_no": 18,
+        "bbox": {
+          "l": 99.384,
+          "t": 524.8314180273437,
+          "r": 532.762,
+          "b": 513.3132647025684,
+          "coord_origin": "BOTTOMLEFT"
+        },
+        "charspan": [
+          0,
+          62
+        ]
+      }
+    ],
+    "orig": "𝐹1 = 5,59 ∙ 10 -3 𝑘1𝑘2 (6,5 + λ)(𝑏 1 -𝐶𝐵) 2 𝐴𝑣 2 ; (2.2.2.1-2)",
+    "text": "F _ { 1 } = 5 , 5 9 \\cdot 1 0 ^ { - 3 } k _ { 1 2 } k _ { 2 } ( 6 , 5 + \\lambda ) ( b _ { 1 } - C _ { B } ) ^ { 2 } A v ^ { 2 } ;",
+    "formatting": null,
+    "hyperlink": null
+  },
+  {
+    "self_ref": "#/texts/9",
+    "parent": {
+      "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "meta": null,
+    "label": "formula",
+    "prov": [
+      {
+        "page_no": 18,
+        "bbox": {
+          "l": 99.384,
+          "t": 503.83141802734383,
+          "r": 532.762,
+          "b": 486.51253433029626,
+          "coord_origin": "BOTTOMLEFT"
+        },
+        "charspan": [
+          0,
+          45
+        ]
+      }
+    ],
+    "orig": "𝐹2 = 0,177𝑘1 (6,5 + λ) 𝑇 𝐷в 2 𝐴в, (2.2.2.1-3)",
+    "text": "F _ { 2 } = 0 , 1 7 7 k _ { 1 } ( 6 , 5 + \\lambda ) \\frac { T } { d _ { s } ^ { 2 } } A _ { b } , & & ( 2 . 2 . 2 . 1 - 3 )",
+    "formatting": null,
+    "hyperlink": null
+  },
+  {
+    "self_ref": "#/texts/18",
+    "parent": {
+      "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "meta": null,
+    "label": "formula",
+    "prov": [
+      {
+        "page_no": 18,
+        "bbox": {
+          "l": 120.02,
+          "t": 371.2114180273438,
+          "r": 532.762,
+          "b": 359.69326470256846,
+          "coord_origin": "BOTTOMLEFT"
+        },
+        "charspan": [
+          0,
+          25
+        ]
+      }
+    ],
+    "orig": "λ = ℎp 2 /𝐴к, (2.2.2.1-4)",
+    "text": "\\lambda = h _ { p } ^ { 2 } / A _ { \\kappa } ,",
+    "formatting": null,
+    "hyperlink": null
+  },
+  {
+    "self_ref": "#/texts/30",
+    "parent": {
+      "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "meta": null,
+    "label": "formula",
+    "prov": [
+      {
+        "page_no": 18,
+        "bbox": {
+          "l": 99.384,
+          "t": 153.8090980273438,
+          "r": 533.32912,
+          "b": 142.77224421476353,
+          "coord_origin": "BOTTOMLEFT"
+        },
+        "charspan": [
+          0,
+          20
+        ]
+      }
+    ],
+    "orig": "𝐹3 = 𝑘3𝐴 , (2.2.2.2)",
+    "text": "F _ { 3 } = k _ { 3 } A ,",
+    "formatting": null,
+    "hyperlink": null
+  }
+]

@@ -25,7 +25,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, FileText, History, Layers3, Maximize2, MoreVertical, Save, Search, Trash2, X } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, FileText, History, Layers3, Maximize2, MoreVertical, Save, Search, Trash2, X } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '../store/uiStore';
 import { downloadPreviewFile } from '../utils/downloadPreview';
@@ -255,6 +255,7 @@ const buildDemoDetail = (document: Document | null) => {
       title: document.name,
       source: document.source,
       updated_at: document.updatedAt,
+      quality: buildDemoQuality(document),
     },
     latest_version: {
       version: document.version,
@@ -326,6 +327,34 @@ const buildDemoParameters = (document: Document | null) => {
       version: document.version,
       updated_at: document.updatedAt,
     },
+  };
+};
+
+const buildDemoQuality = (document: Document | null) => {
+  if (!document) return null;
+  const isIndexed = document.indexStatus === 'Индексировано';
+  return {
+    verdict: isIndexed ? 'good' : 'partial',
+    confidence: isIndexed ? 0.94 : 0.58,
+    needs_ocr: !isIndexed,
+    text_layer_quality: isIndexed ? 'GOOD' : 'SUSPECT',
+    page_coverage_ratio: isIndexed ? 0.98 : 0.45,
+    total_blocks: isIndexed ? 24 : 8,
+    total_chars: isIndexed ? 4860 : 920,
+    empty_blocks: isIndexed ? 1 : 3,
+    mean_chars_per_block: isIndexed ? 202.5 : 115.0,
+    empty_blocks_ratio: isIndexed ? 0.04 : 0.38,
+    block_types: isIndexed ? { paragraph: 15, heading: 3, table: 2, list: 3, image: 1 } : { paragraph: 5, heading: 1, image: 2 },
+    pages_scanned: 10,
+    pages_with_content: isIndexed ? 10 : 5,
+    pages_failed: isIndexed ? 0 : 5,
+    per_page: Array.from({ length: 10 }, (_, i) => ({
+      page: i + 1,
+      status: isIndexed || i < 5 ? 'ok' : 'empty',
+      blocks: isIndexed ? 3 : i < 5 ? 2 : 0,
+    })),
+    notifications: [{ category: 'quality', message: `verdict: ${isIndexed ? 'good' : 'partial'}` }],
+    reasons: isIndexed ? ['good'] : ['partial'],
   };
 };
 
@@ -571,6 +600,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [technicalOpen, setTechnicalOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [qualityOpen, setQualityOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [actionsAnchorEl, setActionsAnchorEl] = useState<null | HTMLElement>(null);
   const [pageMenuAnchorEl, setPageMenuAnchorEl] = useState<null | HTMLElement>(null);
@@ -726,6 +756,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
       return Boolean(msg) && String(msg).toLowerCase() !== 'unknown';
     });
   const historyRows = useMemo(() => normalizeHistoryRows(history), [history]);
+  const quality = useMemo(() => detailRecord?.metadata?.quality ?? detailRecord?.quality ?? null, [detailRecord]);
   const parameters = workMode === 'prod' ? parametersQuery.data : buildDemoParameters(selectedDocument);
   const previewPages = useMemo(
     () => {
@@ -1311,7 +1342,15 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                       >
                         {selectedPreviewPage ? (
                             <Stack spacing={1}>
-                              {currentPreviewText ? (
+                              {pageContentQuery.isLoading && workMode === 'prod' ? (
+                                <Typography color="text.secondary">
+                                  Загружаем страницу…
+                                </Typography>
+                              ) : pageContentQuery.isError && workMode === 'prod' ? (
+                                <Typography color="text.secondary">
+                                  Страница не доступна.
+                                </Typography>
+                              ) : currentPreviewText ? (
                                 <Box sx={{ m: 0, lineHeight: 1.7, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' }, '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 1 } }}>
                                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                     {currentPreviewText}
@@ -1319,7 +1358,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                                 </Box>
                               ) : (
                                 <Typography color="text.secondary">
-                                  Страница существует, но сервер не передал доступное изображение или текстовый слой.
+                                  Нет содержимого для отображения.
                                 </Typography>
                               )}
                             </Stack>
@@ -1445,6 +1484,118 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                           </React.Fragment>
                         ))}
                       </Box>
+                    </Collapse>
+                  </Paper>
+
+                  <Paper variant="outlined" sx={{ borderRadius: 2.2, overflow: 'hidden', ...panelSxFor(isLight) }}>
+                    <Button
+                      fullWidth
+                      onClick={() => setQualityOpen((current) => !current)}
+                      endIcon={qualityOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      sx={{ justifyContent: 'space-between', px: 1.2, py: 0.9, color: 'text.primary', textTransform: 'none' }}
+                    >
+                      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                        <BarChart3 size={16} color={isLight ? '#0284c7' : '#98d9d8'} />
+                        <Typography sx={{ fontWeight: 560 }}>Качество</Typography>
+                        {quality && (
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            label={quality.verdict === 'good' ? 'хорошее' : quality.verdict === 'partial' ? 'частичное' : 'плохое'}
+                            color={quality.verdict === 'good' ? 'success' : quality.verdict === 'partial' ? 'warning' : 'error'}
+                          />
+                        )}
+                      </Stack>
+                    </Button>
+                    <Divider sx={{ borderColor: 'rgba(198,214,236,0.16)' }} />
+                    <Collapse in={qualityOpen}>
+                      <Stack spacing={1.5} sx={{ p: 1.1 }}>
+                        {(() => {
+                          const q = quality as Record<string, any> | null;
+                          if (!q || typeof q !== 'object') return (
+                            <Typography variant="body2" color="text.secondary">
+                              Данные о качестве не переданы сервером.
+                            </Typography>
+                          );
+                          const verdict = String(q.verdict ?? '');
+                          const confidence = typeof q.confidence === 'number' ? q.confidence : 0;
+                          const textLayer = String(q.text_layer_quality ?? '—');
+                          const needsOcr = Boolean(q.needs_ocr);
+                          const pagesScanned = typeof q.pages_scanned === 'number' ? q.pages_scanned : 0;
+                          const pagesWithContent = typeof q.pages_with_content === 'number' ? q.pages_with_content : 0;
+                          const emptyRatio = typeof q.empty_blocks_ratio === 'number' ? q.empty_blocks_ratio : 0;
+                          const meanChars = typeof q.mean_chars_per_block === 'number' ? q.mean_chars_per_block : 0;
+                          const blockTypes = (q.block_types && typeof q.block_types === 'object') ? q.block_types as Record<string, number> : {};
+                          const perPage = Array.isArray(q.per_page) ? q.per_page : [];
+                          const notifications = Array.isArray(q.notifications) ? q.notifications : [];
+
+                          const verdictLabel = verdict === 'good' ? 'Хорошее' : verdict === 'partial' ? 'Частичное' : 'Требуется OCR';
+                          return (
+                            <>
+                              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '0.7fr 1fr 0.7fr 1fr' }, gap: 0.8 }}>
+                                {[
+                                  ['Вердикт', verdictLabel],
+                                  ['Уверенность', `${Math.round(confidence * 100)}%`],
+                                  ['Слой текста', textLayer],
+                                  ['Требуется OCR', needsOcr ? 'Да' : 'Нет'],
+                                  ['Обработано страниц', pagesScanned],
+                                  ['С содержанием', pagesWithContent],
+                                  ['Пустые блоки', `${Math.round(emptyRatio * 100)}%`],
+                                  ['Ср. символов/блок', meanChars.toFixed(1)],
+                                ].map(([label, value]) => (
+                                  <React.Fragment key={label}>
+                                    <Typography sx={detailLabelSx}>{label}</Typography>
+                                    <Typography sx={detailValueSx}>{displayValue(value)}</Typography>
+                                  </React.Fragment>
+                                ))}
+                              </Box>
+                              {Object.keys(blockTypes).length > 0 && (
+                                <Box>
+                                  <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: 'text.secondary' }}>Типы блоков</Typography>
+                                  <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                                    {Object.entries(blockTypes).map(([type, count]) => (
+                                      <Chip key={type} size="small" label={`${type}: ${count}`} variant="outlined" />
+                                    ))}
+                                  </Stack>
+                                </Box>
+                              )}
+                              {perPage.length > 0 && (
+                                <Box>
+                                  <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: 'text.secondary' }}>Постраничный разбор ({perPage.length} стр.)</Typography>
+                                  <Box sx={{ display: 'flex', gap: 0.3, flexWrap: 'wrap' }}>
+                                    {perPage.slice(0, 40).map((p) => (
+                                      <Box
+                                        key={p.page}
+                                        sx={{
+                                          width: 16,
+                                          height: 16,
+                                          borderRadius: 0.5,
+                                          bgcolor: p.status === 'ok' ? (verdict === 'good' ? 'success.main' : 'warning.main') : 'error.main',
+                                          opacity: p.status === 'ok' ? 0.85 : 0.5,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontSize: 8,
+                                          color: '#fff',
+                                          fontWeight: 700,
+                                          title: `Стр.${p.page}: ${p.status} (${p.blocks} блоков)`,
+                                        }}
+                                      >
+                                        {p.page}
+                                      </Box>
+                                    ))}
+                                  </Box>
+                                </Box>
+                              )}
+                              {notifications.length > 0 && (
+                                <Alert severity="info" variant="outlined" sx={{ borderRadius: 1.5, py: 0.5 }}>
+                                  {notifications.map((n: any) => n.message).join('; ')}
+                                </Alert>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </Stack>
                     </Collapse>
                   </Paper>
 
@@ -1706,7 +1857,15 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                       {selectedDocument?.name}
                     </Typography>
                   </Box>
-                  {currentPreviewText ? (
+                  {pageContentQuery.isLoading && workMode === 'prod' ? (
+                    <Typography color="text.secondary">
+                      Загружаем страницу…
+                    </Typography>
+                  ) : pageContentQuery.isError && workMode === 'prod' ? (
+                    <Typography color="text.secondary">
+                      Страница не доступна.
+                    </Typography>
+                  ) : currentPreviewText ? (
                     <Box sx={{ m: 0, lineHeight: 1.75, fontFamily: 'Georgia, serif', fontSize: '0.95rem', '& table': { borderCollapse: 'collapse', width: '100%', my: 1, '& th, & td': { border: '1px solid', borderColor: 'divider', p: 1, textAlign: 'left' } }, '& th': { bgcolor: 'action.hover' }, '& code': { bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5, fontSize: '0.85em' }, '& pre': { bgcolor: 'grey.900', color: 'grey.100', p: 1.5, borderRadius: 1, overflow: 'auto', fontSize: '0.85em' }, '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 1 } }}>
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {currentPreviewText}
@@ -1714,7 +1873,7 @@ export const DocumentRegistryPanel: React.FC<{ documents: Document[] }> = ({ doc
                     </Box>
                   ) : (
                     <Typography color="text.secondary">
-                      Страница существует, но сервер не передал доступное изображение или текстовый слой.
+                      Нет содержимого для отображения.
                     </Typography>
                   )}
                 </Stack>

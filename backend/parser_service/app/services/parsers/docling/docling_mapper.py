@@ -485,7 +485,7 @@ def _create_converter():
     pipeline_options = PdfPipelineOptions()
     pipeline_options.do_ocr = settings.docling_do_ocr
     pipeline_options.do_table_structure = settings.docling_table_structure
-    pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
+    pipeline_options.table_structure_options.mode = TableFormerMode.FAST
     pipeline_options.table_structure_options.do_cell_matching = False
     pipeline_options.do_formula_enrichment = settings.docling_formula_enrichment
     pipeline_options.accelerator_options.num_threads = settings.docling_num_threads
@@ -576,7 +576,10 @@ def convert_via_docling_md(pdf_path: str, max_pages: Optional[int] = None,
             key = (candidate, pno)
             if key in bbox_map:
                 return bbox_map[key]
-        for (map_text, map_page), map_bbox in bbox_map.items():
+        for key, map_bbox in bbox_map.items():
+            if not isinstance(key, tuple) or len(key) != 2:
+                continue
+            map_text, map_page = key
             if map_page == pno and map_text != '__table__':
                 if len(norm) > 10 and norm in map_text:
                     return map_bbox
@@ -711,8 +714,8 @@ def _try_pipeline(pdf_path: str, max_pages: Optional[int] = None, page_start: in
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_ocr = settings.docling_do_ocr
         pipeline_options.do_table_structure = settings.docling_table_structure
-        pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
-        pipeline_options.table_structure_options.do_cell_matching = True
+        pipeline_options.table_structure_options.mode = TableFormerMode.FAST
+        pipeline_options.table_structure_options.do_cell_matching = False
         pipeline_options.do_formula_enrichment = settings.docling_formula_enrichment
         pipeline_options.accelerator_options.num_threads = settings.docling_num_threads
         pipeline_options.layout_batch_size = 2

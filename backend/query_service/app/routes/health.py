@@ -43,6 +43,7 @@ async def health():
         "llm": llm_status,
         "llm_model": settings.LLM_MODEL,
         "llm_url": settings.LLM_API_URL,
+        "llm_timeout": settings.LLM_TIMEOUT,
         "service": "query-service",
     }
 

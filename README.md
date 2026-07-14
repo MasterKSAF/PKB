@@ -110,6 +110,58 @@ curl http://localhost:8080/api/v1/system/diagnostics/system
 Gateway проверяет собственный конфиг и health-check всех сервисов.
 Отдельный diagnostics server не требуется.
 
+## Отладка пайплайна — проверка JSON шагов
+
+Вся цепочка обработки документа логируется в `pipeline.task_steps` (БД orchestrator).
+Каждый шаг (`full_ocr`, `full_converter`, `registry_creation`) сохраняет `input_data` и `output_data` — это позволяет проверить, какие данные прошли через каждый этап, не гадая.
+
+```bash
+# 1. Найти task_id по draft_id
+docker compose exec postgres psql -U pkb -d pkb_neuro -c "
+SELECT id, draft_id, pipeline_stage, status
+FROM pipeline.tasks
+WHERE draft_id = <DRAFT_ID>
+ORDER BY id DESC LIMIT 5;"
+
+# 2. Посмотреть output_data всех шагов (первые 250 символов)
+docker compose exec postgres psql -U pkb -d pkb_neuro -c "
+SELECT id, step_name, status,
+       left(output_data::text, 250) AS preview
+FROM pipeline.task_steps
+WHERE task_id = <TASK_ID>
+ORDER BY step_index, id;"
+
+# 3. Проверить quality конкретного шага (например, full_ocr)
+docker compose exec postgres psql -U pkb -d pkb_neuro -t -A -c "
+SELECT (output_data#>'{full_result,quality}')::text
+FROM pipeline.task_steps
+WHERE id = <STEP_ID>;"
+
+# 4. Проверить quality после конвертера
+docker compose exec postgres psql -U pkb -d pkb_neuro -t -A -c "
+SELECT (output_data#>'{document,metadata,quality}')::text
+FROM pipeline.task_steps
+WHERE id = <STEP_ID>;"
+
+# 5. Проверить metadata->quality в registry
+docker compose exec postgres psql -U pkb -d pkb_neuro -c "
+SELECT id, draft_id, status,
+       substring((metadata->'quality')::text, 1, 600) AS quality
+FROM registry.documents
+WHERE draft_id = <DRAFT_ID>
+ORDER BY id DESC LIMIT 5;"
+```
+
+**Ключевые точки проверки:**
+
+| Шаг | Что проверять | Где quality |
+|-----|---------------|-------------|
+| `preview_ocr` / `full_ocr` | `output_data->'full_result'->'quality'` | parser-only (`per_page`, `confidence`, `pages_processed`) + `notifications` |
+| `full_converter` | `output_data->'document'->'metadata'->'quality'` | финальный quality, который попадёт в registry |
+| `registry.documents` | `metadata->'quality'` | что реально сохранено |
+
+Если в `full_ocr` `notifications` содержит `verdict=good`, а поля `verdict`, `needs_ocr`, `page_coverage_ratio` отсутствуют — проблема в `build_result()` (не смержен корневой quality).
+
 ## Batch-файлы (Windows)
 
 ### Docker-утилиты (backend/service_checker/docker)

@@ -234,13 +234,17 @@ async def _set_status(
     session_factory: async_sessionmaker,
     message_id: str,
     status: str,
+    status_message: str | None = None,
 ) -> None:
     async with session_factory() as db:
         async with db.begin():
+            values: dict = {"status": status}
+            if status_message is not None:
+                values["message"] = status_message
             await db.execute(
                 update(ChatMessage)
                 .where(ChatMessage.message_id == message_id)
-                .values(status=status)
+                .values(**values)
             )
 
 
@@ -259,12 +263,14 @@ async def _run_tool_loop(
     settings,
     valid_at: str,
     message_id: str,
+    session_factory: async_sessionmaker,
 ) -> tuple[str, list[rag_client.Chunk], int, int]:
     all_chunks: list[rag_client.Chunk] = []
     total_prompt = 0
     total_completion = 0
 
     for _ in range(_MAX_TOOL_ITERS):
+        await _set_status(session_factory, message_id, "analyzing", "Обращение к LLM...")
         result = await llm_client.complete(messages, tools=_TOOLS)
         total_prompt += result.prompt_tokens
         total_completion += result.completion_tokens
@@ -285,6 +291,7 @@ async def _run_tool_loop(
             if fn == "rag_search":
                 query = args.get("query", "")
                 logger.info("tool_call rag_search query=%r", query, extra={"message_id": message_id})
+                await _set_status(session_factory, message_id, "searching", f"Поиск: {query[:60]}...")
                 try:
                     chunks = await asyncio.wait_for(
                         rag_client.search(query, top_k=10, valid_at=valid_at),
@@ -301,6 +308,7 @@ async def _run_tool_loop(
                 doc_id = int(args.get("document_id", 0))
                 page = int(args.get("page", 1))
                 logger.info("tool_call get_document_page doc_id=%d page=%d", doc_id, page, extra={"message_id": message_id})
+                await _set_status(session_factory, message_id, "searching", f"Чтение страницы {page} документа {doc_id}...")
                 try:
                     tool_content = await asyncio.wait_for(
                         registry_client.get_document_page_text(doc_id, page),
@@ -319,6 +327,7 @@ async def _run_tool_loop(
                 "content": tool_content,
             })
 
+    await _set_status(session_factory, message_id, "analyzing", "Формирование ответа...")
     result = await llm_client.complete(messages)
     total_prompt += result.prompt_tokens
     total_completion += result.completion_tokens
@@ -340,7 +349,7 @@ async def run_pipeline(
         prompt_tokens: int = 0
         completion_tokens: int = 0
 
-        await _set_status(session_factory, message_id, "enriching")
+        await _set_status(session_factory, message_id, "enriching", "Нормализация терминов запроса...")
         enrichment_skipped = False
         try:
             enriched_query, _synonyms = await asyncio.wait_for(
@@ -352,13 +361,13 @@ async def run_pipeline(
             warnings.append("Обогащение терминов недоступно. Поиск выполнен без нормализации.")
             logger.warning("query enrichment skipped", extra={"message_id": message_id}, exc_info=True)
 
-        await _set_status(session_factory, message_id, "generating")
+        await _set_status(session_factory, message_id, "generating", "Подготовка контекста диалога...")
         summary, history = await _prepare_context(
             session_factory, session_id, message_id, settings
         )
 
         if settings.MOCK_LLM_ENABLED:
-            await _set_status(session_factory, message_id, "searching")
+            await _set_status(session_factory, message_id, "searching", f"Поиск: {enriched_query[:60]}...")
             try:
                 chunks = await asyncio.wait_for(
                     rag_client.search(enriched_query, top_k=10, valid_at=_utcnow().strftime("%Y-%m-%d")),
@@ -405,7 +414,7 @@ async def run_pipeline(
 
             try:
                 llm_text, all_chunks, prompt_tokens, completion_tokens = await asyncio.wait_for(
-                    _run_tool_loop(messages, settings, _utcnow().strftime("%Y-%m-%d"), message_id),
+                    _run_tool_loop(messages, settings, _utcnow().strftime("%Y-%m-%d"), message_id, session_factory),
                     timeout=180.0,
                 )
             except Exception:
@@ -413,7 +422,7 @@ async def run_pipeline(
                 await _set_status(session_factory, message_id, "failed")
                 return
 
-        await _set_status(session_factory, message_id, "enriching_citations")
+        await _set_status(session_factory, message_id, "enriching_citations", "Обогащение цитат...")
         try:
             final_text, used_indices = await asyncio.wait_for(
                 asyncio.to_thread(_enrich_citations, llm_text, all_chunks),

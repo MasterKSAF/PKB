@@ -997,13 +997,24 @@ class PipelineOrchestrator:
                     break
 
             # Guard: don't create document if converter produced no meaningful data
+            doc_content = (document_data or {}).get("content", []) if isinstance(document_data, dict) else []
             doc_meta = (document_data or {}).get("metadata", {})
-            if not doc_meta.get("title") and not doc_meta.get("doc_code"):
+
+            if not doc_content:
                 logger.warning(
-                    f"Converter returned empty metadata (no title/doc_code) for task {task.id} — failing",
+                    f"Converter returned empty content for task {task.id} — failing",
                     extra={"task_id": task.id, "draft_id": task.draft_id},
                 )
-                await self.task_repo.set_task_error(task.id, "CONVERTER_NO_DATA", "Converter returned empty metadata")
+                await self.task_repo.set_task_error(task.id, "CONVERTER_EMPTY_CONTENT", "Converter returned empty content")
+                await self.task_repo.update_task_status(task_id=task.id, status=TaskStatus.FAILED.value)
+                return
+
+            if not doc_meta.get("title") or not doc_meta.get("doc_code"):
+                logger.warning(
+                    f"Converter returned incomplete metadata (title={doc_meta.get('title')!r}, doc_code={doc_meta.get('doc_code')!r}) for task {task.id} — failing",
+                    extra={"task_id": task.id, "draft_id": task.draft_id},
+                )
+                await self.task_repo.set_task_error(task.id, "CONVERTER_INCOMPLETE_METADATA", f"Missing title or doc_code")
                 await self.task_repo.update_task_status(task_id=task.id, status=TaskStatus.FAILED.value)
                 return
 
@@ -1016,8 +1027,8 @@ class PipelineOrchestrator:
             file_hash = doc_meta.get("file_hash_sha256") or upload_metadata.get("file_hash_sha256")
 
             doc_payload = {
-                "title": doc_meta.get("title") or f"Draft {task.draft_id}",
-                "doc_code": doc_meta.get("doc_code") or f"DRAFT-{task.draft_id}",
+                "title": doc_meta["title"],
+                "doc_code": doc_meta["doc_code"],
                 "era": doc_meta.get("era"),
                 "source_type": doc_meta.get("source_type"),
                 "jurisdiction": doc_meta.get("jurisdiction"),
@@ -1870,12 +1881,17 @@ class PipelineOrchestrator:
                 for s in steps
             )
             if not existing_pending:
-                # Re-create step as pending for retry
+                # Re-create step as pending for retry.
+                # Use the original service_name from the failed step, not
+                # task.current_step_name which may have been overwritten
+                # by a previous fallback.
+                retry_service_name = failed_step.service_name or step_name
+                retry_step_index = failed_step.step_index or task.current_step_index
                 await self.task_repo.create_task_step(
                     task_id=task_id,
                     step_name=step_name,
-                    step_index=task.current_step_index,
-                    service_name=task.current_step_name or step_name,
+                    step_index=retry_step_index,
+                    service_name=retry_service_name,
                 )
 
             await self.task_repo.update_task_status(

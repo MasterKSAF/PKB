@@ -286,15 +286,14 @@ def _activate_document_sync(document_id: int) -> dict:
 
     try:
         rag = RAGBuilderClient()
-        check_result = run_async(rag.check_index(document_id=document_id))
+        status_result = run_async(rag.get_build_status(document_id=document_id, longpoll=0))
         run_async(rag.close())
 
-        integrity_ok = check_result.get("integrity_ok", False)
-        if not integrity_ok:
+        if status_result.get("status") != "indexed" or not status_result.get("has_embeddings"):
             logger.warning(
-                f"Background activation: integrity check failed for doc {document_id}, "
+                f"Background activation: build not ready for doc {document_id}, "
                 f"staying in validating",
-                extra={"check_result": check_result},
+                extra={"status_result": status_result},
             )
             return {"status": "integrity_failed", "document_id": document_id}
 
