@@ -40,6 +40,8 @@ def test_start_extract_job_posts_parse_job_id_as_file_input() -> None:
                 "extraction_target": "per_doc",
                 "data_schema": {"type": "object"},
                 "system_prompt": "Extract sections.",
+                "target_pages": "1-6",
+                "max_pages": 20,
             },
         }
 
@@ -67,6 +69,8 @@ def test_start_extract_job_posts_parse_job_id_as_file_input() -> None:
             schema_name="sections_schema",
             extraction_schema={"type": "object"},
             instructions="Extract sections.",
+            target_pages="1-6",
+            max_pages=20,
         )
     )
 

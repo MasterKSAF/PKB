@@ -93,6 +93,8 @@ class ExtractPassRunRequest(BaseModel):
     extraction_schema: dict[str, Any] = Field(default_factory=dict)
     instructions: str | None = None
     schema_name: str | None = None
+    target_pages: str | None = Field(default=None, min_length=1)
+    max_pages: int | None = Field(default=None, ge=1)
     expand: list[str] = Field(default_factory=list)
     max_attempts: int = Field(default=60, ge=1)
     interval_seconds: float = Field(default=2.0, ge=0.0)

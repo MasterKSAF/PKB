@@ -28,12 +28,16 @@ def test_extract_pass_request_uses_parse_job_id_as_input() -> None:
         schema_name="sections_schema",
         extraction_schema={"type": "object"},
         instructions="Extract document sections.",
+        target_pages="10-12",
+        max_pages=3,
     )
 
     assert request.parse_job_id == "pjb-123"
     assert request.pass_name == "sections"
     assert request.project_id == "project-123"
     assert request.schema_name == "sections_schema"
+    assert request.target_pages == "10-12"
+    assert request.max_pages == 3
     assert request.extraction_schema == {"type": "object"}
     assert request.instructions == "Extract document sections."
 

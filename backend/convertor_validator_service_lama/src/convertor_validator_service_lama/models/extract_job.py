@@ -36,6 +36,8 @@ class ExtractPassRequest(BaseModel):
     schema_name: str | None = None
     extraction_schema: dict[str, Any] = Field(default_factory=dict)
     instructions: str | None = None
+    target_pages: str | None = Field(default=None, min_length=1)
+    max_pages: int | None = Field(default=None, ge=1)
 
 
 class ExtractJobPollingConfig(BaseModel):

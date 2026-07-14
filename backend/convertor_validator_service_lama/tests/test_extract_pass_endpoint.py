@@ -27,6 +27,8 @@ def test_extract_pass_endpoint_runs_service_orchestration(monkeypatch) -> None:
         extraction_schema: dict[str, object],
         instructions: str | None,
         schema_name: str | None,
+        target_pages: str | None,
+        max_pages: int | None,
         expand: list[str],
         polling_config: ExtractJobPollingConfig,
     ) -> ExtractJobResult:
@@ -35,6 +37,8 @@ def test_extract_pass_endpoint_runs_service_orchestration(monkeypatch) -> None:
         captured["extraction_schema"] = extraction_schema
         captured["instructions"] = instructions
         captured["schema_name"] = schema_name
+        captured["target_pages"] = target_pages
+        captured["max_pages"] = max_pages
         captured["expand"] = expand
         captured["polling_config"] = polling_config
 
@@ -62,6 +66,8 @@ def test_extract_pass_endpoint_runs_service_orchestration(monkeypatch) -> None:
             "extraction_schema": {"type": "object"},
             "instructions": "Extract sections.",
             "schema_name": "sections_schema",
+            "target_pages": "1-6",
+            "max_pages": 20,
             "expand": ["extract_result"],
             "max_attempts": 3,
             "interval_seconds": 0.0,
@@ -79,6 +85,8 @@ def test_extract_pass_endpoint_runs_service_orchestration(monkeypatch) -> None:
     assert captured["extraction_schema"] == {"type": "object"}
     assert captured["instructions"] == "Extract sections."
     assert captured["schema_name"] == "sections_schema"
+    assert captured["target_pages"] == "1-6"
+    assert captured["max_pages"] == 20
     assert captured["expand"] == ["extract_result"]
     assert captured["polling_config"] == ExtractJobPollingConfig(
         max_attempts=3,
@@ -107,6 +115,8 @@ def test_extract_pass_endpoint_maps_service_errors_to_http_errors(
         extraction_schema: dict[str, object],
         instructions: str | None,
         schema_name: str | None,
+        target_pages: str | None,
+        max_pages: int | None,
         expand: list[str],
         polling_config: ExtractJobPollingConfig,
     ) -> ExtractJobResult:

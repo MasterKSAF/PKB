@@ -155,6 +155,12 @@ class LlamaExtractRestClient:
         if request.instructions:
             configuration["system_prompt"] = request.instructions
 
+        if request.target_pages:
+            configuration["target_pages"] = request.target_pages
+
+        if request.max_pages is not None:
+            configuration["max_pages"] = request.max_pages
+
         return {
             "file_input": request.parse_job_id,
             "configuration": configuration,

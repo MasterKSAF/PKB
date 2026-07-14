@@ -761,6 +761,8 @@ def run_extract_pass_with_polling(
     extraction_schema: dict[str, object] | None = None,
     instructions: str | None = None,
     schema_name: str | None = None,
+    target_pages: str | None = None,
+    max_pages: int | None = None,
     expand: Sequence[str] | None = None,
     polling_config: ExtractJobPollingConfig | None = None,
     client: LlamaExtractRestClient | None = None,
@@ -787,6 +789,8 @@ def run_extract_pass_with_polling(
             schema_name=schema_name,
             extraction_schema=resolved_extraction_schema,
             instructions=resolved_instructions,
+            target_pages=target_pages,
+            max_pages=max_pages,
         )
         submit_response = extract_client.start_extract_job(request)
         return extract_client.poll_extract_job(

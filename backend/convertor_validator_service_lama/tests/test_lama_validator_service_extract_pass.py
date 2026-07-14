@@ -95,6 +95,8 @@ def test_run_extract_pass_with_polling_orchestrates_submit_and_poll(monkeypatch)
         extraction_schema={"type": "object"},
         instructions="Extract sections.",
         schema_name="sections_schema",
+        target_pages="1-6",
+        max_pages=20,
         expand=["extract_result"],
         polling_config=polling_config,
         client=client,
@@ -114,6 +116,8 @@ def test_run_extract_pass_with_polling_orchestrates_submit_and_poll(monkeypatch)
         schema_name="sections_schema",
         extraction_schema={"type": "object"},
         instructions="Extract sections.",
+        target_pages="1-6",
+        max_pages=20,
     )
 
     assert client.calls[1] == (
@@ -130,7 +134,7 @@ def test_run_extract_pass_with_polling_orchestrates_submit_and_poll(monkeypatch)
 
 
 def test_run_extract_pass_with_polling_requires_project_id(monkeypatch) -> None:
-    monkeypatch.delenv("LAMA_EXTRACT_PROJECT_ID", raising=False)
+    monkeypatch.setenv("LAMA_EXTRACT_PROJECT_ID", "")
 
     with pytest.raises(MissingLlamaExtractProjectIdError):
         run_extract_pass_with_polling(

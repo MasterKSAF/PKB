@@ -155,6 +155,8 @@ def extract_pass(request: ExtractPassRunRequest) -> ExtractJobResult:
             extraction_schema=request.extraction_schema,
             instructions=request.instructions,
             schema_name=request.schema_name,
+            target_pages=request.target_pages,
+            max_pages=request.max_pages,
             expand=request.expand,
             polling_config=polling_config,
         )
