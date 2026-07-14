@@ -1,4 +1,5 @@
 from convertor_validator_service_lama.services.reference_normalizer import (
+    document_codes_equal,
     expand_gost_document_codes,
     expand_gost_document_codes_from_values,
 )
@@ -75,3 +76,9 @@ def test_expands_gost_document_codes_from_multiple_values() -> None:
         "\u0413\u041e\u0421\u0422 20863-81",
         "\u0413\u041e\u0421\u0422 20864-81",
     ]
+
+
+def test_document_codes_equal_normalizes_gost_prefix_and_dash_variants() -> None:
+    assert document_codes_equal("GOST 20868-81", "\u0413\u041e\u0421\u0422 20868\u201481")
+    assert document_codes_equal("\u0413\u041e\u0421\u0422 20868\u201381", "\u0413\u041e\u0421\u0422 20868-81")
+    assert not document_codes_equal("GOST 20868-81", "\u0413\u041e\u0421\u0422 20862-81")

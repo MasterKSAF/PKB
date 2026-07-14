@@ -62,7 +62,12 @@ class RichDocumentImage(BaseModel):
     image_id: str | None = None
     caption: str | None = None
     alt_text: str | None = None
+    # Legacy ambiguous page field kept for compatibility.
     page: int | None = Field(default=None, ge=0)
+    # Citation code should prefer file_page_number/file_page_index.
+    file_page_number: int | None = Field(default=None, ge=1)
+    file_page_index: int | None = Field(default=None, ge=0)
+    printed_page_label: str | None = None
     bbox: list[float] | None = None
     storage_uri: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
@@ -72,7 +77,12 @@ class RichDocumentFormula(BaseModel):
     formula_id: str | None = None
     expression: str | None = None
     latex: str | None = None
+    # Legacy ambiguous page field kept for compatibility.
     page: int | None = Field(default=None, ge=0)
+    # Citation code should prefer file_page_number/file_page_index.
+    file_page_number: int | None = Field(default=None, ge=1)
+    file_page_index: int | None = Field(default=None, ge=0)
+    printed_page_label: str | None = None
     bbox: list[float] | None = None
     parameters: list[dict[str, Any]] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
@@ -91,7 +101,12 @@ class RichDocumentTableCell(BaseModel):
 class RichDocumentTable(BaseModel):
     table_id: str | None = None
     caption: str | None = None
+    # Legacy ambiguous page field kept for compatibility.
     page: int | None = Field(default=None, ge=0)
+    # Citation code should prefer file_page_number/file_page_index.
+    file_page_number: int | None = Field(default=None, ge=1)
+    file_page_index: int | None = Field(default=None, ge=0)
+    printed_page_label: str | None = None
     bbox: list[float] | None = None
     cells: list[RichDocumentTableCell] = Field(default_factory=list)
     rows: list[dict[str, Any]] = Field(default_factory=list)
@@ -105,8 +120,14 @@ class RichDocumentSection(BaseModel):
     title: str | None = None
     level: int | None = Field(default=None, ge=0)
     path: str | None = None
+    # Backward-compatible aliases for file_page_start/file_page_end.
     page_start: int | None = Field(default=None, ge=0)
     page_end: int | None = Field(default=None, ge=0)
+    file_page_start: int | None = Field(default=None, ge=1)
+    file_page_end: int | None = Field(default=None, ge=1)
+    file_page_index_start: int | None = Field(default=None, ge=0)
+    file_page_index_end: int | None = Field(default=None, ge=0)
+    printed_page_label: str | None = None
     bbox: list[float] | None = None
     section_type: str | None = None
     content: Any | None = None
@@ -118,7 +139,12 @@ class RichDocumentNote(BaseModel):
     namespace_id: str | None = None
     section_id: str | None = None
     text: str | None = None
+    # Legacy ambiguous page field kept for compatibility.
     page: int | None = Field(default=None, ge=0)
+    # Citation code should prefer file_page_number/file_page_index.
+    file_page_number: int | None = Field(default=None, ge=1)
+    file_page_index: int | None = Field(default=None, ge=0)
+    printed_page_label: str | None = None
     bbox: list[float] | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
 
@@ -133,7 +159,12 @@ class RichDocumentReference(BaseModel):
     target_document_codes: list[str] = Field(default_factory=list)
     target_clause: str | None = None
     reference_type: str | None = None
+    # Legacy ambiguous page field kept for compatibility.
     page: int | None = Field(default=None, ge=0)
+    # Citation code should prefer file_page_number/file_page_index.
+    file_page_number: int | None = Field(default=None, ge=1)
+    file_page_index: int | None = Field(default=None, ge=0)
+    printed_page_label: str | None = None
     bbox: list[float] | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
 

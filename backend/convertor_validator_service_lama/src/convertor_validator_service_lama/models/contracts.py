@@ -224,3 +224,31 @@ class DocumentStructureWorkflowRunResponse(BaseModel):
     overview_page_overview_count: int = 0
     scope_stage_ids: list[str] = Field(default_factory=list)
     merged_extraction: dict[str, Any] = Field(default_factory=dict)
+
+
+
+class RagBuilderBuildDryRunResponse(BaseModel):
+    service: str = "convertor_validator_service_lama"
+    mode: Literal["rag_builder_build_dry_run"] = "rag_builder_build_dry_run"
+    method: Literal["POST"] = "POST"
+    endpoint: str = "/api/v1/rag/build"
+    target_url: str
+    network_call_performed: bool = False
+    payload: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[dict[str, Any]] = Field(default_factory=list)
+    gap_report: list[str] = Field(default_factory=list)
+
+
+
+class RagBuilderBuildAcceptedResponse(BaseModel):
+    status: str
+    document_id: int
+    indexing_txn_id: str
+    task_id: int | None = None
+
+
+class RagBuilderClientError(BaseModel):
+    status_code: int
+    code: str
+    message: str
+    details: dict[str, Any] = Field(default_factory=dict)

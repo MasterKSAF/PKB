@@ -319,3 +319,129 @@ def test_protected_span_from_other_section_is_ignored():
         and "END_PROTECTED" not in chunk.content
         for chunk in chunks
     )
+
+
+def test_chunking_indexes_rich_container_section_types():
+    data = {
+        "metadata": {
+            "schema": "schema_registry_for_rag_v2",
+            "document_id": 420000,
+        },
+        "document": {
+            "id": 420000,
+            "pkb_code": "-1",
+            "doc_code": "GOST-TEST",
+            "title": "Rich container test",
+        },
+        "sections": [
+            {
+                "section_id": 1,
+                "parent_id": None,
+                "clause": "1",
+                "title": "Text section",
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {
+                    "text": "Plain text section",
+                },
+                "references": [],
+            },
+            {
+                "section_id": 2,
+                "parent_id": None,
+                "clause": "parse-table-24",
+                "title": "Table section",
+                "level": 1,
+                "path": "containers/tables/parse-table-24",
+                "page": 2,
+                "bbox": [128.29, 78.84, 311.79, 81.9],
+                "type": "table",
+                "content": {
+                    "text": "| A | B |",
+                    "markdown": "| A | B |\n| --- | --- |\n| 1 | 2 |",
+                    "html": "<table></table>",
+                    "csv": "A,B\n1,2",
+                    "rows": [["A", "B"], ["1", "2"]],
+                },
+                "references": [],
+            },
+            {
+                "section_id": 3,
+                "parent_id": None,
+                "clause": "parse-image-17",
+                "title": "Image section",
+                "level": 1,
+                "path": "containers/images/parse-image-17",
+                "page": 1,
+                "bbox": [79.88, 518.24, 134.73, 50.95],
+                "type": "image",
+                "content": {
+                    "text": "Engineering drawing of a support post",
+                    "alt_text": "Engineering drawing of a support post",
+                    "storage_uri": "minio://bucket/image.png",
+                },
+                "references": [],
+            },
+            {
+                "section_id": 4,
+                "parent_id": None,
+                "clause": "parse-formula-14-1",
+                "title": "Formula section",
+                "level": 1,
+                "path": "containers/formulas/parse-formula-14-1",
+                "page": 1,
+                "bbox": [61.07, 435.3, 298.31, 18.58],
+                "type": "formula",
+                "content": {
+                    "text": "\\pm \\frac{IT14}{2}",
+                    "latex": "\\pm \\frac{IT14}{2}",
+                    "expression": "\\pm \\frac{IT14}{2}",
+                    "parameters": [],
+                },
+                "references": [],
+            },
+        ],
+        "terminology": [],
+        "protected_spans": [],
+        "options": {},
+    }
+
+    request = BuildRequest.model_validate(data)
+
+    service = ChunkingService()
+    chunks = service.build_chunks(request)
+
+    assert [
+        chunk.chunk_type
+        for chunk in chunks
+    ] == ["text", "table", "image", "formula"]
+
+    table_chunk = chunks[1]
+    assert table_chunk.section_id == 2
+    assert table_chunk.page == 2
+    assert table_chunk.bbox == [128.29, 78.84, 311.79, 81.9]
+    assert "| A | B |" in table_chunk.content
+    assert table_chunk.metadata["section_type"] == "table"
+    assert table_chunk.metadata["raw_content"]["csv"] == "A,B\n1,2"
+
+    image_chunk = chunks[2]
+    assert image_chunk.section_id == 3
+    assert image_chunk.page == 1
+    assert image_chunk.bbox == [79.88, 518.24, 134.73, 50.95]
+    assert "Engineering drawing" in image_chunk.content
+    assert "minio://bucket/image.png" in image_chunk.content
+    assert image_chunk.metadata["section_type"] == "image"
+    assert image_chunk.metadata["raw_content"]["alt_text"] == (
+        "Engineering drawing of a support post"
+    )
+
+    formula_chunk = chunks[3]
+    assert formula_chunk.section_id == 4
+    assert formula_chunk.page == 1
+    assert formula_chunk.bbox == [61.07, 435.3, 298.31, 18.58]
+    assert "\\pm \\frac{IT14}{2}" in formula_chunk.content
+    assert formula_chunk.metadata["section_type"] == "formula"
+    assert formula_chunk.metadata["raw_content"]["latex"] == "\\pm \\frac{IT14}{2}"

@@ -368,3 +368,121 @@ def test_parse_item_span_treats_empty_bbox_arrays_as_absent() -> None:
     section_span = extraction.sections[0].source_spans[0]
     assert section_span.bbox is None
     assert section_span.normalized_bbox is None
+
+def test_document_structure_extraction_normalizes_nullable_collections() -> None:
+    extraction = DocumentStructureExtraction.model_validate(
+        {
+            "schema_version": "document_structure_extraction_v1",
+            "document_profile": "compound_rules",
+            "page_count": 139,
+            "numbering_scopes": [
+                {
+                    "namespace_id": "classification",
+                    "title": "Classification",
+                    "page_start": 9,
+                    "page_end": 37,
+                    "start_item_index": 96,
+                    "end_item_index_exclusive": 530,
+                    "confidence": 0.99,
+                    "reason": "Test scope.",
+                }
+            ],
+            "item_classifications": None,
+            "sections": None,
+            "issues": None,
+            "diagnostics": None,
+        }
+    )
+
+    assert extraction.item_classifications == []
+    assert extraction.sections == []
+    assert extraction.issues == []
+    assert extraction.diagnostics == {}
+
+def test_document_structure_extraction_drops_duplicate_numbering_scopes() -> None:
+    extraction = DocumentStructureExtraction.model_validate(
+        {
+            "schema_version": "document_structure_extraction_v1",
+            "document_profile": "compound_rules",
+            "page_count": 139,
+            "numbering_scopes": [
+                {
+                    "namespace_id": "classification",
+                    "title": "Classification",
+                    "page_start": 9,
+                    "page_end": 37,
+                    "start_item_index": 96,
+                    "end_item_index_exclusive": 530,
+                    "confidence": 0.99,
+                    "reason": "First scope.",
+                },
+                {
+                    "namespace_id": "classification",
+                    "title": "Classification duplicate",
+                    "page_start": 10,
+                    "page_end": 37,
+                    "start_item_index": 100,
+                    "end_item_index_exclusive": 530,
+                    "confidence": 0.8,
+                    "reason": "Duplicate scope.",
+                },
+            ],
+            "item_classifications": [],
+            "sections": [],
+            "issues": [],
+            "diagnostics": {},
+        }
+    )
+
+    assert [scope.namespace_id for scope in extraction.numbering_scopes] == [
+        "classification"
+    ]
+    assert extraction.diagnostics["duplicate_numbering_scopes_dropped"] == [
+        "classification"
+    ]
+
+def test_document_structure_extraction_normalizes_nullable_section_collections() -> None:
+    extraction = DocumentStructureExtraction.model_validate(
+        {
+            "schema_version": "document_structure_extraction_v1",
+            "document_profile": "compound_rules",
+            "page_count": 139,
+            "numbering_scopes": [
+                {
+                    "namespace_id": "classification",
+                    "title": "Classification",
+                    "page_start": 9,
+                    "page_end": 37,
+                    "start_item_index": 96,
+                    "end_item_index_exclusive": 530,
+                    "confidence": 0.99,
+                    "reason": "Test scope.",
+                }
+            ],
+            "sections": [
+                {
+                    "section_id": "classification/1",
+                    "namespace_id": "classification",
+                    "namespaced_path": "classification/1",
+                    "clause": "1",
+                    "title": "General",
+                    "parent_section_id": None,
+                    "parent_clause": None,
+                    "section_kind": "numbered_clause",
+                    "content_item_indices": None,
+                    "source_spans": None,
+                    "confidence": 0.9,
+                    "reason": "Test section.",
+                    "issues": None,
+                }
+            ],
+            "item_classifications": [],
+            "issues": [],
+            "diagnostics": {},
+        }
+    )
+
+    section = extraction.sections[0]
+    assert section.content_item_indices == []
+    assert section.source_spans == []
+    assert section.issues == []

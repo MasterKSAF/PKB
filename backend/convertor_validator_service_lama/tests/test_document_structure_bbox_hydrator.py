@@ -624,3 +624,71 @@ def test_bbox_hydrator_uses_nested_list_item_bbox_for_merged_clauses() -> None:
     assert section_9.source_spans[0].normalized_bbox == [0.05, 0.35, 0.5, 0.1]
 
     assert result.diagnostics["spans_hydrated_from_nested_list_item"] == 3
+
+
+def test_bbox_hydrator_preserves_file_page_citation_fields() -> None:
+    extraction = DocumentStructureExtraction.model_validate(
+        {
+            "schema_version": "document_structure_extraction_v1",
+            "document_profile": "simple_standard",
+            "page_count": 2,
+            "numbering_scopes": [
+                {
+                    "namespace_id": "main_document",
+                    "title": "Main document",
+                    "scope_type": "main_document",
+                    "page_start": 1,
+                    "page_end": 2,
+                    "confidence": 0.9,
+                    "reason": "Test scope.",
+                }
+            ],
+            "item_classifications": [],
+            "sections": [
+                {
+                    "section_id": "main_document/6.1",
+                    "namespace_id": "main_document",
+                    "namespaced_path": "main_document/6.1",
+                    "clause": "6.1",
+                    "title": None,
+                    "section_kind": "numbered_clause",
+                    "content_item_indices": [0],
+                    "source_spans": [
+                        {
+                            "page": 2,
+                            "item_index": 0,
+                            "text_preview": "6.1. Clause text",
+                        }
+                    ],
+                    "confidence": 0.9,
+                    "reason": "Test section.",
+                    "issues": [],
+                }
+            ],
+            "issues": [],
+            "diagnostics": {},
+        }
+    )
+
+    result = hydrate_document_structure_extraction_source_spans_from_parse_items(
+        extraction,
+        [
+            {
+                "page_number": 2,
+                "page_index": 1,
+                "printed_page_label": "printed 55 / Str. 2",
+                "text": "6.1. Clause text",
+                "bbox": [{"x": 10, "y": 20, "w": 30, "h": 40}],
+                "page_width": 100,
+                "page_height": 200,
+            },
+        ],
+    )
+
+    span = result.extraction.sections[0].source_spans[0]
+
+    assert span.page == 2
+    assert span.file_page_number == 2
+    assert span.file_page_index == 1
+    assert span.printed_page_label == "printed 55 / Str. 2"
+    assert span.normalized_bbox == [0.1, 0.1, 0.3, 0.2]

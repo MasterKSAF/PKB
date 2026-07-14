@@ -91,9 +91,23 @@ def run_document_structure_extraction_workflow(
         markdown_excerpt_chars=markdown_excerpt_chars,
     )
 
-    overview_extraction = _coerce_extraction(
-        agent.extract_overview(overview_input)
-    )
+    try:
+        overview_extraction = _coerce_extraction(
+            agent.extract_overview(overview_input)
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "document structure overview extraction failed: "
+            f"stage_id={overview_input.get('stage_id')!r}, "
+            f"stage_type={overview_input.get('stage_type')!r}, "
+            f"job_id={overview_input.get('job_id')!r}, "
+            f"page_count={overview_input.get('page_count')!r}, "
+            f"items_count={overview_input.get('items_count')!r}, "
+            f"items_preview_count={overview_input.get('items_preview_count')!r}, "
+            f"markdown_chars={overview_input.get('markdown_chars')!r}, "
+            f"error_type={type(exc).__name__}, "
+            f"error={exc}"
+        ) from exc
 
     numbering_scopes = [
         scope.model_dump(mode="json")
@@ -110,10 +124,29 @@ def run_document_structure_extraction_workflow(
         markdown_excerpt_chars=markdown_excerpt_chars,
     )
 
-    scope_extractions = [
-        _coerce_extraction(agent.extract_scope(scope_input))
-        for scope_input in scope_inputs
-    ]
+    scope_extractions: list[DocumentStructureExtraction] = []
+    for scope_input in scope_inputs:
+        try:
+            scope_extractions.append(
+                _coerce_extraction(agent.extract_scope(scope_input))
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "document structure scope extraction failed: "
+                f"stage_id={scope_input.get('stage_id')!r}, "
+                f"namespace_id={scope_input.get('namespace_id')!r}, "
+                f"scope_title={scope_input.get('scope_title')!r}, "
+                f"page_start={scope_input.get('page_start')!r}, "
+                f"page_end={scope_input.get('page_end')!r}, "
+                f"window_index={scope_input.get('window_index')!r}, "
+                f"windows_count={scope_input.get('windows_count')!r}, "
+                f"source_item_index_start={scope_input.get('source_item_index_start')!r}, "
+                f"source_item_index_end={scope_input.get('source_item_index_end')!r}, "
+                f"items_count={scope_input.get('items_count')!r}, "
+                f"items_preview_count={scope_input.get('items_preview_count')!r}, "
+                f"error_type={type(exc).__name__}, "
+                f"error={exc}"
+            ) from exc
 
     merged_extraction = merge_document_structure_extractions(
         overview_extraction=overview_extraction,

@@ -110,3 +110,29 @@ def _deduplicate_preserving_order(values: list[str]) -> list[str]:
         seen.add(value)
 
     return result
+
+
+def document_codes_equal(left: str | None, right: str | None) -> bool:
+    left_identity = normalize_document_code_identity(left)
+    right_identity = normalize_document_code_identity(right)
+
+    return (
+        left_identity is not None
+        and right_identity is not None
+        and left_identity == right_identity
+    )
+
+
+def normalize_document_code_identity(value: str | None) -> str | None:
+    if not value:
+        return None
+
+    result = value.strip().upper()
+    if not result:
+        return None
+
+    result = result.replace("\u0413\u041e\u0421\u0422", "GOST")
+    result = result.replace("\u2013", "-").replace("\u2014", "-")
+    result = re.sub(r"\s+", " ", result)
+    result = re.sub(r"\s*-\s*", "-", result)
+    return result

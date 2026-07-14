@@ -447,3 +447,117 @@ def test_api_v1_rag_build_rejects_when_active_jobs_limit_reached(monkeypatch):
         "active_jobs": 1,
         "max_active_jobs": 1,
     }
+
+
+def test_api_v1_rag_build_accepts_rich_container_section_types():
+    payload = {
+        "metadata": {
+            "schema": "schema_registry_for_rag_v2",
+            "document_id": 990140,
+        },
+        "document": {
+            "id": 990140,
+            "pkb_code": "-1",
+            "doc_code": "RICH-CONTAINER-SMOKE",
+            "title": "Rich container smoke",
+        },
+        "sections": [
+            {
+                "section_id": 1,
+                "parent_id": None,
+                "clause": "1",
+                "title": "Text section",
+                "level": 1,
+                "path": "1",
+                "page": 1,
+                "bbox": None,
+                "type": "text",
+                "content": {"text": "Plain text section"},
+                "references": [],
+            },
+            {
+                "section_id": 2,
+                "parent_id": None,
+                "clause": "parse-table-24",
+                "title": "Table section",
+                "level": 1,
+                "path": "containers/tables/parse-table-24",
+                "page": 2,
+                "bbox": [128.29, 78.84, 311.79, 81.9],
+                "type": "table",
+                "content": {
+                    "markdown": "| A | B |\n| --- | --- |\n| 1 | 2 |",
+                    "html": "<table></table>",
+                    "csv": "A,B\n1,2",
+                    "rows": [["A", "B"], ["1", "2"]],
+                },
+                "references": [],
+            },
+            {
+                "section_id": 3,
+                "parent_id": None,
+                "clause": "parse-image-17",
+                "title": "Image section",
+                "level": 1,
+                "path": "containers/images/parse-image-17",
+                "page": 1,
+                "bbox": [79.88, 518.24, 134.73, 50.95],
+                "type": "image",
+                "content": {
+                    "text": "Engineering drawing of a support post",
+                    "alt_text": "Engineering drawing of a support post",
+                    "storage_uri": "minio://bucket/image.png",
+                },
+                "references": [],
+            },
+            {
+                "section_id": 4,
+                "parent_id": None,
+                "clause": "parse-formula-14-1",
+                "title": "Formula section",
+                "level": 1,
+                "path": "containers/formulas/parse-formula-14-1",
+                "page": 1,
+                "bbox": [61.07, 435.3, 298.31, 18.58],
+                "type": "formula",
+                "content": {
+                    "text": "\\pm \\frac{IT14}{2}",
+                    "latex": "\\pm \\frac{IT14}{2}",
+                    "expression": "\\pm \\frac{IT14}{2}",
+                    "parameters": [],
+                },
+                "references": [],
+            },
+        ],
+        "terminology": [],
+        "protected_spans": [],
+        "options": {
+            "strategy": "semantic_1024",
+        },
+    }
+
+    response = client.post("/api/v1/rag/build", json=payload)
+
+    assert response.status_code == 202
+
+    data = response.json()
+    assert data["status"] == "indexing"
+    assert data["document_id"] == 990140
+    assert data["indexing_txn_id"]
+
+    status_response = client.get(
+        f"/index/status/{data['indexing_txn_id']}"
+    )
+
+    assert status_response.status_code == 200
+
+    status_data = status_response.json()
+    assert status_data["document_id"] == 990140
+    assert status_data["status"] == "indexed"
+    assert status_data["chunks_count"] == 4
+    assert status_data["has_embeddings"] is True
+    assert status_data["index_stats"]["sections"] == 4
+    assert status_data["index_stats"]["chunks"] == 4
+    assert status_data["index_stats"]["embeddings"] == 4
+    assert status_data["warnings"] == []
+    assert status_data["errors"] == []

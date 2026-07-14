@@ -1,7 +1,9 @@
 from convertor_validator_service_lama.services.reference_normalizer import (
+    document_codes_equal,
     expand_gost_document_codes,
     expand_gost_document_codes_from_values,
 )
+import re
 from typing import Any
 
 from pydantic import ValidationError
@@ -136,6 +138,7 @@ def assemble_rich_document_package(
         artifacts,
         parse_items=effective_parse_items,
         parse_page_count=_parse_page_count(parse_result.metadata, parse_result.job_metadata),
+        current_document_code=request.document_code,
     )
 
     package = RichDocumentPackage(
@@ -159,6 +162,7 @@ def build_document_structure_from_artifacts(
     *,
     parse_items: list[dict[str, Any]] | None = None,
     parse_page_count: int | None = None,
+    current_document_code: str | None = None,
 ) -> RichDocumentStructure:
     parse_item_structure = _build_parse_item_structure(
         parse_items=parse_items or [],
@@ -215,6 +219,8 @@ def build_document_structure_from_artifacts(
             bbox_hydration_diagnostics
         )
 
+    sections = extraction_sections or extract_sections or parse_sections
+
     return RichDocumentStructure(
         namespaces=extraction_namespaces or parse_namespaces,
         document_boundaries=_build_document_boundaries(
@@ -229,12 +235,26 @@ def build_document_structure_from_artifacts(
         nested_documents=_build_nested_documents(
             artifacts.get("nested_documents")
         ),
-        sections=extraction_sections or extract_sections or parse_sections,
-        tables=_build_tables(artifacts.get("tables")),
-        images=_build_images_from_artifact(artifacts.get("images")),
-        formulas=_build_formulas_from_artifact(artifacts.get("formulas")),
+        sections=sections,
+        tables=(
+            _build_tables(artifacts.get("tables"))
+            or _build_tables_from_parse_items(parse_items or [])
+        ),
+        images=(
+            _build_images_from_artifact(artifacts.get("images"))
+            or _build_images_from_parse_items(parse_items or [])
+        ),
+        formulas=(
+            _build_formulas_from_artifact(artifacts.get("formulas"))
+            or _build_formulas_from_parse_items(parse_items or [])
+        ),
         notes=_build_notes(artifacts.get("notes")),
-        references=_build_references(artifacts.get("references")),
+        references=_build_references(
+            artifacts.get("references"),
+            sections=sections,
+            page_count=parse_page_count,
+            current_document_code=current_document_code,
+        ),
         cross_references=_build_cross_references(
             artifacts.get("cross_references")
         ),
@@ -322,6 +342,21 @@ def _build_sections_from_document_structure_extraction(
                 path=section.namespaced_path,
                 page_start=_page_start_from_source_spans(raw.get("source_spans")),
                 page_end=_page_end_from_source_spans(raw.get("source_spans")),
+                file_page_start=_file_page_start_from_source_spans(
+                    raw.get("source_spans")
+                ),
+                file_page_end=_file_page_end_from_source_spans(
+                    raw.get("source_spans")
+                ),
+                file_page_index_start=_file_page_index_start_from_source_spans(
+                    raw.get("source_spans")
+                ),
+                file_page_index_end=_file_page_index_end_from_source_spans(
+                    raw.get("source_spans")
+                ),
+                printed_page_label=_printed_page_label_from_source_spans(
+                    raw.get("source_spans")
+                ),
                 bbox=_bbox_from_source_spans(raw.get("source_spans")),
                 section_type=_enum_or_str(section.section_kind),
                 content={
@@ -348,6 +383,45 @@ def _page_end_from_source_spans(source_spans: Any) -> int | None:
     return max(pages) if pages else None
 
 
+def _file_page_start_from_source_spans(source_spans: Any) -> int | None:
+    pages = _file_pages_from_source_spans(source_spans)
+    return min(pages) if pages else None
+
+
+def _file_page_end_from_source_spans(source_spans: Any) -> int | None:
+    pages = _file_pages_from_source_spans(source_spans)
+    return max(pages) if pages else None
+
+
+def _file_page_index_start_from_source_spans(source_spans: Any) -> int | None:
+    indexes = _file_page_indexes_from_source_spans(source_spans)
+    return min(indexes) if indexes else None
+
+
+def _file_page_index_end_from_source_spans(source_spans: Any) -> int | None:
+    indexes = _file_page_indexes_from_source_spans(source_spans)
+    return max(indexes) if indexes else None
+
+
+def _printed_page_label_from_source_spans(source_spans: Any) -> str | None:
+    if not isinstance(source_spans, list):
+        return None
+
+    for span in source_spans:
+        if not isinstance(span, dict):
+            continue
+
+        printed_page_label = _first_str(
+            span.get("printed_page_label"),
+            span.get("page_label"),
+            span.get("printed_page"),
+        )
+        if printed_page_label is not None:
+            return printed_page_label
+
+    return None
+
+
 def _pages_from_source_spans(source_spans: Any) -> list[int]:
     if not isinstance(source_spans, list):
         return []
@@ -363,6 +437,45 @@ def _pages_from_source_spans(source_spans: Any) -> list[int]:
             pages.append(page)
 
     return pages
+
+
+def _file_pages_from_source_spans(source_spans: Any) -> list[int]:
+    if not isinstance(source_spans, list):
+        return []
+
+    pages: list[int] = []
+
+    for span in source_spans:
+        if not isinstance(span, dict):
+            continue
+
+        page = _first_int(span.get("file_page_number"), span.get("page"))
+        if page is not None:
+            pages.append(page)
+
+    return pages
+
+
+def _file_page_indexes_from_source_spans(source_spans: Any) -> list[int]:
+    if not isinstance(source_spans, list):
+        return []
+
+    indexes: list[int] = []
+
+    for span in source_spans:
+        if not isinstance(span, dict):
+            continue
+
+        index = _first_int(span.get("file_page_index"))
+        if index is None:
+            page = _first_int(span.get("file_page_number"), span.get("page"))
+            if page is not None:
+                index = page - 1
+
+        if index is not None:
+            indexes.append(index)
+
+    return indexes
 
 
 def _enum_or_str(value: Any) -> str:
@@ -389,6 +502,214 @@ def _build_parse_item_structure(
         page_count=page_count,
     )
 
+
+
+
+def _build_tables_from_parse_items(
+    parse_items: list[dict[str, Any]],
+) -> list[RichDocumentTable]:
+    tables: list[RichDocumentTable] = []
+
+    for index, item in enumerate(parse_items, start=1):
+        if not isinstance(item, dict):
+            continue
+
+        if _first_str(item.get("type"), item.get("item_type"), item.get("kind")) != "table":
+            continue
+
+        page_number = _parse_item_file_page_number(item)
+
+        tables.append(
+            RichDocumentTable(
+                table_id=f"parse-table-{index}",
+                caption=_first_str(item.get("caption"), item.get("title")),
+                page=page_number,
+                file_page_number=page_number,
+                file_page_index=_file_page_index_from_number(page_number),
+                printed_page_label=_first_str(item.get("printed_page_label")),
+                bbox=_bbox_from_parse_item(item),
+                rows=_list_of_dicts(item.get("rows")),
+                raw={
+                    "source": "llama_parse_item",
+                    "item_index": index - 1,
+                    "md": item.get("md"),
+                    "html": item.get("html"),
+                    "csv": item.get("csv"),
+                    "rows": item.get("rows"),
+                    "parse_item": item,
+                },
+            )
+        )
+
+    return tables
+
+
+def _build_images_from_parse_items(
+    parse_items: list[dict[str, Any]],
+) -> list[RichDocumentImage]:
+    images: list[RichDocumentImage] = []
+
+    for index, item in enumerate(parse_items, start=1):
+        if not isinstance(item, dict):
+            continue
+
+        if not _parse_item_has_bbox_label(item, "image"):
+            continue
+
+        page_number = _parse_item_file_page_number(item)
+
+        images.append(
+            RichDocumentImage(
+                image_id=f"parse-image-{index}",
+                caption=_first_str(item.get("caption"), item.get("title")),
+                alt_text=_first_str(item.get("value"), item.get("md")),
+                page=page_number,
+                file_page_number=page_number,
+                file_page_index=_file_page_index_from_number(page_number),
+                printed_page_label=_first_str(item.get("printed_page_label")),
+                bbox=_bbox_from_parse_item(item, preferred_label="image"),
+                raw={
+                    "source": "llama_parse_item",
+                    "item_index": index - 1,
+                    "parse_item": item,
+                },
+            )
+        )
+
+    return images
+
+
+def _build_formulas_from_parse_items(
+    parse_items: list[dict[str, Any]],
+) -> list[RichDocumentFormula]:
+    formulas: list[RichDocumentFormula] = []
+
+    for index, item in enumerate(parse_items, start=1):
+        if not isinstance(item, dict):
+            continue
+
+        text = _first_str(item.get("md"), item.get("value"))
+        if text is None:
+            continue
+
+        latex_fragments = _latex_fragments_from_text(text)
+        if not latex_fragments:
+            continue
+
+        page_number = _parse_item_file_page_number(item)
+
+        for formula_index, latex in enumerate(latex_fragments, start=1):
+            formulas.append(
+                RichDocumentFormula(
+                    formula_id=f"parse-formula-{index}-{formula_index}",
+                    expression=latex,
+                    latex=latex,
+                    page=page_number,
+                    file_page_number=page_number,
+                    file_page_index=_file_page_index_from_number(page_number),
+                    printed_page_label=_first_str(item.get("printed_page_label")),
+                    bbox=_bbox_from_parse_item(item),
+                    raw={
+                        "source": "llama_parse_item",
+                        "item_index": index - 1,
+                        "formula_index": formula_index - 1,
+                        "text": text,
+                        "parse_item": item,
+                    },
+                )
+            )
+
+    return formulas
+
+
+def _latex_fragments_from_text(value: str) -> list[str]:
+    fragments = [
+        fragment.strip()
+        for fragment in re.findall(r"\$([^$]+)\$", value)
+        if fragment.strip()
+    ]
+
+    if fragments:
+        return fragments
+
+    if "\\frac" in value or "\\pm" in value or "\\geq" in value:
+        return [value.strip()]
+
+    return []
+
+
+def _parse_item_file_page_number(item: dict[str, Any]) -> int | None:
+    return _first_int(
+        item.get("file_page_number"),
+        item.get("page_number"),
+        item.get("page"),
+    )
+
+
+def _file_page_index_from_number(file_page_number: int | None) -> int | None:
+    if file_page_number is None:
+        return None
+
+    if file_page_number < 1:
+        return None
+
+    return file_page_number - 1
+
+
+def _parse_item_has_bbox_label(item: dict[str, Any], label: str) -> bool:
+    bbox = item.get("bbox")
+    if not isinstance(bbox, list):
+        return False
+
+    for fragment in bbox:
+        if not isinstance(fragment, dict):
+            continue
+
+        if _first_str(fragment.get("label")) == label:
+            return True
+
+    return False
+
+
+def _bbox_from_parse_item(
+    item: dict[str, Any],
+    *,
+    preferred_label: str | None = None,
+) -> list[float] | None:
+    bbox = item.get("bbox")
+    if not isinstance(bbox, list):
+        return None
+
+    candidates = [
+        fragment
+        for fragment in bbox
+        if isinstance(fragment, dict)
+    ]
+
+    if preferred_label is not None:
+        preferred = [
+            fragment
+            for fragment in candidates
+            if _first_str(fragment.get("label")) == preferred_label
+        ]
+        if preferred:
+            candidates = preferred
+
+    if not candidates:
+        return None
+
+    first = candidates[0]
+    values = [
+        first.get("x"),
+        first.get("y"),
+        first.get("w"),
+        first.get("h"),
+    ]
+
+    if not all(isinstance(value, int | float) for value in values):
+        return None
+
+    return [float(value) for value in values]
 
 def _parse_page_count(
     metadata: dict[str, Any],
@@ -653,6 +974,27 @@ def _build_sections_from_rows(rows: list[Any]) -> list[RichDocumentSection]:
                 ),
                 page_start=_first_int(row.get("page_start"), row.get("page")),
                 page_end=_first_int(row.get("page_end"), row.get("page")),
+                file_page_start=_first_int(
+                    row.get("file_page_start"),
+                    row.get("file_page_number"),
+                    row.get("page_start"),
+                    row.get("page"),
+                ),
+                file_page_end=_first_int(
+                    row.get("file_page_end"),
+                    row.get("file_page_number"),
+                    row.get("page_end"),
+                    row.get("page"),
+                ),
+                file_page_index_start=_first_int(
+                    row.get("file_page_index_start"),
+                    row.get("file_page_index"),
+                ),
+                file_page_index_end=_first_int(
+                    row.get("file_page_index_end"),
+                    row.get("file_page_index"),
+                ),
+                printed_page_label=_first_str(row.get("printed_page_label")),
                 bbox=_bbox(row.get("bbox")) or _bbox_from_source_spans(
                     row.get("source_spans")
                 ),
@@ -880,6 +1222,10 @@ def _build_notes(
 
 def _build_references(
     artifact: RichDocumentPackageArtifact | None,
+    *,
+    sections: list[RichDocumentSection] | None = None,
+    page_count: int | None = None,
+    current_document_code: str | None = None,
 ) -> list[RichDocumentReference]:
     rows = _artifact_content_as_list(
         artifact,
@@ -887,6 +1233,8 @@ def _build_references(
     )
 
     references: list[RichDocumentReference] = []
+    sections_by_key = _sections_by_reference_key(sections or [])
+
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -906,6 +1254,13 @@ def _build_references(
             row.get("document_code"),
             row.get("doc_code"),
         )
+        if _reference_points_only_to_current_document(
+            reference_text,
+            target_document_code,
+            current_document_code,
+        ):
+            continue
+
         target_document_codes = expand_gost_document_codes_from_values(
             reference_text,
             target_document_code,
@@ -918,6 +1273,15 @@ def _build_references(
         elif target_document_code is None and target_document_codes:
             target_document_code = target_document_codes[0]
 
+        section_id = _first_str(row.get("section_id"), row.get("source_id"))
+        raw_page = _first_int(row.get("page"))
+        file_page_number = _reference_file_page_number(
+            row,
+            section_id=section_id,
+            sections_by_key=sections_by_key,
+            page_count=page_count,
+        )
+
         references.append(
             RichDocumentReference(
                 reference_id=_first_str(
@@ -926,7 +1290,7 @@ def _build_references(
                     row.get("uid"),
                 ),
                 namespace_id=_first_str(row.get("namespace_id"), row.get("namespace")),
-                section_id=_first_str(row.get("section_id"), row.get("source_id")),
+                section_id=section_id,
                 reference_text=reference_text,
                 target_document_code=target_document_code,
                 target_document_codes=target_document_codes,
@@ -940,7 +1304,15 @@ def _build_references(
                     row.get("type"),
                     row.get("kind"),
                 ),
-                page=_first_int(row.get("page")),
+                page=raw_page,
+                file_page_number=file_page_number,
+                file_page_index=_file_page_index_from_number(file_page_number),
+                printed_page_label=_reference_printed_page_label(
+                    row,
+                    raw_page=raw_page,
+                    file_page_number=file_page_number,
+                    page_count=page_count,
+                ),
                 bbox=_bbox(row.get("bbox")),
                 raw=row,
             )
@@ -948,6 +1320,119 @@ def _build_references(
 
     return references
 
+
+
+
+
+
+def _reference_points_only_to_current_document(
+    reference_text: str | None,
+    target_document_code: str | None,
+    current_document_code: str | None,
+) -> bool:
+    if current_document_code is None:
+        return False
+
+    target_codes = expand_gost_document_codes_from_values(
+        reference_text,
+        target_document_code,
+    )
+
+    if target_codes:
+        return all(
+            document_codes_equal(target_code, current_document_code)
+            for target_code in target_codes
+        )
+
+    return document_codes_equal(target_document_code, current_document_code)
+
+def _sections_by_reference_key(
+    sections: list[RichDocumentSection],
+) -> dict[str, RichDocumentSection]:
+    result: dict[str, RichDocumentSection] = {}
+
+    for section in sections:
+        for key in (
+            section.section_id,
+            section.clause,
+            section.path,
+        ):
+            if isinstance(key, str) and key.strip():
+                result.setdefault(key.strip(), section)
+
+    return result
+
+
+def _reference_file_page_number(
+    row: dict[str, Any],
+    *,
+    section_id: str | None,
+    sections_by_key: dict[str, RichDocumentSection],
+    page_count: int | None,
+) -> int | None:
+    explicit_file_page = _first_int(
+        row.get("file_page_number"),
+        row.get("file_page"),
+    )
+
+    if explicit_file_page is not None:
+        return explicit_file_page
+
+    if section_id is not None:
+        section = sections_by_key.get(section_id)
+
+        if section is not None:
+            section_page = _first_int(
+                section.file_page_start,
+                section.page_start,
+            )
+            if section_page is not None:
+                return section_page
+
+    raw_page = _first_int(row.get("page"))
+
+    if raw_page is None:
+        return None
+
+    if page_count is not None and raw_page > page_count:
+        return None
+
+    return raw_page
+
+
+def _reference_printed_page_label(
+    row: dict[str, Any],
+    *,
+    raw_page: int | None,
+    file_page_number: int | None,
+    page_count: int | None,
+) -> str | None:
+    explicit_label = _first_str(
+        row.get("printed_page_label"),
+        row.get("page_label"),
+        row.get("printed_page"),
+    )
+
+    if explicit_label is not None:
+        return explicit_label
+
+    if raw_page is None:
+        return None
+
+    if raw_page != file_page_number:
+        return str(raw_page)
+
+    if page_count is not None and raw_page > page_count:
+        return str(raw_page)
+
+    return None
+
+
+def _file_page_index_from_number(file_page_number: int | None) -> int | None:
+    if file_page_number is None:
+        return None
+
+    return file_page_number - 1
 
 def _build_cross_references(
     artifact: RichDocumentPackageArtifact | None,

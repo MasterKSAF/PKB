@@ -9,12 +9,17 @@ from convertor_validator_service_lama.models.rag_builder_downcast import (
     RagBuilderFormulaPayload,
     RagBuilderImagePayload,
     RagBuilderPayloadMetadata,
+    RagBuilderReferencePayload,
     RagBuilderSectionPayload,
     RagBuilderTablePayload,
 )
 from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentPackage,
     RichDocumentPackageArtifact,
+)
+from convertor_validator_service_lama.services.reference_normalizer import (
+    document_codes_equal,
+    expand_gost_document_codes_from_values,
 )
 
 
@@ -25,7 +30,10 @@ def downcast_rich_package_to_rag_builder(
 
     artifacts_by_name = _artifacts_by_name(package.artifacts)
 
-    metadata_content = _artifact_content_as_dict(artifacts_by_name.get("metadata"))
+    metadata_content = _document_metadata_content(
+        _artifact_content_as_dict(artifacts_by_name.get("title_metadata")),
+        _artifact_content_as_dict(artifacts_by_name.get("metadata")),
+    )
     raw_parse_content = _artifact_content_as_dict(artifacts_by_name.get("parse_raw_response"))
 
     document = _build_document_payload(
@@ -35,8 +43,15 @@ def downcast_rich_package_to_rag_builder(
         warnings=warnings,
     )
 
+    references_by_section = _build_references_by_section(
+        artifacts_by_name.get("references"),
+        current_document_code=document.document_code,
+    )
     sections = _build_sections_payload(
         artifact=artifacts_by_name.get("sections"),
+        structure_sections=_rich_document_structure_sections(package),
+        structure_container_rows=_rich_document_structure_container_section_rows(package),
+        references_by_section=references_by_section,
         warnings=warnings,
     )
     tables = _build_tables_payload(artifacts_by_name.get("tables"))
@@ -132,6 +147,36 @@ def _artifact_content_as_list(
     return []
 
 
+
+def _document_metadata_content(*contents: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+
+    for content in contents:
+        if not isinstance(content, dict):
+            continue
+
+        candidates: list[dict[str, Any]] = []
+        nested_title_metadata = content.get("title_metadata")
+        if isinstance(nested_title_metadata, dict):
+            candidates.append(nested_title_metadata)
+
+        candidates.append(content)
+
+        for candidate in candidates:
+            for key, value in candidate.items():
+                if key == "title_metadata":
+                    continue
+
+                if value in (None, "", [], {}):
+                    continue
+
+                existing = result.get(key)
+                if existing in (None, "", [], {}):
+                    result[key] = value
+
+    return result
+
+
 def _build_document_payload(
     package: RichDocumentPackage,
     metadata_content: dict[str, Any],
@@ -190,6 +235,9 @@ def _build_document_payload(
 
 def _build_sections_payload(
     artifact: RichDocumentPackageArtifact | None,
+    structure_sections: list[Any] | None,
+    structure_container_rows: list[dict[str, Any]] | None,
+    references_by_section: dict[str, list[RagBuilderReferencePayload]],
     warnings: list[RagBuilderDowncastWarning],
 ) -> list[RagBuilderSectionPayload]:
     rows = _artifact_content_as_list(
@@ -198,18 +246,31 @@ def _build_sections_payload(
     )
 
     if not rows:
+        rows = _section_rows_from_rich_structure(structure_sections)
+
+    container_rows = structure_container_rows or []
+    if container_rows:
+        rows = [*rows, *container_rows]
+
+    if not rows:
         warnings.append(
             RagBuilderDowncastWarning(
                 code="missing_sections",
-                message="No sections artifact was found or it contained no section rows.",
+                message=(
+                    "No sections artifact or rich document structure sections "
+                    "were found."
+                ),
                 source_artifact="sections",
             )
         )
         return []
 
+    known_section_keys = _known_section_reference_lookup_keys(rows)
+
     sections: list[RagBuilderSectionPayload] = []
-    for index, row in enumerate(rows, start=1):
-        if not isinstance(row, dict):
+    for index, source_row in enumerate(rows, start=1):
+        row = _row_as_dict(source_row)
+        if not row:
             continue
 
         section_id = _first_str(
@@ -224,16 +285,572 @@ def _build_sections_payload(
             RagBuilderSectionPayload(
                 section_id=section_id,
                 title=_first_str(row.get("title"), row.get("heading")),
-                text=_first_str(row.get("text"), row.get("content"), row.get("body")),
+                text=_section_text_from_row(row),
                 level=_first_int(row.get("level"), row.get("depth")),
                 page_start=_first_int(row.get("page_start"), row.get("page")),
                 page_end=_first_int(row.get("page_end"), row.get("page")),
                 path=_first_str(row.get("path"), row.get("section_path")),
+                references=_references_for_section(
+                    row,
+                    section_id=section_id,
+                    references_by_section=references_by_section,
+                    known_section_keys=known_section_keys,
+                ),
                 raw=row,
             )
         )
 
     return sections
+
+
+
+
+
+
+def _references_for_section(
+    row: dict[str, Any],
+    *,
+    section_id: str,
+    references_by_section: dict[str, list[RagBuilderReferencePayload]],
+    known_section_keys: set[str],
+) -> list[RagBuilderReferencePayload]:
+    exact_references = _references_from_keys(
+        _section_reference_exact_lookup_keys(row, section_id=section_id),
+        references_by_section=references_by_section,
+    )
+
+    if exact_references:
+        references = exact_references
+    else:
+        references = _references_from_keys(
+            _section_reference_fallback_lookup_keys(row, section_id=section_id),
+            references_by_section=references_by_section,
+        )
+
+    references.extend(
+        _nearest_child_references_for_section_keys(
+            _section_reference_child_parent_lookup_keys(row, section_id=section_id),
+            references_by_section=references_by_section,
+            known_section_keys=known_section_keys,
+        )
+    )
+
+    return _deduplicate_references(references)
+
+
+def _references_from_keys(
+    keys: list[str],
+    *,
+    references_by_section: dict[str, list[RagBuilderReferencePayload]],
+) -> list[RagBuilderReferencePayload]:
+    result: list[RagBuilderReferencePayload] = []
+
+    for key in keys:
+        result.extend(references_by_section.get(key, []))
+
+    return _deduplicate_references(result)
+
+
+def _deduplicate_references(
+    references: list[RagBuilderReferencePayload],
+) -> list[RagBuilderReferencePayload]:
+    result: list[RagBuilderReferencePayload] = []
+    seen: set[tuple[str | None, str | None, str | None, str | None]] = set()
+
+    for reference in references:
+        raw = reference.raw if isinstance(reference.raw, dict) else {}
+        identity = (
+            _first_str(raw.get("section_id"), raw.get("source_section_id")),
+            reference.target_doc_code,
+            reference.type,
+            reference.context,
+        )
+        if identity in seen:
+            continue
+
+        result.append(reference)
+        seen.add(identity)
+
+    return result
+
+
+def _nearest_child_references_for_section_keys(
+    keys: list[str],
+    *,
+    references_by_section: dict[str, list[RagBuilderReferencePayload]],
+    known_section_keys: set[str],
+) -> list[RagBuilderReferencePayload]:
+    key_set = set(keys)
+    result: list[RagBuilderReferencePayload] = []
+
+    for reference_section_key, references in references_by_section.items():
+        if reference_section_key in known_section_keys:
+            continue
+
+        parent_keys = _parent_reference_lookup_keys(reference_section_key)
+        matching_parent_keys = [
+            parent_key
+            for parent_key in parent_keys
+            if parent_key in key_set and "." in parent_key
+        ]
+        if matching_parent_keys:
+            result.extend(references)
+
+    return _deduplicate_references(result)
+
+
+def _known_section_reference_lookup_keys(rows: list[Any]) -> set[str]:
+    result: set[str] = set()
+
+    for index, source_row in enumerate(rows, start=1):
+        row = _row_as_dict(source_row)
+        if not row:
+            continue
+
+        section_id = _first_str(
+            row.get("section_id"),
+            row.get("id"),
+            row.get("uid"),
+            row.get("number"),
+            fallback=f"section-{index}",
+        )
+        if section_id is None:
+            continue
+
+        result.update(_section_reference_exact_lookup_keys(row, section_id=section_id))
+        result.update(_section_reference_fallback_lookup_keys(row, section_id=section_id))
+
+    return result
+
+
+def _parent_reference_lookup_keys(value: Any) -> list[str]:
+    key = _first_str(value)
+    if key is None:
+        return []
+
+    namespace, separator, local_clause = key.rpartition("::")
+    if separator:
+        if "/" in local_clause:
+            return []
+        return _unique_strings(
+            [
+                f"{namespace}::{parent_clause}"
+                for parent_clause in _clause_parent_lookup_keys(local_clause)
+            ]
+        )
+
+    if "/" in key:
+        return []
+
+    return _unique_strings(_clause_parent_lookup_keys(key))
+
+
+def _clause_parent_lookup_keys(value: str) -> list[str]:
+    parts = [part.strip() for part in value.strip().split(".")]
+    if len(parts) <= 1 or any(not part for part in parts):
+        return []
+
+    result: list[str] = []
+    while len(parts) > 1:
+        parts = parts[:-1]
+        result.append(".".join(parts))
+
+    return result
+
+
+def _section_reference_exact_lookup_keys(
+    row: dict[str, Any],
+    *,
+    section_id: str,
+) -> list[str]:
+    raw = row.get("raw")
+    if not isinstance(raw, dict):
+        raw = {}
+
+    return _unique_strings(
+        [
+            section_id,
+            row.get("section_id"),
+            row.get("id"),
+            row.get("uid"),
+            raw.get("section_id"),
+            raw.get("id"),
+            raw.get("uid"),
+        ]
+    )
+
+
+def _section_reference_fallback_lookup_keys(
+    row: dict[str, Any],
+    *,
+    section_id: str,
+) -> list[str]:
+    raw = row.get("raw")
+    if not isinstance(raw, dict):
+        raw = {}
+
+    return _unique_strings(
+        [
+            row.get("clause"),
+            row.get("number"),
+            raw.get("clause"),
+            raw.get("number"),
+        ]
+    )
+
+
+def _section_reference_child_parent_lookup_keys(
+    row: dict[str, Any],
+    *,
+    section_id: str,
+) -> list[str]:
+    raw = row.get("raw")
+    if not isinstance(raw, dict):
+        raw = {}
+
+    clause = _first_str(row.get("clause"), raw.get("clause"))
+    if clause is None:
+        return []
+
+    local_clause = clause.rsplit("::", 1)[-1]
+    if "." not in local_clause:
+        return []
+
+    return [clause]
+
+
+def _rich_document_structure_container_section_rows(
+    package: RichDocumentPackage,
+) -> list[dict[str, Any]]:
+    structure = getattr(package, "document_structure", None)
+    if structure is None:
+        return []
+
+    rows: list[dict[str, Any]] = []
+
+    rows.extend(
+        _table_section_rows_from_rich_structure(
+            getattr(structure, "tables", None)
+        )
+    )
+    rows.extend(
+        _image_section_rows_from_rich_structure(
+            getattr(structure, "images", None)
+        )
+    )
+    rows.extend(
+        _formula_section_rows_from_rich_structure(
+            getattr(structure, "formulas", None)
+        )
+    )
+
+    return rows
+
+
+def _table_section_rows_from_rich_structure(value: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for index, table in enumerate(value or [], start=1):
+        row = _row_as_dict(table)
+        if not row:
+            continue
+
+        table_id = _first_str(
+            row.get("table_id"),
+            row.get("id"),
+            row.get("uid"),
+            fallback=f"table-{index}",
+        )
+        page = _first_int(row.get("file_page_number"), row.get("page"))
+        raw = _row_as_dict(row.get("raw"))
+        content = {
+            "text": _first_str(
+                row.get("caption"),
+                raw.get("md"),
+                raw.get("csv"),
+                raw.get("html"),
+                fallback=table_id,
+            ),
+            "caption": _first_str(row.get("caption")),
+            "markdown": _first_str(raw.get("md")),
+            "html": _first_str(raw.get("html")),
+            "csv": _first_str(raw.get("csv")),
+            "rows": row.get("rows") or raw.get("rows") or [],
+        }
+
+        rows.append(
+            {
+                "section_id": f"container/table/{table_id}",
+                "clause": table_id,
+                "title": _first_str(row.get("caption"), fallback=table_id),
+                "level": 1,
+                "page": page,
+                "path": f"containers/tables/{table_id}",
+                "type": "table",
+                "bbox": row.get("bbox"),
+                "content": content,
+                "source_container_type": "table",
+                "source_container_id": table_id,
+                "source_container": row,
+            }
+        )
+
+    return rows
+
+
+def _image_section_rows_from_rich_structure(value: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for index, image in enumerate(value or [], start=1):
+        row = _row_as_dict(image)
+        if not row:
+            continue
+
+        image_id = _first_str(
+            row.get("image_id"),
+            row.get("figure_id"),
+            row.get("id"),
+            row.get("uid"),
+            fallback=f"image-{index}",
+        )
+        page = _first_int(row.get("file_page_number"), row.get("page"))
+        content_text = _first_str(
+            row.get("caption"),
+            row.get("alt_text"),
+            fallback=image_id,
+        )
+
+        rows.append(
+            {
+                "section_id": f"container/image/{image_id}",
+                "clause": image_id,
+                "title": content_text,
+                "level": 1,
+                "page": page,
+                "path": f"containers/images/{image_id}",
+                "type": "image",
+                "bbox": row.get("bbox"),
+                "content": {
+                    "text": content_text,
+                    "caption": _first_str(row.get("caption")),
+                    "alt_text": _first_str(row.get("alt_text")),
+                    "storage_uri": _first_str(row.get("storage_uri")),
+                },
+                "source_container_type": "image",
+                "source_container_id": image_id,
+                "source_container": row,
+            }
+        )
+
+    return rows
+
+
+def _formula_section_rows_from_rich_structure(value: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for index, formula in enumerate(value or [], start=1):
+        row = _row_as_dict(formula)
+        if not row:
+            continue
+
+        formula_id = _first_str(
+            row.get("formula_id"),
+            row.get("id"),
+            row.get("uid"),
+            fallback=f"formula-{index}",
+        )
+        page = _first_int(row.get("file_page_number"), row.get("page"))
+        latex = _first_str(row.get("latex"))
+        expression = _first_str(row.get("expression"), latex, fallback=formula_id)
+
+        rows.append(
+            {
+                "section_id": f"container/formula/{formula_id}",
+                "clause": formula_id,
+                "title": expression,
+                "level": 1,
+                "page": page,
+                "path": f"containers/formulas/{formula_id}",
+                "type": "formula",
+                "bbox": row.get("bbox"),
+                "content": {
+                    "text": expression,
+                    "latex": latex,
+                    "expression": expression,
+                    "parameters": row.get("parameters") or [],
+                },
+                "source_container_type": "formula",
+                "source_container_id": formula_id,
+                "source_container": row,
+            }
+        )
+
+    return rows
+
+def _rich_document_structure_sections(package: RichDocumentPackage) -> list[Any]:
+    structure = getattr(package, "document_structure", None)
+    sections = getattr(structure, "sections", None)
+
+    if isinstance(sections, list):
+        return sections
+
+    return []
+
+
+def _section_rows_from_rich_structure(value: list[Any] | None) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for item in value or []:
+        row = _row_as_dict(item)
+        if row:
+            rows.append(row)
+
+    return rows
+
+
+def _row_as_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return model_dump(mode="json")
+
+    return {}
+
+
+def _section_text_from_row(row: dict[str, Any]) -> str | None:
+    content = row.get("content")
+    content_text: str | None = None
+
+    if isinstance(content, dict):
+        content_text = _first_str(
+            content.get("text"),
+            content.get("markdown"),
+            content.get("content_text"),
+            _source_span_text_preview(content.get("source_spans")),
+        )
+    elif isinstance(content, str):
+        content_text = content
+
+    return _first_str(
+        row.get("text"),
+        content_text,
+        row.get("body"),
+        row.get("content_text"),
+    )
+
+
+def _source_span_text_preview(value: Any) -> str | None:
+    if not isinstance(value, list):
+        return None
+
+    previews = [
+        preview
+        for preview in (
+            _first_str(row.get("text_preview"))
+            for row in value
+            if isinstance(row, dict)
+        )
+        if preview is not None
+    ]
+
+    if not previews:
+        return None
+
+    return "\n".join(previews)
+
+
+def _build_references_by_section(
+    artifact: RichDocumentPackageArtifact | None,
+    *,
+    current_document_code: str | None = None,
+) -> dict[str, list[RagBuilderReferencePayload]]:
+    rows = _artifact_content_as_list(
+        artifact,
+        preferred_keys=("references", "normative_references", "items", "data"),
+    )
+
+    references_by_section: dict[str, list[RagBuilderReferencePayload]] = {}
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        section_id = _first_str(row.get("section_id"), row.get("source_section_id"))
+        if section_id is None:
+            continue
+
+        reference_type = _first_str(
+            row.get("reference_type"),
+            row.get("type"),
+            row.get("kind"),
+        )
+        if reference_type is None:
+            continue
+
+        context = _first_str(
+            row.get("reference_text"),
+            row.get("text"),
+            row.get("context"),
+        )
+
+        target_codes = [
+            target_doc_code
+            for target_doc_code in _target_doc_codes_from_reference_row(row)
+            if not document_codes_equal(target_doc_code, current_document_code)
+        ]
+        for target_doc_code in target_codes:
+            references_by_section.setdefault(section_id, []).append(
+                RagBuilderReferencePayload(
+                    target_document_id=_first_int(row.get("target_document_id")),
+                    target_doc_code=target_doc_code,
+                    type=reference_type,
+                    context=context,
+                    note=_first_str(row.get("note")),
+                    raw=row,
+                )
+            )
+
+    return references_by_section
+
+
+def _target_doc_codes_from_reference_row(row: dict[str, Any]) -> list[str]:
+    raw_codes = row.get("target_document_codes")
+    if isinstance(raw_codes, list):
+        codes: list[str] = []
+        for value in raw_codes:
+            code = _first_str(value)
+            if code is None:
+                continue
+
+            codes.extend(
+                expand_gost_document_codes_from_values(
+                    row.get("reference_text"),
+                    code,
+                )
+            )
+
+        if codes:
+            return _unique_strings(codes)
+
+    target_doc_code = _first_str(
+        row.get("target_document_code"),
+        row.get("target_doc_code"),
+        row.get("document_code"),
+        row.get("doc_code"),
+    )
+    if target_doc_code is None:
+        return []
+
+    expanded_codes = expand_gost_document_codes_from_values(
+        row.get("reference_text"),
+        target_doc_code,
+    )
+    if expanded_codes:
+        return _unique_strings(expanded_codes)
+
+    return [target_doc_code]
 
 
 def _build_tables_payload(
@@ -365,6 +982,25 @@ def _build_cross_references_payload(
 
     return references
 
+
+
+
+def _unique_strings(values: list[Any]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+
+    for value in values:
+        if not isinstance(value, str):
+            continue
+
+        cleaned = value.strip()
+        if not cleaned or cleaned in seen:
+            continue
+
+        result.append(cleaned)
+        seen.add(cleaned)
+
+    return result
 
 def _first_str(*values: Any, fallback: str | None = None) -> str | None:
     for value in values:

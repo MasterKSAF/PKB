@@ -215,6 +215,23 @@ def test_rich_document_structure_preserves_references() -> None:
     assert structure.references[0].reference_type == "normative_reference"
 
 
+def test_rich_document_reference_preserves_file_page_citation_fields() -> None:
+    reference = RichDocumentReference(
+        reference_id="reference-1",
+        reference_text="GOST 123",
+        target_document_code="GOST 123",
+        page=35,
+        file_page_number=1,
+        file_page_index=0,
+        printed_page_label="35",
+    )
+
+    assert reference.page == 35
+    assert reference.file_page_number == 1
+    assert reference.file_page_index == 0
+    assert reference.printed_page_label == "35"
+
+
 def test_rich_document_structure_preserves_sections_and_cross_references() -> None:
     structure = RichDocumentStructure(
         sections=[

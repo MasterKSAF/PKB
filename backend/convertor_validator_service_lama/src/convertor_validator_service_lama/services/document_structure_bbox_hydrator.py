@@ -170,7 +170,7 @@ def _hydrate_span(
         diagnostics["spans_missing_parse_item"] += 1
         return
 
-    parse_page = _page_from_item(parse_item)
+    parse_page = _file_page_number_from_item(parse_item)
 
     if span.page is not None and parse_page is not None and span.page != parse_page:
         diagnostics["spans_page_mismatch"] += 1
@@ -221,6 +221,15 @@ def _hydrate_span(
 
     if span.page is None and parse_page is not None:
         span.page = parse_page
+
+    if span.file_page_number is None and parse_page is not None:
+        span.file_page_number = parse_page
+
+    if span.file_page_index is None:
+        span.file_page_index = _file_page_index_from_item(parse_item)
+
+    if span.printed_page_label is None:
+        span.printed_page_label = _printed_page_label_from_item(parse_item)
 
     if span.bbox is None and bbox is not None:
         span.bbox = bbox
@@ -335,8 +344,13 @@ def _build_clause_fallback_span(
 
     text = _extract_item_text(parse_item)
 
+    file_page_number = _file_page_number_from_item(parse_item)
+
     return ParseItemSpan(
-        page=_page_from_item(parse_item),
+        page=file_page_number,
+        file_page_number=file_page_number,
+        file_page_index=_file_page_index_from_item(parse_item),
+        printed_page_label=_printed_page_label_from_item(parse_item),
         item_index=item_index,
         text_preview=_compact_text(text, limit=500),
     )
@@ -456,17 +470,53 @@ def _inherit_page_geometry(
 ) -> dict[str, Any]:
     result = dict(nested_item)
 
-    for key in ("page_number", "page", "page_width", "page_height"):
+    for key in (
+        "file_page_number",
+        "file_page_index",
+        "printed_page_label",
+        "page_label",
+        "page_number",
+        "page",
+        "page_width",
+        "page_height",
+    ):
         if result.get(key) is None and parent_item.get(key) is not None:
             result[key] = parent_item[key]
 
     return result
 
 
-def _page_from_item(item: dict[str, Any]) -> int | None:
+def _file_page_number_from_item(item: dict[str, Any]) -> int | None:
     return _first_int(
+        item.get("file_page_number"),
         item.get("page_number"),
         item.get("page"),
+    )
+
+
+def _file_page_index_from_item(item: dict[str, Any]) -> int | None:
+    explicit_index = _first_int(
+        item.get("file_page_index"),
+        item.get("page_index"),
+    )
+
+    if explicit_index is not None:
+        return explicit_index
+
+    file_page_number = _file_page_number_from_item(item)
+
+    if file_page_number is None:
+        return None
+
+    return file_page_number - 1
+
+
+def _printed_page_label_from_item(item: dict[str, Any]) -> str | None:
+    return _first_str(
+        item.get("printed_page_label"),
+        item.get("page_label"),
+        item.get("printed_page"),
+        item.get("page_display"),
     )
 
 
@@ -696,6 +746,18 @@ def _normalize_text(value: str) -> str:
     value = _SPACE_RE.sub(" ", value)
     return value.strip()
 
+
+
+
+def _first_str(*values: Any) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+        if isinstance(value, int):
+            return str(value)
+
+    return None
 
 def _first_int(*values: Any) -> int | None:
     for value in values:

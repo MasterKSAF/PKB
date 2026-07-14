@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from convertor_validator_service_lama.models.document_structure_extraction import (
     DocumentProfile,
     DocumentStructureExtraction,
@@ -296,3 +298,108 @@ def test_workflow_accepts_dict_outputs_from_agent():
     assert result.overview_extraction.numbering_scopes[0].namespace_id == "main_document"
     assert result.scope_extractions[0].sections[0].namespaced_path == "main_document/1/1"
     assert result.merged_extraction.sections[0].namespaced_path == "main_document/1/1"
+
+def test_workflow_scope_failure_includes_stage_context():
+    payload = {
+        "job_id": "job-failure",
+        "status": "COMPLETED",
+        "job_metadata": {"pdf-pages": 2},
+        "items": [
+            {"type": "heading", "page_number": 1, "md": "# TEST"},
+            {"type": "text", "page_number": 1, "md": "1.1. Clause text"},
+            {"type": "text", "page_number": 2, "md": "2.1. Clause text"},
+        ],
+        "markdown": "# TEST\n1.1. Clause text\n2.1. Clause text",
+    }
+
+    overview = make_overview_extraction(
+        page_count=2,
+        scopes=[
+            make_scope(
+                "main_document",
+                page_start=1,
+                page_end=2,
+            )
+        ],
+    )
+
+    class FailingScopeAgent:
+        def __init__(self) -> None:
+            self.overview_calls: list[dict[str, Any]] = []
+            self.scope_calls: list[dict[str, Any]] = []
+
+        def extract_overview(
+            self,
+            overview_input: dict[str, Any],
+        ) -> DocumentStructureExtraction:
+            self.overview_calls.append(overview_input)
+            return overview
+
+        def extract_scope(
+            self,
+            scope_input: dict[str, Any],
+        ) -> DocumentStructureExtraction:
+            self.scope_calls.append(scope_input)
+            raise RuntimeError("fake extract failure")
+
+    agent = FailingScopeAgent()
+
+    with pytest.raises(RuntimeError) as exc_info:
+        run_document_structure_extraction_workflow(
+            payload,
+            agent=agent,
+        )
+
+    message = str(exc_info.value)
+
+    assert "document structure scope extraction failed" in message
+    assert "stage_id='scope_main_document_p1_2'" in message
+    assert "namespace_id='main_document'" in message
+    assert "page_start=1" in message
+    assert "page_end=2" in message
+    assert "items_count=3" in message
+    assert "error_type=RuntimeError" in message
+    assert "fake extract failure" in message
+
+def test_workflow_overview_failure_includes_stage_context():
+    payload = {
+        "job_id": "job-overview-failure",
+        "status": "COMPLETED",
+        "job_metadata": {"pdf-pages": 2},
+        "items": [
+            {"type": "heading", "page_number": 1, "md": "# TEST"},
+            {"type": "text", "page_number": 1, "md": "1.1. Clause text"},
+            {"type": "text", "page_number": 2, "md": "2.1. Clause text"},
+        ],
+        "markdown": "# TEST\n1.1. Clause text\n2.1. Clause text",
+    }
+
+    class FailingOverviewAgent:
+        def extract_overview(
+            self,
+            overview_input: dict[str, Any],
+        ) -> DocumentStructureExtraction:
+            raise RuntimeError("fake overview failure")
+
+        def extract_scope(
+            self,
+            scope_input: dict[str, Any],
+        ) -> DocumentStructureExtraction:
+            raise AssertionError("scope extraction should not be called")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        run_document_structure_extraction_workflow(
+            payload,
+            agent=FailingOverviewAgent(),
+        )
+
+    message = str(exc_info.value)
+
+    assert "document structure overview extraction failed" in message
+    assert "stage_id='overview'" in message
+    assert "stage_type='overview'" in message
+    assert "job_id='job-overview-failure'" in message
+    assert "page_count=2" in message
+    assert "items_count=3" in message
+    assert "error_type=RuntimeError" in message
+    assert "fake overview failure" in message

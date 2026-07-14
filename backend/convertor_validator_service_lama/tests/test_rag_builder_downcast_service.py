@@ -1,11 +1,77 @@
 from convertor_validator_service_lama.models.rich_document_package import (
+    RichDocumentFormula,
+    RichDocumentImage,
     RichDocumentPackage,
     RichDocumentPackageArtifact,
+    RichDocumentSection,
+    RichDocumentStructure,
+    RichDocumentTable,
+)
+from convertor_validator_service_lama.services.rag_builder_buildrequest_adapter import (
+    build_rag_builder_buildrequest_section_shape,
 )
 from convertor_validator_service_lama.services.rag_builder_downcast_service import (
     downcast_rich_package_to_rag_builder,
 )
+from convertor_validator_service_lama.services.reference_normalizer import (
+    expand_gost_document_codes_from_values,
+)
+from gost_20868_fixture_helpers import (
+    gost_20868_chunk_container_extract_results,
+    load_gost_20868_formula_chunk_container,
+)
 
+
+
+
+
+
+def _expected_rag_reference_target_codes(section: dict[str, object]) -> list[str]:
+    direct_codes: list[str] = []
+
+    for reference in section.get("references", []):
+        if not isinstance(reference, dict):
+            continue
+
+        target_doc_code = reference.get("target_doc_code")
+        if isinstance(target_doc_code, str):
+            direct_codes.append(target_doc_code)
+
+    range_codes = _expanded_codes_from_reference_endpoints(direct_codes)
+    if range_codes is not None:
+        return range_codes
+
+    result: list[str] = []
+    for target_doc_code in direct_codes:
+        expanded_codes = expand_gost_document_codes_from_values(
+            None,
+            target_doc_code,
+        )
+
+        if expanded_codes:
+            result.extend(expanded_codes)
+        else:
+            result.append(target_doc_code)
+
+    return result
+
+
+def _expanded_codes_from_reference_endpoints(
+    direct_codes: list[str],
+) -> list[str] | None:
+    if len(direct_codes) != 2:
+        return None
+
+    range_text = f"{direct_codes[0]} - {direct_codes[1]}"
+    expanded_codes = expand_gost_document_codes_from_values(
+        range_text,
+        range_text,
+    )
+
+    if len(expanded_codes) > len(direct_codes):
+        return expanded_codes
+
+    return None
 
 def _artifact(
     artifact_key: str,
@@ -224,3 +290,454 @@ def test_downcast_rich_package_generates_stable_fallback_ids() -> None:
 
     assert result.payload.sections[0].section_id == "section-1"
     assert result.payload.tables[0].table_id == "table-1"
+
+
+def test_downcast_rich_package_maps_gost_20868_fixture_layers() -> None:
+    data = load_gost_20868_formula_chunk_container()
+    extract_results = gost_20868_chunk_container_extract_results(data)
+
+    artifacts = [
+        _artifact(
+            "metadata",
+            {
+                "title": data["document"]["title"],
+                "page_count": data["document"]["page_count"],
+            },
+            source="parse_result",
+            produced_by="parse_result",
+        )
+    ]
+
+    for artifact_key, extract_result in extract_results.items():
+        artifacts.append(
+            _artifact(
+                artifact_key,
+                extract_result.result,
+                produced_by=artifact_key,
+            )
+        )
+
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-gost-20868",
+        source_pdf_path="gost_20868_81.pdf",
+        document_code=data["document"]["doc_code"],
+        artifacts=artifacts,
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+    payload = result.payload
+
+    assert payload.document.document_code == data["document"]["doc_code"]
+    assert payload.document.title == data["document"]["title"]
+    assert payload.document.page_count == data["document"]["page_count"]
+
+    section_clauses = {
+        section.raw["clause"]
+        for section in payload.sections
+    }
+    assert {"title", "1", "6", "6.1", "9"}.issubset(section_clauses)
+
+    assert [image.image_id for image in payload.images] == [
+        "figure-1",
+        "figure-2",
+    ]
+
+    assert len(payload.tables) == 1
+    assert payload.tables[0].table_id == "table-1"
+
+    assert len(payload.formulas) == 1
+    assert payload.formulas[0].formula_id == "formula-test"
+    assert payload.formulas[0].expression == "D = L / 2"
+
+    sections_by_clause = {
+        section.raw["clause"]: section
+        for section in payload.sections
+    }
+    expected_references_by_clause = {
+        section["clause"]: _expected_rag_reference_target_codes(section)
+        for section in data["sections"]
+        if section.get("references")
+    }
+
+    assert set(expected_references_by_clause) == {"2", "3", "4", "6.1"}
+    assert sum(
+        len(target_doc_codes)
+        for target_doc_codes in expected_references_by_clause.values()
+    ) == 10
+    assert expected_references_by_clause["6.1"] == ["table_1"]
+
+    for clause, expected_target_doc_codes in expected_references_by_clause.items():
+        assert [
+            reference.target_doc_code
+            for reference in sections_by_clause[clause].references
+        ] == expected_target_doc_codes
+
+    assert payload.cross_references == []
+    assert result.warnings == []
+
+
+def test_downcast_rich_package_uses_document_structure_sections_when_artifact_missing() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/1",
+                    clause="1",
+                    title="1. Scope",
+                    level=1,
+                    path="main_document/1",
+                    page_start=1,
+                    page_end=1,
+                    content={
+                        "source_spans": [
+                            {
+                                "text_preview": "Scope text from document structure."
+                            }
+                        ]
+                    },
+                )
+            ]
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    assert result.payload.sections[0].section_id == "main_document/1"
+    assert result.payload.sections[0].title == "1. Scope"
+    assert result.payload.sections[0].text == "Scope text from document structure."
+    assert result.payload.sections[0].level == 1
+    assert result.payload.sections[0].page_start == 1
+    assert result.payload.sections[0].page_end == 1
+    assert result.payload.sections[0].path == "main_document/1"
+    assert result.warnings == []
+
+
+def test_downcast_attaches_references_by_clause_when_section_id_differs() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+            _artifact(
+                "references",
+                {
+                    "references": [
+                        {
+                            "section_id": "2",
+                            "reference_text": "GOST 20862-81 - GOST 20867-81",
+                            "target_document_codes": [
+                                "GOST 20862-81",
+                                "GOST 20863-81",
+                                "GOST 20864-81",
+                                "GOST 20865-81",
+                                "GOST 20866-81",
+                                "GOST 20867-81",
+                            ],
+                            "reference_type": "standard_range",
+                        }
+                    ]
+                },
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/2",
+                    clause="2",
+                    title="2. Normative references",
+                    path="main_document/2",
+                    page_start=1,
+                    page_end=1,
+                    content={
+                        "source_spans": [
+                            {
+                                "text_preview": "2. GOST 20862-81 - GOST 20867-81",
+                            }
+                        ]
+                    },
+                )
+            ]
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    section = result.payload.sections[0]
+
+    assert section.section_id == "main_document/2"
+    assert [
+        reference.target_doc_code
+        for reference in section.references
+    ] == [
+        "GOST 20862-81",
+        "GOST 20863-81",
+        "GOST 20864-81",
+        "GOST 20865-81",
+        "GOST 20866-81",
+        "GOST 20867-81",
+    ]
+    assert section.references[0].context == "GOST 20862-81 - GOST 20867-81"
+    assert result.warnings == []
+
+
+def test_downcast_filters_self_reference_from_section_references() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST 20868-81",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+            _artifact(
+                "references",
+                {
+                    "references": [
+                        {
+                            "section_id": "2",
+                            "reference_text": "\u0413\u041e\u0421\u0422 20868\u201481",
+                            "target_document_code": "\u0413\u041e\u0421\u0422 20868\u201481",
+                            "reference_type": "standard",
+                        },
+                        {
+                            "section_id": "2",
+                            "reference_text": "\u0413\u041e\u0421\u0422 20862-81",
+                            "target_document_code": "\u0413\u041e\u0421\u0422 20862-81",
+                            "reference_type": "standard",
+                        },
+                    ]
+                },
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/2",
+                    clause="2",
+                    title="2. Normative references",
+                    path="main_document/2",
+                    page_start=1,
+                    page_end=1,
+                    content={"text": "Clause 2"},
+                )
+            ]
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    section = result.payload.sections[0]
+
+    assert [
+        reference.target_doc_code
+        for reference in section.references
+    ] == ["\u0413\u041e\u0421\u0422 20862-81"]
+
+
+def test_downcast_expands_reference_ranges_for_rag_section_references() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST 20868-81",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+            _artifact(
+                "references",
+                {
+                    "references": [
+                        {
+                            "section_id": "2",
+                            "reference_text": "\u0413\u041e\u0421\u0422 20862-81 \u2014 \u0413\u041e\u0421\u0422 20867-81",
+                            "target_document_code": "\u0413\u041e\u0421\u0422 20862-81 \u2014 \u0413\u041e\u0421\u0422 20867-81",
+                            "reference_type": "standard_range",
+                        }
+                    ]
+                },
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/2",
+                    clause="2",
+                    title="2. Normative references",
+                    path="main_document/2",
+                    page_start=1,
+                    page_end=1,
+                    content={"text": "Clause 2"},
+                )
+            ]
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    section = result.payload.sections[0]
+
+    assert [
+        reference.target_doc_code
+        for reference in section.references
+    ] == [
+        "\u0413\u041e\u0421\u0422 20862-81",
+        "\u0413\u041e\u0421\u0422 20863-81",
+        "\u0413\u041e\u0421\u0422 20864-81",
+        "\u0413\u041e\u0421\u0422 20865-81",
+        "\u0413\u041e\u0421\u0422 20866-81",
+        "\u0413\u041e\u0421\u0422 20867-81",
+    ]
+    assert [
+        reference.type
+        for reference in section.references
+    ] == ["standard_range"] * 6
+    assert [
+        reference.context
+        for reference in section.references
+    ] == ["\u0413\u041e\u0421\u0422 20862-81 \u2014 \u0413\u041e\u0421\u0422 20867-81"] * 6
+
+
+def test_downcast_adds_rich_containers_as_rag_sections() -> None:
+    package = RichDocumentPackage.model_construct(
+        parse_job_id="parse-job-1",
+        source_pdf_path="source.pdf",
+        document_code="GOST-TEST",
+        artifacts=[
+            _artifact(
+                "metadata",
+                {
+                    "title": "Test document",
+                    "page_count": 2,
+                },
+                source="parse_result",
+                produced_by="parse_result",
+            ),
+        ],
+        document_structure=RichDocumentStructure(
+            sections=[
+                RichDocumentSection(
+                    section_id="main_document/1",
+                    clause="1",
+                    title="1. Scope",
+                    level=1,
+                    path="main_document/1",
+                    page_start=1,
+                    page_end=1,
+                    content={"text": "Scope text"},
+                )
+            ],
+            tables=[
+                RichDocumentTable(
+                    table_id="parse-table-24",
+                    caption="Table caption",
+                    page=2,
+                    file_page_number=2,
+                    file_page_index=1,
+                    bbox=[1.0, 2.0, 3.0, 4.0],
+                    rows=[{"A": "1"}],
+                    raw={
+                        "md": "| A |",
+                        "html": "<table></table>",
+                        "csv": "A",
+                    },
+                )
+            ],
+            images=[
+                RichDocumentImage(
+                    image_id="parse-image-17",
+                    alt_text="Drawing alt text",
+                    page=1,
+                    file_page_number=1,
+                    file_page_index=0,
+                    bbox=[5.0, 6.0, 7.0, 8.0],
+                )
+            ],
+            formulas=[
+                RichDocumentFormula(
+                    formula_id="parse-formula-14-1",
+                    expression="\\pm \\frac{IT14}{2}",
+                    latex="\\pm \\frac{IT14}{2}",
+                    page=1,
+                    file_page_number=1,
+                    file_page_index=0,
+                    bbox=[9.0, 10.0, 11.0, 12.0],
+                )
+            ],
+        ),
+        final_correction_policy="python_validator_assembler_applies_final_corrections",
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+    payload = result.payload.model_dump(mode="json")
+
+    assert len(payload["sections"]) == 4
+
+    buildrequest_payload = build_rag_builder_buildrequest_section_shape(payload)
+    sections = buildrequest_payload["sections"]
+
+    assert [
+        section["type"]
+        for section in sections
+    ] == ["text", "table", "image", "formula"]
+
+    table_section = sections[1]
+    assert table_section["clause"] == "parse-table-24"
+    assert table_section["page"] == 2
+    assert table_section["bbox"] == [1.0, 2.0, 3.0, 4.0]
+    assert table_section["content"]["markdown"] == "| A |"
+    assert table_section["content"]["html"] == "<table></table>"
+    assert table_section["content"]["csv"] == "A"
+    assert table_section["content"]["rows"] == [{"A": "1"}]
+
+    image_section = sections[2]
+    assert image_section["clause"] == "parse-image-17"
+    assert image_section["page"] == 1
+    assert image_section["bbox"] == [5.0, 6.0, 7.0, 8.0]
+    assert image_section["content"]["alt_text"] == "Drawing alt text"
+
+    formula_section = sections[3]
+    assert formula_section["clause"] == "parse-formula-14-1"
+    assert formula_section["page"] == 1
+    assert formula_section["bbox"] == [9.0, 10.0, 11.0, 12.0]
+    assert formula_section["content"]["latex"] == "\\pm \\frac{IT14}{2}"
+    assert result.warnings == []

@@ -519,9 +519,12 @@ class ChunkingService:
         """
 
         parts = [
+            content.get("text"),
             content.get("caption"),
             content.get("description"),
+            content.get("alt_text"),
             content.get("image_key"),
+            content.get("storage_uri"),
         ]
 
         return "\n".join(str(part).strip() for part in parts if part)
@@ -538,8 +541,10 @@ class ChunkingService:
         """
 
         parts = [
+            content.get("text"),
             content.get("markdown"),
             content.get("latex"),
+            content.get("expression"),
             content.get("meaning"),
         ]
 

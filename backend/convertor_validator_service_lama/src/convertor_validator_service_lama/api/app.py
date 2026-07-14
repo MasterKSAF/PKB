@@ -32,6 +32,7 @@ from convertor_validator_service_lama.models.contracts import (
     ParseJobDryRunRequest,
     ParseJobDryRunResponse,
     ParseJobRequest,
+    RagBuilderBuildDryRunResponse,
     RichDocumentPackageDryRunRequest,
     RichDocumentPackageDryRunResponse,
     RichDocumentPackagePlanResponse,
@@ -42,6 +43,12 @@ from convertor_validator_service_lama.services.document_structure_workflow_dry_r
 from convertor_validator_service_lama.services.document_structure_workflow_runtime import (
     LlamaExtractDocumentStructureWorkflowRuntimeConfig,
     run_llama_extract_document_structure_workflow,
+)
+from convertor_validator_service_lama.services.document_audit_bundle import (
+    build_document_conversion_audit_bundle,
+)
+from convertor_validator_service_lama.services.document_audit_bundle_writer import (
+    write_document_conversion_audit_bundle,
 )
 from convertor_validator_service_lama.services.llama_extract_structured_json_backend import (
     LlamaExtractStructuredJsonResultError,
@@ -69,8 +76,17 @@ from convertor_validator_service_lama.models.rich_document_package import (
     RichDocumentPackageAssemblyRequest,
     RichDocumentPackageAssemblyResult,
 )
+from convertor_validator_service_lama.services.rag_builder_buildrequest_adapter import (
+    build_rag_builder_buildrequest_payload,
+)
+from convertor_validator_service_lama.services.rag_builder_contract_audit import (
+    build_rag_builder_buildrequest_gap_report,
+)
 from convertor_validator_service_lama.services.rag_builder_downcast_service import (
     downcast_rich_package_to_rag_builder,
+)
+from convertor_validator_service_lama.services.rag_builder_build_dry_run import (
+    build_rag_builder_build_dry_run_response,
 )
 from convertor_validator_service_lama.services.rich_document_package_assembler import (
     assemble_rich_document_package,
@@ -244,6 +260,10 @@ def document_structure_workflow(
         ValueError,
     ) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        if not str(exc).startswith("document structure "):
+            raise
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return _build_document_structure_workflow_run_response(
         request=request,
@@ -271,6 +291,77 @@ def rich_document_package(
 @app.post("/rag-builder-payload", response_model=RagBuilderDowncastResult)
 def rag_builder_payload(request: RichDocumentPackage) -> RagBuilderDowncastResult:
     return downcast_rich_package_to_rag_builder(request)
+
+
+@app.post("/rag-builder-buildrequest")
+def rag_builder_buildrequest(
+    request: RichDocumentPackage,
+    document_id: int,
+    pkb_code: str = "-1",
+) -> dict[str, object]:
+    downcast_result = downcast_rich_package_to_rag_builder(request)
+    buildrequest_payload = build_rag_builder_buildrequest_payload(
+        downcast_result.payload.model_dump(mode="json"),
+        document_id=document_id,
+        pkb_code=pkb_code,
+    )
+
+    return {
+        "payload": buildrequest_payload,
+        "warnings": downcast_result.warnings,
+        "gap_report": build_rag_builder_buildrequest_gap_report(buildrequest_payload),
+    }
+
+
+@app.post("/document-audit-bundle")
+def document_audit_bundle(
+    request: RichDocumentPackage,
+    document_id: int,
+    pkb_code: str = "-1",
+) -> dict[str, object]:
+    return build_document_conversion_audit_bundle(
+        request,
+        document_id=document_id,
+        pkb_code=pkb_code,
+    )
+
+
+@app.post("/document-audit-bundle/write")
+def document_audit_bundle_write(
+    request: RichDocumentPackage,
+    document_id: int,
+    pkb_code: str = "-1",
+    output_root: str = "audit_output",
+    document_slug: str | None = None,
+) -> dict[str, object]:
+    bundle = build_document_conversion_audit_bundle(
+        request,
+        document_id=document_id,
+        pkb_code=pkb_code,
+    )
+    return write_document_conversion_audit_bundle(
+        bundle,
+        output_root=output_root,
+        document_slug=document_slug,
+    )
+
+
+@app.post(
+    "/rag-builder-build/dry-run",
+    response_model=RagBuilderBuildDryRunResponse,
+)
+def rag_builder_build_dry_run(
+    request: RichDocumentPackage,
+    document_id: int,
+    pkb_code: str = "-1",
+    rag_builder_base_url: str | None = None,
+) -> RagBuilderBuildDryRunResponse:
+    return build_rag_builder_build_dry_run_response(
+        request,
+        document_id=document_id,
+        pkb_code=pkb_code,
+        rag_builder_base_url=rag_builder_base_url,
+    )
 
 
 @app.post("/rich-document-package/dry-run", response_model=RichDocumentPackageDryRunResponse)
