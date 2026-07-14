@@ -10,6 +10,7 @@ import {
   Chip,
   Button,
   CircularProgress,
+  LinearProgress,
   Collapse,
   Alert,
   Stack,
@@ -56,11 +57,12 @@ import {
 
 type ChatStatus = NonNullable<ChatMessage['status']>;
 
-const statusLabel: Record<ChatStatus, string> = {
+const statusLabel: Record<string, string> = {
   pending: 'ожидание',
   enriching: 'обогащение запроса',
-  searching: 'поиск источников',
   generating: 'генерация ответа',
+  searching: 'поиск источников',
+  analyzing: 'обращение к LLM',
   enriching_citations: 'обогащение цитат',
   answered: 'ответ найден',
   failed: 'ошибка',
@@ -70,11 +72,12 @@ const statusLabel: Record<ChatStatus, string> = {
   source_conflict: 'конфликт источников',
 } as const;
 
-const statusTone: Record<ChatStatus, 'success' | 'warning' | 'error' | 'info'> = {
+const statusTone: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
   pending: 'warning',
   enriching: 'warning',
   searching: 'warning',
   generating: 'warning',
+  analyzing: 'warning',
   enriching_citations: 'info',
   answered: 'success',
   failed: 'error',
@@ -436,12 +439,19 @@ export const Chat: React.FC = () => {
     };
   }, [isResizing]);
 
+  const [chatStatus, setChatStatus] = useState<string | null>(null);
+  const [chatStatusMessage, setChatStatusMessage] = useState<string | null>(null);
+  const [chatProgress, setChatProgress] = useState<number>(0);
   const chatMutation = useMutation({
-    mutationFn: (q: string) => chatApi.send(q),
+    mutationFn: (q: string) => chatApi.send(q, (status, message, progress) => { setChatStatus(status); setChatStatusMessage(message ?? null); if (typeof progress === 'number') setChatProgress(progress); }),
     onSuccess: (data) => {
       appendChatMessages([data]);
       setExpandedCitations((prev) => ({ ...prev, [data.id]: false }));
+      setChatStatus(null);
+      setChatStatusMessage(null);
+      setChatProgress(0);
     },
+    onError: () => { setChatStatus(null); setChatStatusMessage(null); setChatProgress(0); },
   });
   const [guardActionLoading, setGuardActionLoading] = useState(false);
   const projectsQuery = useQuery({
@@ -1044,24 +1054,43 @@ export const Chat: React.FC = () => {
               })}
 
               {chatMutation.isPending && (
-                <Box sx={{ display: 'flex', gap: 1.5 }}>
-                  <Avatar
-                    sx={{
-                      bgcolor: isLight ? '#e0f2fe' : 'rgba(152, 217, 216, 0.16)',
-                      color: assistantAccent,
-                      width: 34,
-                      height: 34,
-                      border: isLight ? '1px solid rgba(2, 132, 199, 0.36)' : 'none',
-                    }}
-                  >
-                    <Ship size={18} />
-                  </Avatar>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <CircularProgress size={16} thickness={5} />
-                    <Typography variant="body2" color="text.secondary">
-                      Подготовка ответа...
-                    </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                    <Avatar
+                      sx={{
+                        bgcolor: isLight ? '#e0f2fe' : 'rgba(152, 217, 216, 0.16)',
+                        color: assistantAccent,
+                        width: 34,
+                        height: 34,
+                        border: isLight ? '1px solid rgba(2, 132, 199, 0.36)' : 'none',
+                      }}
+                    >
+                      <Ship size={18} />
+                    </Avatar>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.3 }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                        {chatStatus ? (statusLabel as Record<string, string>)[chatStatus] ?? chatStatus : 'Подготовка ответа...'}
+                      </Typography>
+                      {chatStatusMessage && (
+                        <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.7 }}>
+                          {chatStatusMessage}
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
+                  <LinearProgress
+                    variant="determinate"
+                    value={chatProgress}
+                    sx={{
+                      borderRadius: 1,
+                      height: 3,
+                      bgcolor: isLight ? 'rgba(2, 132, 199, 0.12)' : 'rgba(152, 217, 216, 0.12)',
+                      '& .MuiLinearProgress-bar': {
+                        bgcolor: assistantAccent,
+                        transition: 'transform .4s linear',
+                      },
+                    }}
+                  />
                 </Box>
               )}
               {mustSelectGatewayChat && !guardActionLoading && (

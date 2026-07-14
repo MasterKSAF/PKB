@@ -744,7 +744,7 @@ function isFinalChatStatus(status?: string) {
   );
 }
 
-async function waitForGatewayChatMessage(sessionId: string, messageId: string, llmTimeout: number) {
+async function waitForGatewayChatMessage(sessionId: string, messageId: string, llmTimeout: number, onStatus?: (status: string, message?: string | null, progress?: number | null) => void) {
   // longpoll шаг 15с; axios timeout переопределяем, чтобы не обрывал раньше бэкенда
   const POLL_STEP = 15;
   const deadline = Date.now() + llmTimeout * 1000;
@@ -759,6 +759,9 @@ async function waitForGatewayChatMessage(sessionId: string, messageId: string, l
     );
 
     const messagePayload = unwrapGatewayMessagePayload(response.data);
+    if (messagePayload?.status) {
+      onStatus?.(messagePayload.status, messagePayload.message, messagePayload.progress);
+    }
     if (isFinalChatStatus(messagePayload?.status)) {
       return response.data;
     }
@@ -1760,7 +1763,7 @@ export const chatApi = {
     const response = await gatewayRequest<any>(() => apiClient.post(`/chat/sessions/${gatewaySessionId}/export`, { format }));
     return response.data;
   },
-  send: async (query: string): Promise<ChatMessage> => {
+  send: async (query: string, onStatus?: (status: string, message?: string | null, progress?: number | null) => void): Promise<ChatMessage> => {
     const demoMode = isDemoMode();
     const createSessionRequiredError = (message: string) => {
       const error = new Error(message) as Error & { code?: string };
@@ -1811,7 +1814,7 @@ export const chatApi = {
       let finalResponse;
       try {
         const llmTimeout = await _ensureChatTimeout();
-        finalResponse = await waitForGatewayChatMessage(activeSessionId, String(messageId), llmTimeout);
+        finalResponse = await waitForGatewayChatMessage(activeSessionId, String(messageId), llmTimeout, onStatus);
       } catch (error) {
         useUIStore.getState().setApiStatus('offline');
         throw error;

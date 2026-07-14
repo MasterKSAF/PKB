@@ -278,7 +278,9 @@ async def _run_tool_loop(
 
     for i in range(_MAX_TOOL_ITERS):
         p = _ANALYZE_PROGRESS[i] if i < len(_ANALYZE_PROGRESS) else 78
-        await _set_status(session_factory, message_id, "analyzing", "Обращение к LLM...", progress=p)
+        has_tool_results = any(m.get("role") == "tool" for m in messages)
+        msg = "Обработка результатов поиска..." if has_tool_results else "Анализ запроса..."
+        await _set_status(session_factory, message_id, "analyzing", msg, progress=p)
         result = await llm_client.complete(messages, tools=_TOOLS)
         total_prompt += result.prompt_tokens
         total_completion += result.completion_tokens
