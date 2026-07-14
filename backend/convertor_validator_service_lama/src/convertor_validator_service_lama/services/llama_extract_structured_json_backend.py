@@ -105,7 +105,8 @@ class LlamaExtractStructuredJsonPromptBackend(StructuredJsonPromptBackend):
                 "LAMA_EXTRACT_PROJECT_ID is required for LlamaExtract network calls."
             )
 
-        parse_job_id = self._resolve_parse_job_id(metadata or {})
+        request_metadata = metadata or {}
+        parse_job_id = self._resolve_parse_job_id(request_metadata)
 
         request = ExtractPassRequest(
             parse_job_id=parse_job_id,
@@ -116,8 +117,9 @@ class LlamaExtractStructuredJsonPromptBackend(StructuredJsonPromptBackend):
             instructions=self._build_instructions(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
-                metadata=metadata or {},
+                metadata=request_metadata,
             ),
+            target_pages=_target_pages_from_metadata(request_metadata),
         )
 
         submit_response = self._client.start_extract_job(request)
@@ -182,6 +184,22 @@ class LlamaExtractStructuredJsonPromptBackend(StructuredJsonPromptBackend):
             raise LlamaExtractStructuredJsonResultError(
                 "LlamaExtract extract_result must be a JSON object."
             ) from exc
+
+
+def _target_pages_from_metadata(metadata: dict[str, Any]) -> str | None:
+    page_start = metadata.get("page_start")
+    page_end = metadata.get("page_end")
+
+    if type(page_start) is not int or type(page_end) is not int:
+        return None
+
+    if page_start < 1 or page_end < page_start:
+        return None
+
+    if page_start == page_end:
+        return str(page_start)
+
+    return f"{page_start}-{page_end}"
 
 
 def _format_metadata(metadata: dict[str, Any]) -> str:

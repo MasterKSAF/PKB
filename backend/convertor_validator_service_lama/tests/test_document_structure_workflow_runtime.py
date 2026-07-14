@@ -205,6 +205,8 @@ def test_runtime_runs_llama_extract_document_structure_workflow():
         "sections",
         "sections",
     ]
+    assert client.start_requests[0].target_pages is None
+    assert client.start_requests[1].target_pages == "1-2"
     assert "GOST test" in (client.start_requests[0].instructions or "")
     assert "stage_type=overview" in (client.start_requests[0].instructions or "")
     assert "stage_type=scope" in (client.start_requests[1].instructions or "")
@@ -286,4 +288,10 @@ def test_runtime_uses_window_settings_for_large_scope():
         "parse-job-windowed",
         "parse-job-windowed",
         "parse-job-windowed",
+    ]
+    assert [request.target_pages for request in client.start_requests] == [
+        None,
+        "1-3",
+        "3-5",
+        "5-7",
     ]

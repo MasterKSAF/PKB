@@ -160,6 +160,33 @@ def test_llama_extract_backend_can_resolve_parse_job_id_from_metadata():
     assert client.start_requests[0].parse_job_id == "parse-job-from-metadata"
 
 
+def test_llama_extract_backend_sets_target_pages_from_stage_metadata():
+    client = FakeLlamaExtractClient()
+    backend = LlamaExtractStructuredJsonPromptBackend(
+        settings=make_settings(),
+        client=client,
+        config=LlamaExtractStructuredJsonPromptBackendConfig(
+            parse_job_id="parse-job-123",
+        ),
+    )
+
+    backend.generate_json(
+        system_prompt="System",
+        user_prompt="User",
+        json_schema={"type": "object"},
+        metadata={
+            "stage_id": "scope_main_document_p2_5_w01",
+            "page_start": 2,
+            "page_end": 5,
+        },
+    )
+
+    request = client.start_requests[0]
+
+    assert request.target_pages == "2-5"
+    assert request.max_pages is None
+
+
 def test_llama_extract_backend_raises_without_parse_job_id():
     backend = LlamaExtractStructuredJsonPromptBackend(
         settings=make_settings(),
