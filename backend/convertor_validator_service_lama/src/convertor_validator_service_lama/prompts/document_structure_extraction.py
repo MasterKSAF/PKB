@@ -39,7 +39,7 @@ SYSTEM_PROMPT = dedent(
 
 USER_PROMPT_TEMPLATE = dedent(
     """
-    Extract DocumentStructureExtraction from the following parse result.
+    Extract document structure from the following parse result.
 
     Document hint:
     {document_hint}
@@ -47,8 +47,8 @@ USER_PROMPT_TEMPLATE = dedent(
     Page count:
     {page_count}
 
-    Output JSON schema:
-    {json_schema}
+    JSON schema:
+    Supplied separately via data_schema. Follow that schema exactly.
 
     Parse items preview:
     {parse_items_preview}
@@ -72,11 +72,6 @@ def build_document_structure_extraction_prompt(
     page_count: int | None = None,
     document_hint: str | None = None,
 ) -> str:
-    json_schema = json.dumps(
-        document_structure_extraction_json_schema(),
-        ensure_ascii=False,
-        indent=2,
-    )
     items_json = json.dumps(
         parse_items_preview,
         ensure_ascii=False,
@@ -86,7 +81,6 @@ def build_document_structure_extraction_prompt(
     return USER_PROMPT_TEMPLATE.format(
         document_hint=document_hint or "unknown",
         page_count=page_count if page_count is not None else "unknown",
-        json_schema=json_schema,
         parse_items_preview=items_json,
         document_markdown=document_markdown,
     )

@@ -200,7 +200,7 @@ def test_document_structure_extraction_rejects_invalid_normalized_bbox():
         )
 
 
-def test_prompt_builder_includes_schema_and_input():
+def test_prompt_builder_uses_external_schema_and_includes_input():
     prompt = build_document_structure_extraction_prompt(
         document_markdown="## 1. Test\n1.1. Clause text",
         parse_items_preview=[
@@ -217,7 +217,9 @@ def test_prompt_builder_includes_schema_and_input():
 
     schema = document_structure_extraction_json_schema()
 
-    assert "document_structure_extraction_v1" in prompt
+    assert "Supplied separately via data_schema" in prompt
+    assert "DocumentStructureExtraction" not in prompt
+    assert "document_structure_extraction_v1" not in prompt
     assert "simple standard" in prompt
     assert "1.1. Clause text" in prompt
     assert "Return JSON only" in prompt

@@ -194,4 +194,5 @@ def test_agent_input_can_be_used_to_build_prompt():
     assert "???? 10054-82" in prompt
     assert "750 X 50 ? 64? 16-? ???? 10054?82" in prompt
     assert "1.1. Clause text" in prompt
-    assert "DocumentStructureExtraction" in prompt
+    assert "Supplied separately via data_schema" in prompt
+    assert "DocumentStructureExtraction" not in prompt
