@@ -253,6 +253,60 @@ def test_workflow_creates_scope_windows_for_large_scope():
     assert result.merged_extraction.sections[0].namespaced_path == "main_document/1/1"
 
 
+def test_workflow_uses_deterministic_overview_for_large_document():
+    payload = {
+        "job_id": "job-large-deterministic",
+        "status": "COMPLETED",
+        "job_metadata": {"pdf-pages": 100},
+        "items": [
+            {
+                "type": "text",
+                "page_number": index + 1,
+                "md": f"{index + 1}. Large document item",
+            }
+            for index in range(100)
+        ],
+        "markdown": "large document",
+    }
+
+    agent_overview = make_overview_extraction(
+        page_count=100,
+        scopes=[
+            make_scope(
+                "agent_should_not_be_used",
+                page_start=1,
+                page_end=100,
+            )
+        ],
+    )
+    scope = make_scope_extraction(
+        namespace_id="main_document",
+        page_count=100,
+        page_start=1,
+        page_end=100,
+        section_path="main_document/1/1",
+        item_index=0,
+    )
+    agent = FakeDocumentStructureExtractionAgent(
+        overview_extraction=agent_overview,
+        scope_extractions_by_namespace={
+            "main_document": scope,
+        },
+    )
+
+    result = run_document_structure_extraction_workflow(
+        payload,
+        agent=agent,
+    )
+
+    assert agent.overview_calls == []
+    assert len(agent.scope_calls) == 1
+    assert result.overview_extraction.numbering_scopes[0].namespace_id == "main_document"
+    assert result.scope_inputs[0]["stage_id"] == "scope_main_document_p1_100"
+    assert result.overview_extraction.diagnostics["deterministic_overview"] is True
+    assert result.merged_extraction.diagnostics["workflow_overview_source"] == "deterministic"
+
+
 def test_workflow_accepts_dict_outputs_from_agent():
     payload = {
         "job_id": "job-dict",

@@ -18,6 +18,7 @@ from convertor_validator_service_lama.services.document_structure_extraction_sta
     DEFAULT_STAGE_MARKDOWN_EXCERPT_CHARS,
 )
 from convertor_validator_service_lama.services.document_structure_extraction_workflow import (
+    DEFAULT_DETERMINISTIC_OVERVIEW_MIN_PAGES,
     DocumentStructureExtractionWorkflowResult,
     run_document_structure_extraction_workflow,
 )
@@ -41,6 +42,8 @@ class LlamaExtractDocumentStructureWorkflowRuntimeConfig:
     scope_overlap_items: int = DEFAULT_SCOPE_OVERLAP_ITEMS
     item_text_chars: int = DEFAULT_STAGE_ITEM_TEXT_CHARS
     markdown_excerpt_chars: int = DEFAULT_STAGE_MARKDOWN_EXCERPT_CHARS
+    use_deterministic_overview_for_large_documents: bool = True
+    deterministic_overview_min_pages: int = DEFAULT_DETERMINISTIC_OVERVIEW_MIN_PAGES
 
 
 def run_llama_extract_document_structure_workflow(
@@ -89,6 +92,12 @@ def run_llama_extract_document_structure_workflow(
             scope_overlap_items=resolved_config.scope_overlap_items,
             item_text_chars=resolved_config.item_text_chars,
             markdown_excerpt_chars=resolved_config.markdown_excerpt_chars,
+            use_deterministic_overview_for_large_documents=(
+                resolved_config.use_deterministic_overview_for_large_documents
+            ),
+            deterministic_overview_min_pages=(
+                resolved_config.deterministic_overview_min_pages
+            ),
         )
     finally:
         bundle.close()

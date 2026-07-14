@@ -255,6 +255,29 @@ def test_runtime_can_use_parse_job_id_from_payload_metadata():
     ]
 
 
+def test_runtime_uses_deterministic_overview_for_large_document():
+    client = FakeLlamaExtractClient(
+        result_payloads=[
+            make_scope_output(page_count=100, item_index=0),
+        ]
+    )
+
+    result = run_llama_extract_document_structure_workflow(
+        make_payload(pages=100, items_count=100),
+        settings=make_settings(),
+        client=client,
+        config=LlamaExtractDocumentStructureWorkflowRuntimeConfig(
+            parse_job_id="parse-job-large",
+        ),
+    )
+
+    assert result.scope_inputs_count == 1
+    assert result.merged_extraction.diagnostics["workflow_overview_source"] == "deterministic"
+    assert len(client.start_requests) == 1
+    assert client.start_requests[0].parse_job_id == "parse-job-large"
+    assert client.start_requests[0].target_pages == "1-100"
+
+
 def test_runtime_uses_window_settings_for_large_scope():
     client = FakeLlamaExtractClient(
         result_payloads=[
