@@ -251,6 +251,74 @@ class DocumentStructureExtraction(StrictExtractionModel):
     issues: list[ExtractionIssue] = Field(default_factory=list)
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_nullable_collections(cls, data):
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+
+        for key in ("item_classifications", "sections", "issues"):
+            if normalized.get(key) is None:
+                normalized[key] = []
+
+        if normalized.get("diagnostics") is None:
+            normalized["diagnostics"] = {}
+
+        sections = normalized.get("sections")
+        if isinstance(sections, list):
+            normalized_sections: list[object] = []
+            for section in sections:
+                if not isinstance(section, dict):
+                    normalized_sections.append(section)
+                    continue
+
+                normalized_section = dict(section)
+                for key in ("content_item_indices", "source_spans", "issues"):
+                    if normalized_section.get(key) is None:
+                        normalized_section[key] = []
+                normalized_sections.append(normalized_section)
+
+            normalized["sections"] = normalized_sections
+
+        scopes = normalized.get("numbering_scopes")
+        if isinstance(scopes, list):
+            seen_namespace_ids: set[str] = set()
+            unique_scopes: list[object] = []
+            dropped_namespace_ids: list[str] = []
+
+            for scope in scopes:
+                if not isinstance(scope, dict):
+                    unique_scopes.append(scope)
+                    continue
+
+                namespace_id = scope.get("namespace_id")
+                if not isinstance(namespace_id, str) or not namespace_id.strip():
+                    unique_scopes.append(scope)
+                    continue
+
+                normalized_namespace_id = namespace_id.strip()
+                if normalized_namespace_id in seen_namespace_ids:
+                    dropped_namespace_ids.append(normalized_namespace_id)
+                    continue
+
+                seen_namespace_ids.add(normalized_namespace_id)
+                unique_scopes.append(scope)
+
+            if dropped_namespace_ids:
+                normalized["numbering_scopes"] = unique_scopes
+                diagnostics = normalized.get("diagnostics")
+                if not isinstance(diagnostics, dict):
+                    diagnostics = {}
+                diagnostics["duplicate_numbering_scopes_dropped"] = (
+                    dropped_namespace_ids
+                )
+                normalized["diagnostics"] = diagnostics
+
+        return normalized
+
+
     @model_validator(mode="after")
     def validate_global_invariants(self) -> "DocumentStructureExtraction":
         namespace_ids = [scope.namespace_id for scope in self.numbering_scopes]
