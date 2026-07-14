@@ -282,3 +282,65 @@ def test_document_structure_workflow_endpoint_rejects_invalid_request():
     )
 
     assert response.status_code == 422
+
+def test_document_structure_workflow_endpoint_returns_workflow_runtime_error_detail(monkeypatch):
+    message = (
+        "document structure overview extraction failed: "
+        "stage_id='overview', job_id='parse-job-from-payload'"
+    )
+
+    def fake_run_llama_extract_document_structure_workflow(
+        parse_result_payload: dict,
+        *,
+        config: LlamaExtractDocumentStructureWorkflowRuntimeConfig | None = None,
+    ) -> DocumentStructureExtractionWorkflowResult:
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(
+        app_module,
+        "run_llama_extract_document_structure_workflow",
+        fake_run_llama_extract_document_structure_workflow,
+    )
+
+    client = TestClient(app_module.app)
+
+    response = client.post(
+        "/document-structure-workflow",
+        json={
+            "parse_result_payload": {
+                "job_id": "parse-job-from-payload",
+                "status": "COMPLETED",
+            }
+        },
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == message
+
+
+def test_document_structure_workflow_endpoint_does_not_mask_unknown_runtime_error(monkeypatch):
+    def fake_run_llama_extract_document_structure_workflow(
+        parse_result_payload: dict,
+        *,
+        config: LlamaExtractDocumentStructureWorkflowRuntimeConfig | None = None,
+    ) -> DocumentStructureExtractionWorkflowResult:
+        raise RuntimeError("unexpected runtime error")
+
+    monkeypatch.setattr(
+        app_module,
+        "run_llama_extract_document_structure_workflow",
+        fake_run_llama_extract_document_structure_workflow,
+    )
+
+    client = TestClient(app_module.app)
+
+    with pytest.raises(RuntimeError, match="unexpected runtime error"):
+        client.post(
+            "/document-structure-workflow",
+            json={
+                "parse_result_payload": {
+                    "job_id": "parse-job-from-payload",
+                    "status": "COMPLETED",
+                }
+            },
+        )

@@ -260,6 +260,10 @@ def document_structure_workflow(
         ValueError,
     ) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        if not str(exc).startswith("document structure "):
+            raise
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return _build_document_structure_workflow_run_response(
         request=request,
