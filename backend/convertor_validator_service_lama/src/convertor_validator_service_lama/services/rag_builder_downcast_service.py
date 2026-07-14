@@ -428,16 +428,21 @@ def _parent_reference_lookup_keys(value: Any) -> list[str]:
     if key is None:
         return []
 
-    result: list[str] = []
+    namespace, separator, local_clause = key.rpartition("::")
+    if separator:
+        if "/" in local_clause:
+            return []
+        return _unique_strings(
+            [
+                f"{namespace}::{parent_clause}"
+                for parent_clause in _clause_parent_lookup_keys(local_clause)
+            ]
+        )
 
     if "/" in key:
-        prefix, suffix = key.rsplit("/", 1)
-        for parent_suffix in _clause_parent_lookup_keys(suffix):
-            result.append(f"{prefix}/{parent_suffix}")
+        return []
 
-    result.extend(_clause_parent_lookup_keys(key))
-
-    return _unique_strings(result)
+    return _unique_strings(_clause_parent_lookup_keys(key))
 
 
 def _clause_parent_lookup_keys(value: str) -> list[str]:

@@ -137,3 +137,163 @@ def test_downcast_attaches_child_clause_reference_to_nearest_existing_parent_sec
     assert len(parent_section.references) == 1
     assert parent_section.references[0].target_doc_code == "REF-6456-82"
     assert sibling_section.references == []
+
+def test_downcast_child_clause_reference_fallback_stays_within_namespace() -> None:
+    package = _package(
+        artifacts={
+            "title_metadata": _artifact(
+                "title_metadata",
+                {
+                    "document_code": "DOC-1",
+                    "title": "Namespaced document",
+                },
+            ),
+            "sections": _artifact(
+                "sections",
+                {
+                    "sections": [
+                        {
+                            "section_id": "main-4-1",
+                            "clause": "main_document::4.1",
+                            "title": "Main test methods",
+                            "content": {"text": "Main clause text."},
+                        },
+                        {
+                            "section_id": "appendix-4-1",
+                            "clause": "appendix_A::4.1",
+                            "title": "Appendix test methods",
+                            "content": {"text": "Appendix clause text."},
+                        },
+                    ]
+                },
+            ),
+            "references": _artifact(
+                "references",
+                {
+                    "references": [
+                        {
+                            "section_id": "main_document::4.1.1",
+                            "reference_text": "REF-MAIN",
+                            "target_document_code": "REF-MAIN",
+                            "reference_type": "normative_reference",
+                            "context": "main child reference",
+                        },
+                        {
+                            "section_id": "appendix_A::4.1.1",
+                            "reference_text": "REF-APPENDIX",
+                            "target_document_code": "REF-APPENDIX",
+                            "reference_type": "normative_reference",
+                            "context": "appendix child reference",
+                        },
+                    ]
+                },
+            ),
+        }
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    sections_by_clause = {
+        section.raw.get("clause"): section
+        for section in result.payload.sections
+    }
+
+    assert [
+        reference.target_doc_code
+        for reference in sections_by_clause["main_document::4.1"].references
+    ] == ["REF-MAIN"]
+
+    assert [
+        reference.target_doc_code
+        for reference in sections_by_clause["appendix_A::4.1"].references
+    ] == ["REF-APPENDIX"]
+
+
+def test_downcast_child_clause_reference_fallback_does_not_attach_to_top_level_parent() -> None:
+    package = _package(
+        artifacts={
+            "title_metadata": _artifact(
+                "title_metadata",
+                {
+                    "document_code": "DOC-1",
+                    "title": "Namespaced document",
+                },
+            ),
+            "sections": _artifact(
+                "sections",
+                {
+                    "sections": [
+                        {
+                            "section_id": "main-4",
+                            "clause": "main_document::4",
+                            "title": "Top level section",
+                            "content": {"text": "Top level text."},
+                        }
+                    ]
+                },
+            ),
+            "references": _artifact(
+                "references",
+                {
+                    "references": [
+                        {
+                            "section_id": "main_document::4.1",
+                            "reference_text": "REF-CHILD",
+                            "target_document_code": "REF-CHILD",
+                            "reference_type": "normative_reference",
+                            "context": "child reference",
+                        }
+                    ]
+                },
+            ),
+        }
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    assert result.payload.sections[0].references == []
+
+def test_downcast_child_clause_reference_fallback_does_not_treat_slash_path_as_namespace() -> None:
+    package = _package(
+        artifacts={
+            "title_metadata": _artifact(
+                "title_metadata",
+                {
+                    "document_code": "DOC-1",
+                    "title": "Slash path document",
+                },
+            ),
+            "sections": _artifact(
+                "sections",
+                {
+                    "sections": [
+                        {
+                            "section_id": "path-4-1",
+                            "clause": "main_document/4.1",
+                            "title": "Path-like clause",
+                            "content": {"text": "Path-like clause text."},
+                        }
+                    ]
+                },
+            ),
+            "references": _artifact(
+                "references",
+                {
+                    "references": [
+                        {
+                            "section_id": "main_document/4.1.1",
+                            "reference_text": "REF-PATH",
+                            "target_document_code": "REF-PATH",
+                            "reference_type": "normative_reference",
+                            "context": "slash path reference",
+                        }
+                    ]
+                },
+            ),
+        }
+    )
+
+    result = downcast_rich_package_to_rag_builder(package)
+
+    assert result.payload.sections[0].references == []
+
