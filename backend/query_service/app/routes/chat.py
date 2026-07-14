@@ -76,6 +76,7 @@ def _msg_dict(m: ChatMessage, include_sources: bool = True) -> dict:
         "role": m.role,
         "content": m.content,
         "status": m.status,
+        "progress": m.progress,
         "message": m.message,
         "timestamp": m.timestamp.isoformat(),
     }
@@ -244,13 +245,14 @@ async def get_message(
         raise HTTPException(status_code=404, detail={"error": {"code": "MESSAGE_NOT_FOUND", "message": "Сообщение не найдено", "details": {}}})
 
     if longpoll and msg.status not in _FINAL_STATUSES:
+        initial_status = msg.status
         session_factory = get_session_factory()
         deadline = asyncio.get_event_loop().time() + longpoll
         while asyncio.get_event_loop().time() < deadline:
             await asyncio.sleep(0.5)
             async with session_factory() as fresh_db:
                 msg = await _fetch_message(fresh_db)
-                if msg and msg.status in _FINAL_STATUSES:
+                if msg and (msg.status in _FINAL_STATUSES or msg.status != initial_status):
                     break
 
     return {

@@ -153,6 +153,7 @@ class PendingMessageResponse(BaseModel):
     session_id: int
     role: str
     status: str
+    progress: int | None = None
     message: str | None = None
     content: str
     timestamp: datetime
@@ -163,6 +164,7 @@ class MessageResponse(BaseModel):
     session_id: int
     role: str
     status: str | None
+    progress: int | None = None
     content: str | None
     message: str | None = None
     missing_fields: list[str] | None = None

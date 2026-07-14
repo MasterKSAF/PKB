@@ -54,6 +54,7 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(16))  # user | assistant
     content: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str | None] = mapped_column(String(32), default="pending")
+    progress: Mapped[int | None] = mapped_column(Integer)
     message: Mapped[str | None] = mapped_column(Text)
     missing_fields: Mapped[list | None] = mapped_column(JSON)
     conflicts: Mapped[list | None] = mapped_column(JSON)
